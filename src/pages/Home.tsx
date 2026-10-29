@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
 import { useFirm } from '../lib/firm'
-import { SetPassword } from '../lib/auth'
 import type { Project } from '../lib/types'
 
 export default function Home() {
@@ -48,10 +47,6 @@ export default function Home() {
           </tbody>
         </table>
       )}
-
-      <h2>Account</h2>
-      <p className="muted small">Change your sign-in password.</p>
-      <SetPassword />
     </section>
   )
 }

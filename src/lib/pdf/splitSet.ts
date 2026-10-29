@@ -1,8 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-
-GlobalWorkerOptions.workerSrc = workerSrc
+import { getDocument } from './pdfjs'
 
 export interface SplitSheet {
   pageIndex: number

@@ -10,12 +10,13 @@ import Submittals from './pages/Submittals'
 import CaLogs from './pages/CaLogs'
 import Contracts from './pages/Contracts'
 import Settings from './pages/Settings'
+import Templates from './pages/Templates'
 
 const nav = [
   { to: '/', label: 'Projects' },
   { to: '/documents', label: 'Drawings' },
   { to: '/submittals', label: 'Submittals' },
-  { to: '/ca-logs', label: 'CA Logs' },
+  { to: '/ca-logs', label: 'CA Documents' },
   { to: '/contracts', label: 'Contracts' },
 ]
 
@@ -55,6 +56,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
         </nav>
         {!offline && (
           <div className="sidebar-foot">
+            <NavLink to="/templates" className="settings-link">Form templates</NavLink>
             <NavLink to="/settings" className="settings-link">Settings</NavLink>
             <SignOut />
           </div>
@@ -74,6 +76,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <Route path="/ca-logs" element={<CaLogs />} />
           <Route path="/contracts" element={<Contracts />} />
           {!offline && <Route path="/settings" element={<Settings />} />}
+          {!offline && <Route path="/templates" element={<Templates />} />}
         </Routes>
       </main>
     </div>

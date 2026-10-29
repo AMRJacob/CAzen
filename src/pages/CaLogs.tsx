@@ -1,22 +1,22 @@
-const kinds = [
-  ['RFI', 'Requests for Information and architect responses'],
-  ['ASI', "Architect's Supplemental Instructions — can push revised sheets into Document control"],
-  ['PR', 'Proposal Requests'],
-  ['CCD', 'Construction Change Directives'],
-  ['CO', 'Change Orders'],
-  ['Field reports', 'Site observation reports with photos'],
-  ['Punch lists', 'Substantial completion punch items'],
-]
+import { useState } from 'react'
+import IssueForm from './IssueForm'
+import { FORM_LABELS } from '../lib/templates/fields'
+import type { FormKind } from '../lib/templates/types'
+
+const KINDS: FormKind[] = ['field_report', 'asi', 'rfi_response', 'pr', 'ccd']
 
 export default function CaLogs() {
+  const [kind, setKind] = useState<FormKind>('field_report')
   return (
     <section>
-      <h1>CA logs</h1>
-      <p className="lead">Auto-numbered per project, tracked by status, issued on your firm’s letterhead. Built in Phase 3.</p>
-      <table>
-        <thead><tr><th>Log</th><th>What it tracks</th></tr></thead>
-        <tbody>{kinds.map(([k, d]) => <tr key={k}><td>{k}</td><td>{d}</td></tr>)}</tbody>
-      </table>
+      <h1>CA documents</h1>
+      <p className="lead">Write a field report, ASI, RFI response, proposal request or CCD and download it on your firm’s template. Numbered logs for each are next.</p>
+      <div className="tabs" role="tablist">
+        {KINDS.map((k) => (
+          <button key={k} role="tab" aria-selected={k === kind} className={k === kind ? 'on' : ''} onClick={() => setKind(k)}>{FORM_LABELS[k]}</button>
+        ))}
+      </div>
+      <IssueForm key={kind} kind={kind} />
     </section>
   )
 }
