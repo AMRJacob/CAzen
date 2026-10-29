@@ -28,7 +28,7 @@ export default function Templates() {
   const [scale, setScale] = useState(1)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const history = useRef<Record<string, Layout[]>>({})
+  const history = useRef<{ key: TemplateKind; layout: Layout }[]>([])
   const stageRef = useRef<HTMLDivElement>(null)
 
   // Load layouts and brand assets.
@@ -55,50 +55,69 @@ export default function Templates() {
   }, [layouts])
 
   const layout = layouts?.[kind]
+  const sharedOn = kind !== 'general' && !!layout?.useLetterhead
   const values = useMemo(() => (brand ? sampleValues(kind, brand) : {}), [kind, brand])
-  const sel = layout?.elements.find((e) => e.id === selected) ?? null
   const dirty = (k: string) => layouts && JSON.stringify(layouts[k]) !== savedJson[k]
 
-  const commit = useCallback((next: Layout, record = true) => {
+  /** Which layout an element lives in: this form, or the shared letterhead shown on it. */
+  const layerOf = useCallback((id: string | null): TemplateKind | null => {
+    if (!layouts || !id) return null
+    if (layouts[kind].elements.some((e) => e.id === id)) return kind
+    if (sharedOn && layouts.general.elements.some((e) => e.id === id)) return 'general'
+    return null
+  }, [layouts, kind, sharedOn])
+  const selLayer = layerOf(selected)
+  const sel = selLayer && layouts ? layouts[selLayer].elements.find((e) => e.id === selected) ?? null : null
+
+  const update = useCallback((key: TemplateKind, fn: (l: Layout) => Layout, record = true) => {
     setLayouts((ls) => {
       if (!ls) return ls
-      if (record) (history.current[kind] ??= []).push(clone(ls[kind]))
-      return { ...ls, [kind]: next }
+      if (record) history.current.push({ key, layout: clone(ls[key]) })
+      return { ...ls, [key]: fn(ls[key]) }
     })
-  }, [kind])
+  }, [])
+
+  const commit = useCallback((next: Layout) => update(kind, () => next), [update, kind])
 
   const patchEl = useCallback((id: string, patch: Partial<El>, record = true) => {
-    if (!layout) return
-    commit({ ...layout, elements: layout.elements.map((e) => (e.id === id ? ({ ...e, ...patch } as El) : e)) }, record)
-  }, [layout, commit])
+    const key = layerOf(id)
+    if (key) update(key, (l) => ({ ...l, elements: l.elements.map((e) => (e.id === id ? ({ ...e, ...patch } as El) : e)) }), record)
+  }, [layerOf, update])
 
   const undo = useCallback(() => {
-    const stack = history.current[kind]
-    const prev = stack?.pop()
-    if (prev) setLayouts((ls) => (ls ? { ...ls, [kind]: prev } : ls))
-  }, [kind])
+    const last = history.current.pop()
+    if (last) setLayouts((ls) => (ls ? { ...ls, [last.key]: last.layout } : ls))
+  }, [])
 
   const remove = useCallback(() => {
-    if (!layout || !selected) return
-    commit({ ...layout, elements: layout.elements.filter((e) => e.id !== selected) })
+    if (!selLayer || !selected) return
+    update(selLayer, (l) => ({ ...l, elements: l.elements.filter((e) => e.id !== selected) }))
     setSelected(null)
-  }, [layout, selected, commit])
+  }, [selLayer, selected, update])
 
   const duplicate = useCallback(() => {
-    if (!layout || !sel) return
+    if (!selLayer || !sel) return
     const copy = { ...clone(sel), id: newId(), x: sel.x + 12, y: sel.y + 12 }
-    commit({ ...layout, elements: [...layout.elements, copy] })
+    update(selLayer, (l) => ({ ...l, elements: [...l.elements, copy] }))
     setSelected(copy.id)
-  }, [layout, sel, commit])
+  }, [selLayer, sel, update])
 
   const reorder = (dir: 1 | -1) => {
-    if (!layout || !sel) return
-    const els = [...layout.elements]
-    const i = els.indexOf(sel)
-    const j = Math.max(0, Math.min(els.length - 1, i + dir))
-    els.splice(i, 1)
-    els.splice(j, 0, sel)
-    commit({ ...layout, elements: els })
+    if (!selLayer || !sel) return
+    update(selLayer, (l) => {
+      const els = l.elements.filter((e) => e.id !== sel.id)
+      const i = l.elements.findIndex((e) => e.id === sel.id)
+      els.splice(Math.max(0, Math.min(els.length, i + dir)), 0, sel)
+      return { ...l, elements: els }
+    })
+  }
+
+  /** Copy the shared letterhead into this form so its header can be arranged separately. */
+  const detachLetterhead = () => {
+    if (!layouts) return
+    const copies = layouts.general.elements.map((e) => ({ ...clone(e), id: newId(), repeat: true }))
+    update(kind, (l) => ({ ...l, useLetterhead: false, elements: [...copies, ...l.elements] }))
+    setSelected(null)
   }
 
   // Keyboard: delete, nudge, undo, duplicate.
@@ -119,15 +138,16 @@ export default function Templates() {
     return () => window.removeEventListener('keydown', onKey)
   }, [sel, undo, duplicate, remove, patchEl, isAdmin])
 
-  // Drag to move / resize.
+  // Drag to move / resize. Works on this form's items and on the shared letterhead's.
   function startDrag(e: React.PointerEvent, el: El, mode: 'move' | 'resize') {
-    if (!isAdmin || !layout) return
+    const key = layerOf(el.id)
+    if (!isAdmin || !layouts || !key) return
     e.stopPropagation()
     e.preventDefault()
     setSelected(el.id)
     const start = { x: e.clientX, y: e.clientY, el: { ...el } }
     let moved = false
-    const before = clone(layout)
+    const before = clone(layouts[key])
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
     const snap = (v: number, ev: PointerEvent) => (ev.altKey ? Math.round(v * 2) / 2 : Math.round(v / GRID) * GRID)
@@ -135,11 +155,11 @@ export default function Templates() {
       const dx = (ev.clientX - start.x) / scale
       const dy = (ev.clientY - start.y) / scale
       if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return
-      if (!moved) { (history.current[kind] ??= []).push(before); moved = true }
+      if (!moved) { history.current.push({ key, layout: before }); moved = true }
       const patch = mode === 'move'
         ? { x: clamp(snap(start.el.x + dx, ev), -start.el.w + 12, PAGE_W - 12), y: clamp(snap(start.el.y + dy, ev), -start.el.h + 12, PAGE_H - 12) }
         : { w: Math.max(2, snap(start.el.w + dx, ev)), h: Math.max(2, snap(start.el.h + dy, ev)) }
-      patchEl(el.id, patch, false)
+      update(key, (l) => ({ ...l, elements: l.elements.map((x) => (x.id === el.id ? ({ ...x, ...patch } as El) : x)) }), false)
     }
     const up = () => {
       target.removeEventListener('pointermove', move)
@@ -197,7 +217,6 @@ export default function Templates() {
   const choiceFields = fields.filter((f) => f.choices)
   const listFields = fields.filter((f) => f.multiline)
   const anyDirty = KINDS.some((k) => dirty(k))
-  const showLetterhead = kind !== 'general' && layout.useLetterhead
   const hasFlow = layout.elements.some((e) => e.type === 'field' && e.flow)
 
   return (
@@ -237,7 +256,7 @@ export default function Templates() {
             <button onClick={() => add('logo')}>Logo</button>
             <button onClick={() => add('checkbox')}>Checkbox</button>
             <div className="palette-title">Edit</div>
-            <button onClick={undo} disabled={!history.current[kind]?.length}>Undo</button>
+            <button onClick={undo} disabled={!history.current.length}>Undo</button>
             <button onClick={duplicate} disabled={!sel}>Duplicate</button>
             <button onClick={() => reorder(1)} disabled={!sel}>Bring forward</button>
             <button onClick={() => reorder(-1)} disabled={!sel}>Send back</button>
@@ -249,12 +268,19 @@ export default function Templates() {
         <div className="stage" ref={stageRef} onPointerDown={() => setSelected(null)}>
           <div
             className={`page ${showGrid ? 'grid' : ''}`}
-            style={{ width: PAGE_W * scale, height: PAGE_H * scale, '--grid': `${GRID * scale * 4}px` } as CSSProperties}
+            style={{ width: PAGE_W * scale, height: PAGE_H * scale, '--minor': `${GRID * scale}px`, '--major': `${36 * scale}px` } as CSSProperties}
           >
             {bgUrl && (kind === 'general' || layout.useLetterhead) && <img className="page-bg" src={bgUrl} alt="" />}
-            {showLetterhead && layouts.general.elements.map((el) => (
-              <div key={el.id} className="el ghost" style={box(el, scale)}>
+            {sharedOn && layouts.general.elements.map((el) => (
+              <div
+                key={el.id}
+                className={`el shared ${el.id === selected ? 'selected' : ''} ${isAdmin ? 'editable' : ''}`}
+                style={box(el, scale)}
+                title="Shared letterhead item"
+                onPointerDown={(e) => startDrag(e, el, 'move')}
+              >
                 <ElView el={el} values={values} logoUrl={logoUrl} scale={scale} accent={brand.accent} />
+                {el.id === selected && isAdmin && <span className="handle" onPointerDown={(e) => startDrag(e, el, 'resize')} />}
               </div>
             ))}
             {hasFlow && (
@@ -276,15 +302,28 @@ export default function Templates() {
 
         <aside className="props">
           {sel ? (
-            <Props el={sel} kind={kind} disabled={!isAdmin} onChange={(p) => patchEl(sel.id, p)} />
+            <>
+              {selLayer === 'general' && kind !== 'general' && (
+                <div className="shared-note">
+                  Shared letterhead item. Moving or editing it changes every form that uses the letterhead.
+                  {isAdmin && <button className="link" onClick={detachLetterhead}>Give this form its own header instead</button>}
+                </div>
+              )}
+              <Props el={sel} kind={selLayer ?? kind} disabled={!isAdmin} onChange={(p) => patchEl(sel.id, p)} />
+            </>
           ) : (
             <div className="props-body">
               <div className="palette-title">{FORM_LABELS[kind]}</div>
               {kind !== 'general' ? (
-                <label className="check">
-                  <input type="checkbox" checked={layout.useLetterhead} disabled={!isAdmin} onChange={(e) => commit({ ...layout, useLetterhead: e.target.checked })} />
-                  Use the shared letterhead
-                </label>
+                <>
+                  <label className="check">
+                    <input type="checkbox" checked={layout.useLetterhead} disabled={!isAdmin} onChange={(e) => commit({ ...layout, useLetterhead: e.target.checked })} />
+                    Use the shared letterhead
+                  </label>
+                  {layout.useLetterhead && isAdmin && (
+                    <p className="hint">Letterhead items (logo, address, rules) can be moved right here; changes apply to every form that uses the letterhead. <button className="link" onClick={detachLetterhead}>Give this form its own header</button> to arrange it separately.</p>
+                  )}
+                </>
               ) : (
                 <p className="hint">The letterhead appears behind every form that uses it, on every page. {bgUrl ? 'Your uploaded letterhead PDF is shown behind it; remove built-in items that overlap it.' : 'Upload a letterhead PDF in Settings to use your designed letterhead instead.'}</p>
               )}

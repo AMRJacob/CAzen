@@ -28,10 +28,9 @@ a { color: var(--moss); }
 ::selection { background: var(--moss-soft); }
 
 /* ---------- Logo ---------- */
-.logo { display: inline-flex; align-items: baseline; color: var(--ink); line-height: 1; }
-.logo-c { width: 0.78em; height: 0.78em; flex: none; align-self: baseline; margin-right: -0.03em; transform: translateY(0.035em); color: var(--ink); }
-.wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.02em; font-weight: 500; }
-.wordmark span { color: var(--moss); }
+.logo { display: inline-flex; align-items: flex-end; color: var(--ink); line-height: 1; }
+.logo-ca { width: 1.62em; height: 1.45em; flex: none; color: var(--ink); margin-bottom: -0.12em; }
+.wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); margin-left: 0.02em; }
 
 /* ---------- Layout ---------- */
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
@@ -197,14 +196,24 @@ label.check input { width: auto; }
 
 .stage { min-width: 0; display: flex; justify-content: center; padding: 4px; }
 .page { position: relative; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 28px rgba(40,40,30,0.08); border-radius: 2px; user-select: none; touch-action: none; }
-.page.grid { background-image: radial-gradient(circle, #e4e1d8 0.8px, transparent 0.9px); background-size: var(--grid) var(--grid); }
+.page.grid {
+  background-image:
+    linear-gradient(to right, rgba(95, 122, 97, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(95, 122, 97, 0.16) 1px, transparent 1px),
+    linear-gradient(to right, rgba(60, 60, 50, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(60, 60, 50, 0.045) 1px, transparent 1px);
+  background-size: var(--major) var(--major), var(--major) var(--major), var(--minor) var(--minor), var(--minor) var(--minor);
+}
 .page-bg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.9; }
 .continuation-mark { position: absolute; left: 0; right: 0; border-top: 1px dashed #c9c3b4; pointer-events: none; }
 .el { position: absolute; box-sizing: border-box; }
 .el.editable { cursor: move; }
 .el.editable:hover { outline: 1px dashed #b9c4b6; }
 .el.selected { outline: 1.5px solid var(--moss) !important; z-index: 5; }
-.el.ghost { opacity: 0.4; pointer-events: none; }
+.el.shared.editable:hover { outline: 1px dashed rgba(95, 122, 97, 0.55); }
+.el.shared:not(.selected) { opacity: 0.85; }
+.shared-note { font-size: 12px; line-height: 1.45; background: var(--moss-soft); color: #3f5541; padding: 9px 11px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.shared-note .link { align-self: flex-start; font-size: 12px; }
 .handle { position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px; background: var(--panel); border: 1.5px solid var(--moss); border-radius: 2px; cursor: nwse-resize; }
 .el-text, .el-field { width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap; word-break: break-word; }
 .el-field.left { display: flex; gap: 0.5em; }
