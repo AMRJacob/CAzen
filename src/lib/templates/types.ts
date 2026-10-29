@@ -31,6 +31,8 @@ export interface TextEl extends Base {
   color: ColorRole
   serif?: boolean
   caps?: boolean
+  /** Shrink the text slightly if it doesn't fit its box, rather than cutting it off. */
+  fit?: boolean
 }
 
 /** Fills in from the firm, the project, or the form being issued. */
@@ -50,6 +52,8 @@ export interface FieldEl extends Base {
   flow?: boolean
   /** Lines can be indented outlines: "1." / "-" markers, Tab or spaces to nest, "# " for a heading. */
   rich?: boolean
+  /** Print several fields one after another, each under its own heading (empty ones are skipped). */
+  combine?: { field: string; heading: string }[]
 }
 
 export interface BoxEl extends Base { type: 'box'; stroke: ColorRole | 'none'; lineWidth: number; fill: 'none' | 'wash' | 'tint' }

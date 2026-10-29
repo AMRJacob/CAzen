@@ -26,6 +26,15 @@ export interface RenderInput {
 
 export const LINE_HEIGHT = 1.3
 
+/** A field's text; combined fields become headed sections. */
+export function fieldText(el: FieldEl, get: (k: string) => string): string {
+  if (!el.combine?.length) return get(el.field)
+  return el.combine
+    .filter((c) => get(c.field).trim())
+    .map((c) => (c.heading ? `# ${c.heading}\n` : '') + get(c.field))
+    .join('\n')
+}
+
 export function hexToRgb(hex: string): RGB {
   const n = parseInt(hex.replace('#', ''), 16)
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
@@ -129,7 +138,13 @@ function drawBlock(c: Ctx, text: string, x: number, y: number, w: number, h: num
 
 function drawText(c: Ctx, el: TextEl) {
   const font = fontFor(c.fonts, el.serif, el.bold)
-  drawBlock(c, el.caps ? el.text.toUpperCase() : el.text, el.x, el.y, el.w, el.h, el.size, font, c.colors[el.color], el.align)
+  const text = el.caps ? el.text.toUpperCase() : el.text
+  let size = el.size
+  if (el.fit) {
+    // Step down until every line fits, to no less than 75% of the set size.
+    while (size > el.size * 0.75 && wrap(text, font, size, el.w).length > Math.floor((el.h + size * 0.3) / (size * LINE_HEIGHT))) size -= el.size * 0.03
+  }
+  drawBlock(c, text, el.x, el.y, el.w, el.h, size, font, c.colors[el.color], el.align)
 }
 
 function fieldParts(el: FieldEl) {
@@ -153,7 +168,7 @@ function drawField(c: Ctx, el: FieldEl, flowSlice?: RichLine[]) {
   const font = fontFor(c.fonts, el.serif, el.bold)
   const color = c.colors[el.color]
   if (flowSlice) return drawRich(c, flowSlice, vx, vy, el)
-  const value = c.value(el.field)
+  const value = fieldText(el, c.value)
   if (!value) return
   if (el.rich) {
     const lines = richLines(value, c.fonts, el.size, vw, el.serif)
@@ -292,7 +307,7 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
   const laterSlices: RichLine[][] = []
   if (flow) {
     const { vw, vh } = fieldParts(flow)
-    const text = values[flow.field] ?? ''
+    const text = fieldText(flow, (k) => values[k] ?? '')
     const all = flow.rich
       ? richLines(text, fonts, flow.size, vw, flow.serif)
       : wrap(text, fontFor(fonts, flow.serif, flow.bold), flow.size, vw).map((t) => ({ text: t, bold: false, indent: 0 }))

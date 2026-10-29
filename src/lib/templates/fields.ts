@@ -1,11 +1,13 @@
 import type { Brand } from '../brand'
-import type { FormKind, TemplateKind } from './types'
+import type { FormKind, Layout, TemplateKind } from './types'
 
 export interface FieldDef {
   key: string
   label: string
   sample: string
   multiline?: boolean
+  /** Short guidance shown under the input when filling in the form. */
+  hint?: string
   /** How CAzen fills it in automatically (the person can always type over it):
    *  today = today's date · user = the signed-in person's name · next = next number in sequence
    *  carry = same as the last form of this type on the project · contractor = the project's contractor */
@@ -123,23 +125,44 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'fr.location', auto: 'carry', label: 'Location', sample: 'Job site\nLittle Rock, AR', multiline: true },
     { key: 'fr.weather', label: 'Weather', sample: 'Sunny, upper 80s°F' },
     { key: 'fr.participants', auto: 'carry', label: 'Participants (Name | Company | Email per line)', sample: 'Pat Owner | Owner | pat@owner.org\nSam Super | Sample Builders | sam@builders.com\nJ. Smith | Your Firm | jsmith@yourfirm.com', multiline: true },
-    { key: 'fr.notes', label: 'Observations and notes', multiline: true, sample: '# Field Observations\n1. Site / Parking\n  1. Footings excavated and Sonotubes in place for light pole bases.\n2. Framing\n  1. Interior metal stud wall framing nearly complete.\n  2. Blocking installation underway.\n# Meeting Notes\n1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n  2. Brick installation to begin in approximately two weeks.\n    1. Brick and block are on site.' },
+    { key: 'fr.observations', label: 'Field observations', multiline: true, hint: 'What was seen on site, with any comments on what was seen.', sample: '1. Site / Parking\n  1. Footings excavated and Sonotubes in place for light pole bases.\n2. Framing\n  1. Interior metal stud wall framing nearly complete.\n  2. Blocking installation underway.' },
+    { key: 'fr.notes', label: 'Meeting notes', multiline: true, hint: 'OAC meeting notes, on-site discussions, and schedule or material comments and concerns.', sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n  2. Brick installation to begin in approximately two weeks.\n    1. Brick and block are on site.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
     { key: 'fr.observed_by', auto: 'user', label: 'Observed by', sample: 'J. Smith, AIA' },
   ],
 }
 
 /** Fields a person fills in when issuing the form (firm fields and page numbers fill themselves). */
-export function inputFieldsFor(kind: FormKind): FieldDef[] {
-  return [...PROJECT, ...FORM_FIELDS[kind]]
+export function inputFieldsFor(kind: FormKind, layout?: Layout): FieldDef[] {
+  return [...PROJECT, ...FORM_FIELDS[kind], ...customFields(layout)]
+}
+
+/**
+ * Fields a firm added to its own template (e.g. from an imported PDF): key "custom.<name>".
+ * They appear on the form to fill in, labelled as on the template.
+ */
+export function customFields(layout?: Layout): FieldDef[] {
+  if (!layout) return []
+  const seen = new Map<string, FieldDef>()
+  for (const e of layout.elements) {
+    const key = 'field' in e ? e.field : ''
+    if (!key.startsWith('custom.') || seen.has(key)) continue
+    const label = (e.type === 'field' && e.label.replace(/[:#]\s*$/, '').trim()) || key.slice(7).replace(/_/g, ' ')
+    seen.set(key, { key, label, sample: '', multiline: e.type === 'field' && e.h > (e.size ?? 9) * 2.6 })
+  }
+  return [...seen.values()]
+}
+
+export function customKey(label: string) {
+  return 'custom.' + label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
 }
 
 /** Fields offered in the editor for a template kind. */
-export function fieldsFor(kind: TemplateKind): FieldDef[] {
-  return kind === 'general' ? [...FIRM, PROJECT[5], PAGE_FIELD] : [...FIRM, ...PROJECT, PAGE_FIELD, ...FORM_FIELDS[kind]]
+export function fieldsFor(kind: TemplateKind, layout?: Layout): FieldDef[] {
+  return kind === 'general' ? [...FIRM, PROJECT[5], PAGE_FIELD] : [...FIRM, ...PROJECT, PAGE_FIELD, ...FORM_FIELDS[kind], ...customFields(layout)]
 }
 
-export function fieldDef(kind: TemplateKind, key: string): FieldDef | undefined {
-  return fieldsFor(kind).find((f) => f.key === key)
+export function fieldDef(kind: TemplateKind, key: string, layout?: Layout): FieldDef | undefined {
+  return fieldsFor(kind, layout).find((f) => f.key === key)
 }
 
 /** Values from the firm brand, so firm fields stay current after a rebrand. */
@@ -153,8 +176,8 @@ export function firmValues(brand: Brand): Record<string, string> {
 }
 
 /** Sample values for previews, with the firm's real details. */
-export function sampleValues(kind: TemplateKind, brand: Brand): Record<string, string> {
+export function sampleValues(kind: TemplateKind, brand: Brand, layout?: Layout): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const f of fieldsFor(kind)) out[f.key] = f.sample
+  for (const f of fieldsFor(kind, layout)) out[f.key] = f.sample || (f.key.startsWith('custom.') ? f.label : '')
   return { ...out, ...firmValues(brand) }
 }

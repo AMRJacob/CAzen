@@ -43,10 +43,10 @@ function SignedIn({ kind }: { kind: FormKind }) {
 function Form({ kind, brand, layouts, project, signer }: {
   kind: FormKind; brand: Brand; layouts: Record<string, Layout>; project: Project | null; signer: string
 }) {
-  const fields = inputFieldsFor(kind)
   const layout = layouts[kind]
+  const fields = useMemo(() => inputFieldsFor(kind, layout), [kind, layout])
   // Only ask for fields this firm's template actually prints.
-  const used = useMemo(() => new Set(layout.elements.flatMap((e) => ('field' in e ? [e.field] : []))), [layout])
+  const used = useMemo(() => new Set(layout.elements.flatMap((e) => [...('field' in e ? [e.field] : []), ...(e.type === 'field' && e.combine ? e.combine.map((c) => c.field) : [])])), [layout])
   const shown = fields.filter((f) => used.has(f.key))
 
   const [log, setLog] = useState<IssuedForm[]>([])
@@ -234,7 +234,7 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
     )
   }
   if (f.multiline) {
-    const el = layout.elements.find((e) => e.type === 'field' && e.field === f.key)
+    const el = layout.elements.find((e) => e.type === 'field' && (e.field === f.key || e.combine?.some((c) => c.field === f.key)))
     const rich = el && el.type === 'field' && el.rich
     const table = layout.elements.some((e) => e.type === 'table' && e.field === f.key)
     return (
@@ -247,6 +247,7 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
           onKeyDown={rich ? (e) => indentKeys(e, onChange) : undefined}
           className={`${rich ? 'mono-ish' : ''} ${autoValue && !overridden ? 'is-auto' : ''}`}
         />
+        {f.hint && <span className="hint">{f.hint}</span>}
         {rich && <span className="hint">Start lines with 1. or - for lists. Tab indents a sub-item (Shift+Tab outdents). Start a line with # for a bold heading.</span>}
       </label>
     )

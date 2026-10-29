@@ -10,7 +10,7 @@ export default function CaLogs() {
   return (
     <section>
       <h1>Document creation</h1>
-      <p className="lead">Write a field report, ASI, RFI response, proposal request or CCD and download it on your firm’s template. Numbered logs for each are next.</p>
+      <p className="lead">Field reports, ASIs, RFI responses, proposal requests and CCDs on your firm’s template. Each one fills itself in, numbers itself and is kept with the project.</p>
       <div className="tabs" role="tablist">
         {KINDS.map((k) => (
           <button key={k} role="tab" aria-selected={k === kind} className={k === kind ? 'on' : ''} onClick={() => setKind(k)}>{FORM_LABELS[k]}</button>

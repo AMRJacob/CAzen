@@ -30,6 +30,7 @@ a { color: var(--moss); }
 /* ---------- Logo ---------- */
 .logo { display: inline-flex; align-items: center; gap: 0.35em; color: #3a3c3b; line-height: 1; }
 .logo .logo-mark { width: 1.7em; height: 1.7em; flex: none; }
+.mark-ring { fill: #5d605f; }
 .wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); }
 
 /* ---------- Layout ---------- */

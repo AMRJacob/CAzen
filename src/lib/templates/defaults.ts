@@ -104,7 +104,10 @@ const FIELD_REPORT = (): Layout => ({
       'This confirms and records our interpretation of the discussions which occurred and our understanding reached during this meeting. Unless notified in writing within seven days of receipt, we will assume that the following interpretation or description is complete and accurate.',
       { size: 7.5, color: 'muted' }),
     hline(36, 294, 540),
-    field(54, 306, 514, 438, 'fr.notes', { size: 9.5, rich: true, flow: true }),
+    field(54, 306, 514, 438, 'fr.observations', {
+      size: 9.5, rich: true, flow: true,
+      combine: [{ field: 'fr.observations', heading: 'Field Observations' }, { field: 'fr.notes', heading: 'Meeting Notes' }],
+    }),
   ],
 })
 

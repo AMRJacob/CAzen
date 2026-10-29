@@ -4,7 +4,7 @@ import { loadBrand, type Brand } from '../lib/brand'
 import { pdfPageImage } from '../lib/pdf/pdfjs'
 import { defaultLayout } from '../lib/templates/defaults'
 import { FORM_LABELS, fieldDef, fieldsFor, sampleValues } from '../lib/templates/fields'
-import { renderForm, tableRows } from '../lib/templates/render'
+import { fieldText, renderForm, tableRows } from '../lib/templates/render'
 import { loadLayouts, saveLayout } from '../lib/templates/store'
 import {
   DEFAULT_CONTINUATION, PAGE_H, PAGE_W, newId,
@@ -366,7 +366,7 @@ function ElView({ el, values, logoUrl, scale, accent }: { el: El; values: Record
     case 'text':
       return <div className="el-text" style={{ ...wrap, ...style(el.size, el.bold, el.serif), color: COLOR[el.color], textAlign: el.align, textTransform: el.caps ? 'uppercase' : 'none' }}>{el.text}</div>
     case 'field': {
-      const v = values[el.field] ?? ''
+      const v = fieldText(el, (k) => values[k] ?? '')
       const label = el.labelMode !== 'none' && el.label
       return (
         <div className={`el-field ${el.labelMode}`} style={{ ...wrap, ...style(el.size, false, el.serif) }}>
@@ -488,6 +488,7 @@ function Props({ el, kind, onChange, disabled }: { el: El; kind: TemplateKind; o
           <label className="stack">Text<textarea rows={3} value={el.text} onChange={(e) => set({ text: e.target.value })} /></label>
           <TypeControls el={el} set={set} />
           <label className="check"><input type="checkbox" checked={!!el.caps} onChange={(e) => set({ caps: e.target.checked })} /> All caps</label>
+          <label className="check"><input type="checkbox" checked={!!el.fit} onChange={(e) => set({ fit: e.target.checked })} /> Shrink to fit the box</label>
         </>
       )}
 
@@ -513,6 +514,17 @@ function Props({ el, kind, onChange, disabled }: { el: El; kind: TemplateKind; o
           <TypeControls el={el} set={set} />
           <label className="check"><input type="checkbox" checked={!!el.rich} onChange={(e) => set({ rich: e.target.checked })} /> Outline lists (numbering, indents, # headings)</label>
           <label className="check"><input type="checkbox" checked={!!el.flow} onChange={(e) => set({ flow: e.target.checked })} /> Continue onto more pages if long</label>
+          {el.combine && (
+            <>
+              <div className="stack-label">Sections, in order</div>
+              {el.combine.map((c, i) => (
+                <div key={i} className="option-edit">
+                  <span className="muted small">{fields.find((f) => f.key === c.field)?.label ?? c.field}</span>
+                  <input value={c.heading} placeholder="Heading" onChange={(e) => set({ combine: el.combine!.map((x, j) => (j === i ? { ...x, heading: e.target.value } : x)) })} />
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
 
