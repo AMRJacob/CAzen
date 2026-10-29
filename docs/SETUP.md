@@ -46,14 +46,17 @@ Anyone who forgets can use **Forgot password?** on the sign-in screen; the reset
 
 Invite and reset links only work after step 2 (Site URL) is set.
 
-**Optional, if invite links show "expired" right away:** some work email systems open links to scan them,
-which uses up a one-time link before the person clicks it. Changing the email templates so CAzen does the
-verification avoids that. In **Authentication → Emails → Templates**:
+**Email limits on the free plan.** Supabase's built-in email only delivers to members of your Supabase
+organization and sends at most 2 auth emails per hour for the whole project (invites, sign-in links and
+resets combined). For testing, create users with a password instead (Add user → Create new user →
+Auto Confirm). Before inviting coworkers, connect your own email sender under
+**Authentication → Emails → SMTP Settings**. That removes both limits and lets you edit the email templates.
 
-- **Invite user**: replace the link with
-  `<a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=invite">Accept invite and create your password</a>`
-- **Reset password**: replace the link with
-  `<a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=recovery">Choose a new password</a>`
+**Once custom SMTP is on (optional):** if invite links show "expired" as soon as they're clicked, a work email
+scanner may be using up the one-time link. In **Authentication → Emails → Templates**:
+
+- **Invite user**: link to `{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=invite`
+- **Reset password**: link to `{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=recovery`
 
 ## 3. Run it on your computer
 
