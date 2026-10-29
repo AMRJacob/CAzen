@@ -245,3 +245,15 @@ label.check input { width: auto; }
 @media (max-width: 900px) { .settings-side { position: static; } }
 .el-value { display: block; }
 .el-table { align-content: start; }
+
+/* ---------- Autofill ---------- */
+.field-head { display: flex; align-items: baseline; gap: 8px; }
+.auto-tag { font-size: 10.5px; font-weight: 500; letter-spacing: 0.04em; color: var(--moss); background: var(--moss-soft); padding: 0 6px; border-radius: 8px; }
+.auto-reset { font-size: 11px; padding: 0 6px; border: none; background: none; color: var(--moss); text-decoration: underline; text-underline-offset: 2px; }
+.auto-reset:hover { background: none; color: var(--ink); }
+.form input.is-auto, .form textarea.is-auto { background: #fbfcf9; border-color: #dfe5dc; }
+td.nowrap { white-space: nowrap; }
+
+.card.account { display: flex; flex-direction: column; gap: 8px; }
+.card.account .stack-label { margin: 8px 0 -4px; }
+.card.account .hint { margin: 0; }

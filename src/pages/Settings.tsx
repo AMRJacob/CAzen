@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFirm } from '../lib/firm'
-import { SetPassword, useAuth } from '../lib/auth'
+import { SetPassword, SignerName, useAuth } from '../lib/auth'
 import { db } from '../lib/supabase'
 import { brandFromFirm, loadBrand, removeBrandFile, uploadBrandFile, type Brand } from '../lib/brand'
 import { sampleValues } from '../lib/templates/fields'
 import { renderForm } from '../lib/templates/render'
+import { logoColors } from '../lib/logoColors'
 import { loadLayouts } from '../lib/templates/store'
 import type { Layout } from '../lib/templates/types'
 import type { Firm } from '../lib/types'
@@ -19,6 +20,7 @@ export default function Settings() {
   const [assets, setAssets] = useState<Pick<Brand, 'logo' | 'letterhead'>>({})
   const [layouts, setLayouts] = useState<Record<string, Layout> | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [fromLogo, setFromLogo] = useState<string[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -30,6 +32,12 @@ export default function Settings() {
     loadBrand(firm).then((b) => setAssets({ logo: b.logo, letterhead: b.letterhead }))
     loadLayouts(firm.id, ['general', 'submittal_cover']).then(setLayouts)
   }, [firm])
+
+  // Suggest accent colours from the logo whenever it changes.
+  useEffect(() => {
+    if (assets.logo) logoColors(assets.logo.bytes, assets.logo.type).then(setFromLogo)
+    else setFromLogo([])
+  }, [assets.logo])
 
   useEffect(() => {
     if (!layouts) return
@@ -105,8 +113,19 @@ export default function Settings() {
           </div>
 
           <h2>Brand</h2>
+          {fromLogo.length > 0 && (
+            <div className="brand-row">
+              <span className="brand-label">From your logo <span className="muted small">suggested accent colours</span></span>
+              <div className="swatches">
+                {fromLogo.map((c) => (
+                  <button key={c} type="button" className={`swatch ${draft.accent_color.toLowerCase() === c ? 'on' : ''}`} style={{ background: c }}
+                    aria-label={`Use ${c} from logo`} title={c} onClick={() => setDraft({ ...draft, accent_color: c })} />
+                ))}
+              </div>
+            </div>
+          )}
           <div className="brand-row">
-            <span className="brand-label">Accent colour</span>
+            <span className="brand-label">Accent colour <span className="muted small">titles, rules and stamp boxes</span></span>
             <div className="swatches">
               {SWATCHES.map((c) => (
                 <button key={c} type="button" className={`swatch ${draft.accent_color === c ? 'on' : ''}`} style={{ background: c }}
@@ -142,6 +161,10 @@ export default function Settings() {
         <div className="card account">
           <h2>Your account</h2>
           <p className="muted small">{session?.user.email} · {role ?? 'member'}</p>
+          <div className="stack-label">Name on documents</div>
+          <p className="hint">Fills “Reviewed by”, “Issued by” and similar fields on every form you issue.</p>
+          <SignerName />
+          <div className="stack-label">Password</div>
           <SetPassword />
         </div>
         <div className="preview">

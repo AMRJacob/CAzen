@@ -230,3 +230,25 @@ export function SetPassword() {
     </form>
   )
 }
+
+/** The name printed in "Reviewed by", "Issued by" and similar fields. */
+export function SignerName() {
+  const { session } = useAuth()
+  const initial = (session?.user.user_metadata?.full_name as string | undefined) ?? ''
+  const [name, setName] = useState(initial)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    const { error } = await supabase!.auth.updateUser({ data: { full_name: name.trim() } })
+    setMsg(error ? error.message : 'Saved. New forms will use it.')
+  }
+
+  return (
+    <form className="inline-form" onSubmit={save}>
+      <input placeholder="e.g. Jacob Seither, AIA" value={name} onChange={(e) => setName(e.target.value)} />
+      <button disabled={name.trim() === initial}>Save name</button>
+      {msg && <span className="muted small">{msg}</span>}
+    </form>
+  )
+}
