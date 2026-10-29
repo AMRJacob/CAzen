@@ -30,6 +30,14 @@ Or tell Claude the repo name once it exists, and Claude can push it for you.
 4. **Authentication → Users → Invite user**: invite yourself.
 5. **Project Settings → API**: copy the Project URL and the `anon` public key.
 
+### 2b. Phase 1 settings
+
+1. **SQL Editor** → paste all of `supabase/migrations/0002_phase1.sql` → **Run**.
+2. **Authentication → URL Configuration**:
+   - Site URL: `https://amrjacob.github.io/CAzen/`
+   - Redirect URLs: add `https://amrjacob.github.io/CAzen/` and `http://localhost:5173/`
+3. **Authentication → Users → Add user → Create new user**: enter your email and a password, tick **Auto Confirm User**. This is the quickest way in; email sign-in links also work once step 2 is done.
+
 ## 3. Run it on your computer
 
 Requires Node.js 22+ (nodejs.org).

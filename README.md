@@ -39,8 +39,8 @@ Files are never replaced or deleted. A sheet (A-201) or spec section (08 71 00) 
 
 ## Roadmap
 
-1. Phase 0 — Setup (this scaffold)
-2. Phase 1 — Document control MVP: projects, upload, split, replace, revision history
+1. Phase 0 — Setup ✓
+2. Phase 1 — Document control: sign-in, projects, upload sets and revised sheets, revision history, set as of any date ✓ (project manual next)
 3. Phase 2 — Submittals: register, review workflow, cover sheet, resubmittal chain
 4. Phase 3 — CA logs: RFI, ASI, PR, CCD, field reports
 5. Phase 4 — Contract library, contractor/consultant logins, notifications, overlay compare
