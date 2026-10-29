@@ -1,6 +1,6 @@
 # CAzen
 
-One place for architect-side construction administration: the current drawings and project manual with full revision history, the contract documents, CA logs (RFIs, ASIs, PRs, CCDs, field reports) and submittals — all output on AMR letterhead.
+One place for architect-side construction administration, for any number of firms: the current drawings and project manual with full revision history, the contract documents, CA logs (RFIs, ASIs, PRs, CCDs, field reports) and submittals — all output on AMR letterhead.
 
 Full scope: [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md) · First-time setup: [docs/SETUP.md](docs/SETUP.md)
 
@@ -27,6 +27,13 @@ templates/                 AMR letterhead and titleblock source PDFs
 docs/                      Executive summary and setup guide
 .github/workflows/         CI build + GitHub Pages deploy
 ```
+
+## Firms and branding
+
+Each firm has its own people, projects, files and brand. Nothing is shared between firms.
+A firm sets its brand once under **Firm & branding**: name, address, logo, accent colour, an optional
+letterhead PDF, and the wording for each document type (e.g. submittal stamp actions and disclaimer).
+Every generated document uses it.
 
 ## Revision rule
 

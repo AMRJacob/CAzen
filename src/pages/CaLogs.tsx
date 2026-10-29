@@ -12,7 +12,7 @@ export default function CaLogs() {
   return (
     <section>
       <h1>CA logs</h1>
-      <p className="lead">Auto-numbered per project, tracked by status, issued on AMR letterhead. Built in Phase 3.</p>
+      <p className="lead">Auto-numbered per project, tracked by status, issued on your firm’s letterhead. Built in Phase 3.</p>
       <table>
         <thead><tr><th>Log</th><th>What it tracks</th></tr></thead>
         <tbody>{kinds.map(([k, d]) => <tr key={k}><td>{k}</td><td>{d}</td></tr>)}</tbody>

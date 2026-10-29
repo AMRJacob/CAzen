@@ -49,3 +49,23 @@ export interface SheetRevision {
   created_at: string
   issuances: { kind: IssuanceKind; number: string | null; issued_on: string } | null
 }
+
+export interface Firm {
+  id: string
+  name: string
+  address_line1: string | null
+  address_line2: string | null
+  city_state_zip: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  license_text: string | null
+  accent_color: string
+  logo_path: string | null
+  letterhead_path: string | null
+  created_at: string
+}
+
+export type FirmRole = 'owner' | 'admin' | 'member'
+
+export type DocKind = 'general' | 'submittal_cover' | 'asi' | 'pr' | 'rfi_response' | 'ccd' | 'field_report' | 'transmittal'

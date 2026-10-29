@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { EmailOtpType, Session } from '@supabase/supabase-js'
 import { appUrl, supabase } from './supabase'
+import { Logo } from '../components/Logo'
 
 interface AuthState {
   session: Session | null
@@ -144,7 +145,7 @@ export function SignIn() {
   return (
     <div className="signin">
       <form className="card" onSubmit={submit}>
-        <div className="brand dark">CA<span>zen</span></div>
+        <Logo />
         <p className="muted">
           {mode === 'forgot' ? 'Enter your email and we’ll send a link to choose a new password.' : 'Sign in with the email you were invited with.'}
         </p>
@@ -188,7 +189,7 @@ export function CreatePassword() {
   return (
     <div className="signin">
       <form className="card" onSubmit={save}>
-        <div className="brand dark">CA<span>zen</span></div>
+        <Logo />
         <h2 className="flush">Create your password</h2>
         <p className="muted">You’ll use it with <strong>{session?.user.email}</strong> to sign in from now on.</p>
         <label>Password

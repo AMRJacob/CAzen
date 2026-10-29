@@ -32,7 +32,7 @@ Or tell Claude the repo name once it exists, and Claude can push it for you.
 
 ### 2b. Phase 1 settings
 
-1. **SQL Editor** → paste all of `supabase/migrations/0002_phase1.sql` → **Run**.
+1. **SQL Editor** → run `0002_phase1.sql`, `0003_firms.sql`, then `0004_hardening.sql` from `supabase/migrations/`, in that order. (Already applied to the CAzen project.)
 2. **Authentication → URL Configuration**:
    - Site URL: `https://amrjacob.github.io/CAzen/`
    - Redirect URLs: add `https://amrjacob.github.io/CAzen/` and `http://localhost:5173/`

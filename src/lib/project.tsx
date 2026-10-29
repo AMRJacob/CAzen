@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { db } from './supabase'
+import { useFirm } from './firm'
 import type { Project } from './types'
 
 const KEY = 'cazen.currentProject'
@@ -28,11 +29,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [currentId, setCurrentId] = useState<string | null>(readSaved())
   const [loading, setLoading] = useState(true)
 
+  const { firm } = useFirm()
+
   const reload = useCallback(async () => {
-    const { data, error } = await db().from('projects').select('*').order('number', { ascending: false })
+    if (!firm) return
+    const { data, error } = await db().from('projects').select('*').eq('firm_id', firm.id).order('number', { ascending: false })
     if (!error && data) setProjects(data as Project[])
     setLoading(false)
-  }, [])
+  }, [firm])
 
   useEffect(() => { reload() }, [reload])
 

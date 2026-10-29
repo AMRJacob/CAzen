@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
+import { useFirm } from '../lib/firm'
 import { SetPassword } from '../lib/auth'
 import type { Project } from '../lib/types'
 
@@ -56,6 +57,7 @@ export default function Home() {
 }
 
 function NewProject({ onCreated }: { onCreated: (p: Project) => void }) {
+  const { firm } = useFirm()
   const [f, setF] = useState({ number: '', name: '', owner: '', contractor: '', address: '' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -66,6 +68,7 @@ function NewProject({ onCreated }: { onCreated: (p: Project) => void }) {
     setBusy(true)
     setError(null)
     const { data, error } = await db().rpc('create_project', {
+      p_firm_id: firm!.id,
       p_number: f.number.trim(),
       p_name: f.name.trim(),
       p_owner_name: f.owner.trim() || null,
