@@ -302,3 +302,6 @@ create policy staff_read on storage.objects for select to authenticated
   using (bucket_id in ('documents','templates'));
 create policy staff_insert on storage.objects for insert to authenticated
   with check (bucket_id in ('documents','templates'));
+
+-- Make the API see new tables and functions immediately
+notify pgrst, 'reload schema';

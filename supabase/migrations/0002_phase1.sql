@@ -53,3 +53,6 @@ join issuances i on i.id = r.issuance_id
 order by s.id, i.issued_on desc, r.revision_index desc;
 
 grant select on current_sheets to authenticated;
+
+-- Make the API see new tables and functions immediately
+notify pgrst, 'reload schema';
