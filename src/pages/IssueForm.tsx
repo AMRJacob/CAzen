@@ -5,6 +5,7 @@ import { isConfigured } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useFirm } from '../lib/firm'
 import { useProject } from '../lib/project'
+import { ProjectFolder } from '../components/ProjectFolder'
 import { listIssued, nextNumber, openIssued, saveIssued, type IssuedForm } from '../lib/issued'
 import { DIVISION_OPTIONS, divisionFor, nextInSection, normaliseSection, sectionOf } from '../lib/csi'
 import { db } from '../lib/supabase'
@@ -37,7 +38,12 @@ function SignedIn({ kind }: { kind: FormKind }) {
 
   if (!brand || !layouts) return <p className="muted">Loading your template…</p>
   const signer = (session?.user.user_metadata?.full_name as string | undefined) ?? ''
-  return <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts} project={current} signer={signer} />
+  return (
+    <>
+      {current && <ProjectFolder project={current} compact />}
+      <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts} project={current} signer={signer} />
+    </>
+  )
 }
 
 function Form({ kind, brand, layouts, project, signer }: {
@@ -136,7 +142,7 @@ function Form({ kind, brand, layouts, project, signer }: {
       a.download = `${[v['project.number'], FORM_LABELS[kind], num].filter(Boolean).join(' - ')}.pdf`
       a.click()
       if (project && isConfigured) {
-        await saveIssued(project.id, kind, v, bytes)
+        await saveIssued(project, kind, v, bytes)
         setOverrides({})
         setAttachment(null)
         await loadLog()
@@ -201,7 +207,7 @@ function Form({ kind, brand, layouts, project, signer }: {
                   <td>{usDate(new Date(f.issued_at))}</td>
                   <td className="right nowrap">
                     <button className="link" onClick={() => startFrom(f)}>Start new from this</button>{' '}
-                    {f.file_path && <button onClick={() => openIssued(f.file_path!)}>Open</button>}
+                    {f.file_path && <button onClick={() => openIssued(project!, f.file_path!).catch((e) => setError(e instanceof Error ? e.message : String(e)))}>Open</button>}
                   </td>
                 </tr>
               ))}

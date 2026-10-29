@@ -11,7 +11,9 @@ import {
 } from '../lib/sheets'
 import { listTemplates, readPage, type TitleblockTemplate } from '../lib/titleblocks'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
-import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type SheetRevision } from '../lib/types'
+import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
+import { openFile } from '../lib/files'
+import { ProjectFolder } from '../components/ProjectFolder'
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
@@ -108,9 +110,11 @@ export default function Documents() {
         {!uploading && <button className="primary" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
       </div>
 
+      <ProjectFolder project={current} />
+
       {uploading && firm && (
         <UploadIssuance
-          projectId={current.id}
+          project={current}
           firmId={firm.id}
           order={order}
           existingNumbers={new Set(sheets.map((s) => s.number))}
@@ -174,7 +178,7 @@ export default function Documents() {
           )}
 
           {asOfRows ? (
-            <AsOfTable rows={asOfRows} date={asOf} order={order} />
+            <AsOfTable rows={asOfRows} date={asOf} order={order} onOpen={(p) => openFile(current, p).catch((e) => setError(message(e)))} />
           ) : loading ? (
             <p className="muted">Loading…</p>
           ) : sheets.length === 0 ? (
@@ -198,7 +202,7 @@ export default function Documents() {
       )}
 
       {viewing && (
-        <SheetViewer projectId={current.id} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} />
+        <SheetViewer project={current} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} />
       )}
     </section>
   )
@@ -278,7 +282,7 @@ function SetsList({ projectId, order }: { projectId: string; order: Discipline[]
   )
 }
 
-function AsOfTable({ rows, date, order }: { rows: Awaited<ReturnType<typeof listSheetsAsOf>>; date: string; order: Discipline[] }) {
+function AsOfTable({ rows, date, order, onOpen }: { rows: Awaited<ReturnType<typeof listSheetsAsOf>>; date: string; order: Discipline[]; onOpen: (path: string) => void }) {
   const sorted = sortSheets(rows, (r) => r.sheet_number, order)
   return (
     <>
@@ -292,7 +296,7 @@ function AsOfTable({ rows, date, order }: { rows: Awaited<ReturnType<typeof list
               <td>{r.sheet_title ?? ''}</td>
               <td>{r.revision_index}</td>
               <td>{usDate(r.issued_on)}</td>
-              <td className="right"><button onClick={() => openPath(r.file_path)}>Open</button></td>
+              <td className="right"><button onClick={() => onOpen(r.file_path)}>Open</button></td>
             </tr>
           ))}
         </tbody>
@@ -301,10 +305,7 @@ function AsOfTable({ rows, date, order }: { rows: Awaited<ReturnType<typeof list
   )
 }
 
-async function openPath(path: string) {
-  const { data, error } = await db().storage.from('documents').createSignedUrl(path, 600)
-  if (!error) window.open(data.signedUrl, '_blank', 'noopener')
-}
+
 
 interface Draft {
   pageIndex: number
@@ -318,8 +319,8 @@ interface Draft {
   touched: { number?: boolean; title?: boolean; revision?: boolean }
 }
 
-function UploadIssuance({ projectId, firmId, order, existingNumbers, onDone, onCancel }: {
-  projectId: string
+function UploadIssuance({ project, firmId, order, existingNumbers, onDone, onCancel }: {
+  project: Project
   firmId: string
   order: Discipline[]
   existingNumbers: Set<string>
@@ -392,7 +393,7 @@ function UploadIssuance({ projectId, firmId, order, existingNumbers, onDone, onC
       const out: SheetToSave[] = sortSheets(chosen, (d) => d.number, order).map((d) => ({
         number: d.number, title: d.title, revisionLabel: d.revision || setRev, bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
-      await saveIssuance(projectId, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
+      await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
       onDone()
     } catch (err) {
       setError(message(err))

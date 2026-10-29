@@ -1,4 +1,5 @@
 import { db } from './supabase'
+import { openFile, putFile, SECTIONS, type ProjectStore } from './files'
 import type { CurrentSheet, IssuanceKind, SheetRevision } from './types'
 
 export interface IssuanceInput {
@@ -43,12 +44,8 @@ export async function listRevisions(sheetId: string): Promise<SheetRevision[]> {
   return (data ?? []) as unknown as SheetRevision[]
 }
 
-/** A short-lived private link to open a stored PDF. */
-export async function openStoredPdf(path: string) {
-  const { data, error } = await db().storage.from('documents').createSignedUrl(path, 60 * 10)
-  if (error) throw error
-  window.open(data.signedUrl, '_blank', 'noopener')
-}
+/** Open a stored sheet PDF in a new tab, from cloud storage or the project folder. */
+export const openStoredPdf = (project: ProjectStore, path: string) => openFile(project, path)
 
 /**
  * Save an issuance (bid set, addendum, ASI…) and one new revision per sheet in it.
@@ -56,14 +53,18 @@ export async function openStoredPdf(path: string) {
  * Nothing is overwritten: each revision is its own file.
  */
 export async function saveIssuance(
-  projectId: string,
+  project: ProjectStore,
   issuance: IssuanceInput,
   sheets: SheetToSave[],
   onProgress?: (done: number, total: number) => void,
 ) {
   const client = db()
+  const projectId = project.id
   const { data: userData } = await client.auth.getUser()
   const userId = userData.user?.id
+  // In a project folder, each upload round gets its own folder: "2026-02-10 Addendum 1".
+  const kindLabel: Record<IssuanceKind, string> = { bid_set: 'Bid Set', conformed_set: 'Conformed Set', addendum: 'Addendum', asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', other: 'Revision' }
+  const setFolder = `${issuance.issuedOn} ${issuance.number || kindLabel[issuance.kind]}`
 
   const { data: iss, error: issErr } = await client
     .from('issuances')
@@ -101,11 +102,15 @@ export async function saveIssuance(
       .from('sheet_revisions').select('id', { count: 'exact', head: true }).eq('sheet_id', sheet.id)
     const revisionIndex = count ?? 0
 
-    const path = `${projectId}/sheets/${sheet.id}/${revisionIndex}.pdf`
-    const up = await client.storage
-      .from('documents')
-      .upload(path, new Blob([s.bytes as BlobPart], { type: 'application/pdf' }), { upsert: false })
-    if (up.error) throw new Error(`${number}: ${up.error.message}`)
+    let path: string
+    try {
+      path = await putFile(project, s.bytes, `${projectId}/sheets/${sheet.id}/${revisionIndex}.pdf`, {
+        dirs: [SECTIONS.drawings, setFolder],
+        name: `${number}${s.title ? ' ' + titleCase(s.title) : ''}${s.revisionLabel ? ` (Rev ${s.revisionLabel})` : ''}.pdf`,
+      })
+    } catch (e) {
+      throw new Error(`${number}: ${e instanceof Error ? e.message : String(e)}`)
+    }
 
     const rev = await client.from('sheet_revisions').insert({
       sheet_id: sheet.id,
@@ -168,4 +173,11 @@ export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
     id: r.id, kind: r.kind, number: r.number, title: r.title, issued_on: r.issued_on,
     sheets: r.sheet_revisions.map((x) => ({ number: x.sheets?.number ?? '', revision_label: x.revision_label })),
   }))
+}
+
+/** "FIRST FLOOR PLAN" → "First Floor Plan" for file names; mixed-case titles are left alone. */
+function titleCase(t: string) {
+  if (t !== t.toUpperCase()) return t
+  const small = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with'])
+  return t.toLowerCase().split(' ').map((w, i) => (i > 0 && small.has(w) ? w : w.replace(/^([a-z])/, (m) => m.toUpperCase()))).join(' ')
 }

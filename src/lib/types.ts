@@ -10,6 +10,10 @@ export interface Project {
   status: 'active' | 'closed' | 'archived'
   /** Sheet order for this project; null = the firm's. */
   discipline_order?: Discipline[] | null
+  /** Where files are saved: CAzen cloud storage, or a folder on each user's computer (a mapped shared folder). */
+  storage?: 'cloud' | 'folder' | null
+  /** The chosen folder's name, to help people connect the same folder. */
+  folder_name?: string | null
   created_at: string
 }
 

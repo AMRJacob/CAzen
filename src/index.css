@@ -375,3 +375,8 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 }
 .tb-box.label-right > span { left: auto; right: -2px; }
 .notice.warn { background: #f8efd9; color: #6b5420; }
+
+.folder-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 9px 14px; margin: 0 0 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 13.5px; }
+.folder-bar.warn { background: #f8efd9; border-color: #ecdcb3; color: #5d4a1d; }
+.folder-bar button { padding: 5px 12px; font-size: 13px; }
+.folder-bar button.primary-lite { background: var(--ink); color: var(--paper); border-color: var(--ink); }

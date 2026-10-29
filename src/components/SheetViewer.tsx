@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { db } from '../lib/supabase'
+import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { openStoredPdf } from '../lib/sheets'
@@ -25,8 +26,8 @@ const norm = (s: string) => s.toUpperCase().replace(/[\s-]/g, '')
  * Full-screen sheet viewer. Sheet numbers printed on the drawing (callouts, the sheet index,
  * "SEE 3/A501") become links to that sheet's current revision; links can also be drawn by hand.
  */
-export function SheetViewer({ projectId, sheets, start, highlight, onClose }: {
-  projectId: string
+export function SheetViewer({ project, sheets, start, highlight, onClose }: {
+  project: ProjectStore
   /** Current sheets in set order, for links and next/previous. */
   sheets: ViewSheet[]
   start: ViewSheet
@@ -65,9 +66,7 @@ export function SheetViewer({ projectId, sheets, start, highlight, onClose }: {
     setText(null)
     ;(async () => {
       try {
-        const { data, error } = await db().storage.from('documents').download(sheet.filePath)
-        if (error) throw error
-        const pdf = await getDocument({ data: new Uint8Array(await data.arrayBuffer()) }).promise
+        const pdf = await getDocument({ data: await readFile(project, sheet.filePath) }).promise
         if (cancelled) return
         pdfRef.current?.loadingTask.destroy()
         pdfRef.current = pdf
@@ -84,7 +83,7 @@ export function SheetViewer({ projectId, sheets, start, highlight, onClose }: {
       }
     })()
     return () => { cancelled = true }
-  }, [sheet.filePath, sheet.revisionId])
+  }, [sheet.filePath, sheet.revisionId, project])
 
   useEffect(() => () => { pdfRef.current?.loadingTask.destroy() }, [])
 
@@ -196,7 +195,7 @@ export function SheetViewer({ projectId, sheets, start, highlight, onClose }: {
     if (!pending || !target) return
     const { data: u } = await db().auth.getUser()
     const { data, error } = await db().from('sheet_links')
-      .insert({ revision_id: sheet.revisionId, project_id: projectId, target_number: target, ...pending, created_by: u.user?.id })
+      .insert({ revision_id: sheet.revisionId, project_id: project.id, target_number: target, ...pending, created_by: u.user?.id })
       .select('id, target_number, label, x, y, w, h').single()
     if (error) { setError(error.message); return }
     setManual([...manual, data as ManualLink])
@@ -246,7 +245,7 @@ export function SheetViewer({ projectId, sheets, start, highlight, onClose }: {
           <button className={linkMode ? 'on' : ''} onClick={() => { setLinkMode(!linkMode); setPending(null) }} title="Draw a box and choose the sheet it opens">
             {linkMode ? 'Done linking' : 'Add link'}
           </button>
-          <button onClick={() => openStoredPdf(sheet.filePath)}>Open PDF</button>
+          <button onClick={() => openStoredPdf(project, sheet.filePath).catch((e) => setError(e instanceof Error ? e.message : String(e)))}>Open PDF</button>
           <button onClick={onClose} aria-label="Close">Close</button>
         </div>
       </div>

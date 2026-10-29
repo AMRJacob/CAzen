@@ -1,4 +1,5 @@
 import { db } from './supabase'
+import { openFile, putFile, SECTIONS, type ProjectStore } from './files'
 import type { FormKind } from './templates/types'
 
 export interface IssuedForm {
@@ -22,26 +23,28 @@ export async function listIssued(projectId: string, kind: FormKind): Promise<Iss
 }
 
 /** Keep an issued form with the project: the PDF in storage, the values for the log and autofill. */
-export async function saveIssued(projectId: string, kind: FormKind, values: Record<string, string>, pdf: Uint8Array) {
+const SECTION_FOR: Record<FormKind, string> = {
+  submittal_cover: SECTIONS.submittals, asi: SECTIONS.asis, rfi_response: SECTIONS.rfis,
+  pr: SECTIONS.prs, ccd: SECTIONS.ccds, field_report: SECTIONS.fieldReports,
+}
+
+export async function saveIssued(project: ProjectStore, kind: FormKind, values: Record<string, string>, pdf: Uint8Array) {
   const client = db()
+  const projectId = project.id
   const { data: u } = await client.auth.getUser()
   const id = crypto.randomUUID()
-  const path = `${projectId}/forms/${kind}/${id}.pdf`
-  const up = await client.storage.from('documents').upload(path, new Blob([pdf as BlobPart], { type: 'application/pdf' }), { upsert: false })
-  if (up.error) throw up.error
   const number = Object.entries(values).find(([k]) => k.endsWith('.number') && !k.startsWith('project.'))?.[1] ?? null
   const title = ['sub.title', 'asi.title', 'rfi.subject', 'pr.title', 'ccd.title', 'fr.date'].map((k) => values[k]).find(Boolean) ?? null
+  // In a project folder: "06 ASIs\ASI-003 Revised Storefront.pdf". Dates use dashes, which Windows allows.
+  const label = [number, title].filter(Boolean).join(' ').replace(/\//g, '-') || id
+  const path = await putFile(project, pdf, `${projectId}/forms/${kind}/${id}.pdf`, { dirs: [SECTION_FOR[kind]], name: `${label}.pdf` })
   const { error } = await client.from('issued_forms').insert({
     id, project_id: projectId, kind, number, title, values, file_path: path, issued_by: u.user?.id,
   })
   if (error) throw error
 }
 
-export async function openIssued(path: string) {
-  const { data, error } = await db().storage.from('documents').createSignedUrl(path, 600)
-  if (error) throw error
-  window.open(data.signedUrl, '_blank', 'noopener')
-}
+export const openIssued = (project: ProjectStore, path: string) => openFile(project, path)
 
 const PREFIX: Record<FormKind, string> = {
   submittal_cover: '', asi: 'ASI-', rfi_response: 'RFI-', pr: 'PR-', ccd: 'CCD-', field_report: 'FR-',
