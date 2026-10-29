@@ -55,7 +55,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
         </nav>
         {!offline && (
           <div className="sidebar-foot">
-            <NavLink to="/settings" className="settings-link">Firm & branding</NavLink>
+            <NavLink to="/settings" className="settings-link">Settings</NavLink>
             <SignOut />
           </div>
         )}

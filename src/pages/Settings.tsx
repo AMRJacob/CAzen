@@ -106,8 +106,8 @@ export default function Settings() {
 
   return (
     <section>
-      <h1>Firm & branding</h1>
-      <p className="lead">Set once. Every letter, cover sheet and log CAzen produces uses this template.</p>
+      <h1>Settings</h1>
+      <p className="lead">Your firm’s details and brand. Change them any time, for example when rebranding; every new document uses the current settings.</p>
       {readOnly && <div className="notice">Only firm admins can change branding. You can view it here.</div>}
 
       <div className="settings-grid">

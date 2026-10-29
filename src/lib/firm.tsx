@@ -31,6 +31,8 @@ export function FirmProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
+    // One firm per CAzen site: joining is automatic for anyone invited after setup.
+    await db().rpc('join_firm')
     const [f, m] = await Promise.all([
       db().from('firms').select('*').order('name'),
       db().from('firm_members').select('firm_id, role').eq('user_id', session!.user.id),
@@ -89,7 +91,7 @@ function FirmSetup({ onCreated }: { onCreated: (f: Firm) => void }) {
       <form className="card wide-card" onSubmit={submit}>
         <Logo />
         <h2 className="flush">Set up your firm</h2>
-        <p className="muted">This appears on every document CAzen produces. You can add a logo and letterhead next, in Settings.</p>
+        <p className="muted">You’re the first one here. This sets up CAzen for your firm and appears on every document it produces. Everything can be changed later in Settings, including a full rebrand.</p>
         <label>Firm name<input required value={f.name} onChange={set('name')} placeholder="Studio name, Architects" /></label>
         <label>Street address<input value={f.address} onChange={set('address')} /></label>
         <label>City, state ZIP<input value={f.city} onChange={set('city')} /></label>
