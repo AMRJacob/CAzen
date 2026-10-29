@@ -49,7 +49,7 @@ export default function Home() {
       )}
 
       <h2>Account</h2>
-      <p className="muted small">Signed in by email link? Set a password so you can sign in without waiting for an email.</p>
+      <p className="muted small">Change your sign-in password.</p>
       <SetPassword />
     </section>
   )

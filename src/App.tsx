@@ -1,6 +1,6 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { isConfigured } from './lib/supabase'
-import { AuthProvider, SignIn, useAuth } from './lib/auth'
+import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
 import { ProjectProvider, useProject } from './lib/project'
 import Home from './pages/Home'
 import Documents from './pages/Documents'
@@ -25,10 +25,11 @@ export default function App() {
 }
 
 function Gate() {
-  const { session, loading } = useAuth()
+  const { session, loading, needsPassword } = useAuth()
   if (!isConfigured) return <Shell offline />
   if (loading) return <div className="signin"><p className="muted">Loading…</p></div>
   if (!session) return <SignIn />
+  if (needsPassword) return <CreatePassword />
   return (
     <ProjectProvider>
       <Shell />

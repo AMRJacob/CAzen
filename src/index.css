@@ -104,3 +104,5 @@ input.cell.bad { border-color: #d64545; background: #fff5f5; }
   table { display: block; overflow-x: auto; }
   .sidebar nav { flex: none; }
 }
+.signin-links { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+h2.flush { margin: 0; }

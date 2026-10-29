@@ -38,6 +38,23 @@ Or tell Claude the repo name once it exists, and Claude can push it for you.
    - Redirect URLs: add `https://amrjacob.github.io/CAzen/` and `http://localhost:5173/`
 3. **Authentication → Users → Add user → Create new user**: enter your email and a password, tick **Auto Confirm User**. This is the quickest way in; email sign-in links also work once step 2 is done.
 
+### Inviting people
+
+**Authentication → Users → Add user → Send invitation**. The person clicks the link in the email, lands on CAzen,
+and is asked to **create a password** before anything else. After that they sign in with email + password.
+Anyone who forgets can use **Forgot password?** on the sign-in screen; the reset link opens the same screen.
+
+Invite and reset links only work after step 2 (Site URL) is set.
+
+**Optional, if invite links show "expired" right away:** some work email systems open links to scan them,
+which uses up a one-time link before the person clicks it. Changing the email templates so CAzen does the
+verification avoids that. In **Authentication → Emails → Templates**:
+
+- **Invite user**: replace the link with
+  `<a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=invite">Accept invite and create your password</a>`
+- **Reset password**: replace the link with
+  `<a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=recovery">Choose a new password</a>`
+
 ## 3. Run it on your computer
 
 Requires Node.js 22+ (nodejs.org).

@@ -6,9 +6,13 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 /** True once .env / GitHub secrets have real Supabase keys. */
 export const isConfigured = Boolean(url && anonKey)
 
-// PKCE puts the sign-in code in ?code=…, which works alongside the HashRouter's #/route.
+// PKCE puts sign-in codes in ?code=…, which works alongside the HashRouter's #/route.
+// Invite and recovery links from the Supabase dashboard arrive as #access_token=… instead;
+// auth.tsx handles those itself, so automatic detection of that format is turned off here.
 export const supabase = isConfigured
-  ? createClient(url!, anonKey!, { auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true } })
+  ? createClient(url!, anonKey!, {
+      auth: { flowType: 'pkce', detectSessionInUrl: () => false, persistSession: true },
+    })
   : null
 
 /** Use inside screens that only render once signed in. */
