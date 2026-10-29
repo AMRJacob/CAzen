@@ -10,6 +10,9 @@ import { logoColors } from '../lib/logoColors'
 import { loadLayouts } from '../lib/templates/store'
 import type { Layout } from '../lib/templates/types'
 import type { Firm } from '../lib/types'
+import { DisciplineOrderEditor } from '../components/DisciplineOrder'
+import { effectiveOrder, type Discipline } from '../lib/disciplines'
+import { deleteTemplate, listTemplates, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
 
 const SWATCHES = ['#5f7a61', '#4a6b82', '#8a6f4e', '#6b5b73', '#2f3a34', '#c8323a']
 
@@ -173,6 +176,61 @@ export default function Settings() {
         </div>
         </div>
       </div>
+
+      <div className="settings-grid drawings-settings">
+        <div className="card">
+          <h2>Sheet order</h2>
+          <p className="muted small">The order disciplines appear in every project’s drawing list. A project can use its own order (Drawings → Sheet order).</p>
+          <DisciplineOrderEditor
+            key={JSON.stringify(firm.discipline_order ?? null)}
+            value={effectiveOrder(firm.discipline_order)}
+            disabled={!isAdmin}
+            saveLabel="Save firm order"
+            onSave={async (list: Discipline[]) => {
+              const { error } = await db().from('firms').update({ discipline_order: list }).eq('id', firm.id)
+              if (error) throw error
+              await reload()
+            }}
+          />
+        </div>
+        <TitleblockList firmId={firm.id} isAdmin={isAdmin} />
+      </div>
     </section>
+  )
+}
+
+/** The firm's title block templates. New ones are drawn while uploading drawings, on a real sheet. */
+function TitleblockList({ firmId, isAdmin }: { firmId: string; isAdmin: boolean }) {
+  const [list, setList] = useState<TitleblockTemplate[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { listTemplates(firmId).then(setList).catch((e) => setError(e.message)) }, [firmId])
+
+  async function rename(t: TitleblockTemplate, name: string) {
+    if (!name.trim() || name === t.name) return
+    try { const u = await saveTemplate({ ...t, name }); setList((l) => l!.map((x) => (x.id === t.id ? u : x))) }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+  }
+  async function remove(t: TitleblockTemplate) {
+    try { await deleteTemplate(t.id); setList((l) => l!.filter((x) => x.id !== t.id)) }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+  }
+
+  return (
+    <div className="card">
+      <h2>Title block templates</h2>
+      <p className="muted small">Where CAzen reads the sheet number, title and revision mark on each title block layout. Draw new ones while uploading drawings (Drawings → Upload → New template), on a real sheet.</p>
+      {error && <div className="notice error">{error}</div>}
+      {!list ? <p className="muted small">Loading…</p> : list.length === 0 ? <p className="muted small">None yet.</p> : (
+        <ul className="tb-list">
+          {list.map((t) => (
+            <li key={t.id}>
+              <input defaultValue={t.name} aria-label="Template name" onBlur={(e) => rename(t, e.target.value)} />
+              <span className="muted small">{Object.keys(t.regions).length} boxes</span>
+              {isAdmin && <button className="link" onClick={() => remove(t)}>Delete</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

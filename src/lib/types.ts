@@ -1,3 +1,5 @@
+import type { Discipline } from './disciplines'
+
 export interface Project {
   id: string
   number: string
@@ -6,6 +8,8 @@ export interface Project {
   contractor_name: string | null
   address: string | null
   status: 'active' | 'closed' | 'archived'
+  /** Sheet order for this project; null = the firm's. */
+  discipline_order?: Discipline[] | null
   created_at: string
 }
 
@@ -63,6 +67,8 @@ export interface Firm {
   accent_color: string
   logo_path: string | null
   letterhead_path: string | null
+  /** Default sheet order for the firm's projects; null = the standard order. */
+  discipline_order?: Discipline[] | null
   created_at: string
 }
 
