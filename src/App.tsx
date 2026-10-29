@@ -47,7 +47,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="sidebar-logo"><Logo size={26} /></div>
+        <div className="sidebar-logo"><Logo size={23} /></div>
         {!offline && <FirmAndProject />}
         <nav>
           {nav.map((n) => (
