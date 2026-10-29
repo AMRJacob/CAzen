@@ -31,6 +31,7 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 | Title block templates | Live |
 | Sheet order by discipline | Live |
 | Sheet search and links between sheets | Live |
+| Project folders (files saved to the mapped CA folder) | Live, proof of concept |
 | Submittal cover sheet | Live |
 | Document creation (field reports, ASIs, RFI responses, PRs, CCDs) | Live |
 | Form template editor | Live |
@@ -51,11 +52,13 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 - One firm per deployment, branding editable in Settings.
 - The architect uploads contractor submittals and RFIs for now; outside logins come later.
 - Default templates follow AMR's existing forms; each firm can edit its own.
+- Proof of concept for files: each project can save to its CA folder on the mapped shared drive (Chrome or Edge on office computers); CAzen builds its own CAzen folder structure there.
 
 ## Open items
 
 - Firm sign-off on storing project documents in Supabase.
 - Storage plan: Supabase free plan holds 1 GB with a 50 MB per-file limit; Pro includes 100 GB with extra billed per GB. Move to Pro before uploading full project sets.
 - AMR letterhead PDF (if a background letterhead is wanted).
+- Field access on iPhone: project-folder files can't be opened from a phone. Options: Google Drive via a CAzen account approved by the firm's Google admin (one shared drive only), or Cloudflare R2 with a copy written to the project folder.
 - Pilot project.
 - Relationship to ACC/BIM360: standalone, or eventually pull sheets from ACC?
