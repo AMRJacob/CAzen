@@ -37,9 +37,22 @@ a { color: var(--moss); }
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
 .sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .sidebar-logo { padding: 0 24px 28px; }
-.context { padding: 0 24px 20px; display: flex; flex-direction: column; gap: 8px; }
-.firm-name { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.context select { font: inherit; font-size: 13px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); width: 100%; }
+.context { padding: 0 12px 18px; position: relative; }
+.project-switch { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 12px; color: var(--ink); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+.project-switch:hover, .project-switch.open { background: var(--wash); }
+.project-switch:focus-visible { outline: none; border-color: var(--moss); }
+.ps-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ps-number { font-size: 11px; letter-spacing: 0.06em; color: var(--faint); }
+.ps-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-empty { color: var(--muted); font-weight: 400; }
+.ps-chev { flex: none; color: var(--faint); transition: transform 0.2s; }
+.project-switch.open .ps-chev { transform: rotate(180deg); }
+.ps-menu { position: absolute; left: 12px; right: 12px; top: calc(100% - 14px); z-index: 20; background: var(--panel, #fff); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(43, 45, 44, 0.1); padding: 4px; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; }
+.ps-menu button { font: inherit; display: flex; flex-direction: column; text-align: left; background: none; border: none; border-radius: 6px; padding: 7px 10px; color: var(--ink); cursor: pointer; min-width: 0; }
+.ps-menu button:hover { background: var(--wash); }
+.ps-menu button.on { background: var(--moss-soft); }
+.ps-menu .ps-name { font-size: 13px; }
+.ps-menu .ps-all { font-size: 13px; color: var(--moss); border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 9px; }
 .sidebar nav { display: flex; flex-direction: column; flex: 1; padding: 0 12px; gap: 2px; }
 .sidebar nav a, .settings-link { white-space: nowrap; color: var(--muted); text-decoration: none; padding: 9px 12px; border-radius: 8px; font-size: 14px; transition: background 0.2s, color 0.2s; }
 .sidebar nav a:hover, .settings-link:hover { background: var(--wash); color: var(--ink); }
@@ -150,7 +163,7 @@ tr.skipped td { opacity: 0.4; }
   .shell { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); padding: 18px 0 10px; position: static; height: auto; }
   .sidebar-logo { padding: 0 16px 14px; }
-  .context { padding: 0 16px 12px; }
+  .context { padding: 0 4px 10px; }
   .sidebar nav { flex-direction: row; overflow-x: auto; padding: 0 8px; }
   .sidebar-foot { flex-direction: row; justify-content: space-between; align-items: center; border-top: none; margin: 0; gap: 12px; }
   .signout { min-width: 0; word-break: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-items: flex-end; }

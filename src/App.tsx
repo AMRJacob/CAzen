@@ -1,7 +1,8 @@
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { isConfigured } from './lib/supabase'
 import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
-import { FirmProvider, useFirm } from './lib/firm'
+import { FirmProvider } from './lib/firm'
 import { ProjectProvider, useProject } from './lib/project'
 import { Logo } from './components/Logo'
 import Home from './pages/Home'
@@ -48,7 +49,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar-logo"><Logo size={23} /></div>
-        {!offline && <FirmAndProject />}
+        {!offline && <ProjectSwitcher />}
         <nav>
           {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'}>{n.label}</NavLink>
@@ -83,23 +84,48 @@ function Shell({ offline = false }: { offline?: boolean }) {
   )
 }
 
-function FirmAndProject() {
-  const { firms, firm, select: selectFirm } = useFirm()
+/** The current project; click it to switch to another. */
+function ProjectSwitcher() {
   const { projects, current, select } = useProject()
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [open])
+
+  const pick = (id: string) => { select(id); setOpen(false) }
   return (
-    <div className="context">
-      {firms.length > 1 ? (
-        <select className="firm-select" value={firm?.id} onChange={(e) => selectFirm(e.target.value)} aria-label="Firm">
-          {firms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
-      ) : (
-        <div className="firm-name">{firm?.name}</div>
-      )}
-      {projects.length > 0 && (
-        <select value={current?.id ?? ''} onChange={(e) => select(e.target.value || null)} aria-label="Project">
-          <option value="">Choose a project…</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}
-        </select>
+    <div className="context" ref={box}>
+      <button className={`project-switch${open ? ' open' : ''}`} onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}>
+        <span className="ps-text">
+          {current ? (
+            <>
+              <span className="ps-number">{current.number}</span>
+              <span className="ps-name">{current.name}</span>
+            </>
+          ) : (
+            <span className="ps-name ps-empty">{projects.length ? 'Choose a project' : 'No projects yet'}</span>
+          )}
+        </span>
+        <svg className="ps-chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="ps-menu" role="listbox" aria-label="Projects">
+          {projects.map((p) => (
+            <button key={p.id} role="option" aria-selected={p.id === current?.id} className={p.id === current?.id ? 'on' : ''} onClick={() => pick(p.id)}>
+              <span className="ps-number">{p.number}</span>
+              <span className="ps-name">{p.name}</span>
+            </button>
+          ))}
+          <button className="ps-all" onClick={() => { setOpen(false); navigate('/') }}>{projects.length ? 'All projects' : 'Create a project'}</button>
+        </div>
       )}
     </div>
   )
