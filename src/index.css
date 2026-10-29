@@ -28,9 +28,9 @@ a { color: var(--moss); }
 ::selection { background: var(--moss-soft); }
 
 /* ---------- Logo ---------- */
-.logo { display: inline-flex; align-items: flex-end; color: var(--ink); line-height: 1; }
-.logo-ca { width: 1.62em; height: 1.45em; flex: none; color: var(--ink); margin-bottom: -0.12em; }
-.wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); margin-left: 0.02em; }
+.logo { display: inline-flex; align-items: center; gap: 0.35em; color: #3a3c3b; line-height: 1; }
+.logo .logo-mark { width: 1.7em; height: 1.7em; flex: none; }
+.wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); }
 
 /* ---------- Layout ---------- */
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }

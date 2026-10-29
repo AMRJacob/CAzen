@@ -9,7 +9,7 @@ export default function CaLogs() {
   const [kind, setKind] = useState<FormKind>('field_report')
   return (
     <section>
-      <h1>CA documents</h1>
+      <h1>Document creation</h1>
       <p className="lead">Write a field report, ASI, RFI response, proposal request or CCD and download it on your firm’s template. Numbered logs for each are next.</p>
       <div className="tabs" role="tablist">
         {KINDS.map((k) => (
