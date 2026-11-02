@@ -71,6 +71,9 @@ export interface Firm {
   accent_color: string
   logo_path: string | null
   letterhead_path: string | null
+  /** Cap on CAzen file storage (Cloudflare R2), enforced by the files function. */
+  storage_cap_gb?: number
+  max_file_mb?: number
   /** Default sheet order for the firm's projects; null = the standard order. */
   discipline_order?: Discipline[] | null
   created_at: string

@@ -13,6 +13,8 @@ import type { Firm } from '../lib/types'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
 import { effectiveOrder, type Discipline } from '../lib/disciplines'
 import { deleteTemplate, listTemplates, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
+import { r2Ready, storageUsage, type StorageUsage } from '../lib/files'
+import { useProject } from '../lib/project'
 
 const SWATCHES = ['#5f7a61', '#4a6b82', '#8a6f4e', '#6b5b73', '#2f3a34', '#c8323a']
 
@@ -195,6 +197,7 @@ export default function Settings() {
         </div>
         <TitleblockList firmId={firm.id} isAdmin={isAdmin} />
       </div>
+      <StorageCard firm={firm} isAdmin={isAdmin} onSaved={reload} />
     </section>
   )
 }
@@ -230,6 +233,105 @@ function TitleblockList({ firmId, isAdmin }: { firmId: string; isAdmin: boolean 
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+const GB = 1024 ** 3, MB = 1024 ** 2
+const size = (b: number) => (b >= GB ? `${(b / GB).toFixed(2)} GB` : b >= MB ? `${(b / MB).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`)
+
+/** How full CAzen file storage is, per project, and the limits that keep it inside the free allowance. */
+function StorageCard({ firm, isAdmin, onSaved }: { firm: Firm; isAdmin: boolean; onSaved: () => Promise<void> }) {
+  const { projects } = useProject()
+  const [ready, setReady] = useState<boolean | null>(null)
+  const [u, setU] = useState<StorageUsage | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cap, setCap] = useState(String(firm.storage_cap_gb ?? 9.5))
+  const [maxFile, setMaxFile] = useState(String(firm.max_file_mb ?? 100))
+  const [saved, setSaved] = useState<string | null>(null)
+
+  const load = async (fresh = false) => {
+    setBusy(true)
+    setError(null)
+    try { setU(await storageUsage(fresh)) } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+  useEffect(() => { r2Ready().then((ok) => { setReady(ok); if (ok) load() }) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveLimits() {
+    const c = Number(cap), m = Number(maxFile)
+    if (!(c > 0) || !(m > 0)) { setSaved('Enter numbers above zero.'); return }
+    const { error } = await db().from('firms').update({ storage_cap_gb: c, max_file_mb: m }).eq('id', firm.id)
+    if (error) { setSaved(error.message); return }
+    await onSaved()
+    setSaved('Saved.')
+    load()
+  }
+
+  const pct = u ? Math.min(100, (u.bytes / u.cap_bytes) * 100) : 0
+  const name = (id: string) => {
+    const p = projects.find((x) => x.id === id)
+    return p ? `${p.number} ${p.name}` : 'Not in a current project'
+  }
+  const rows = u ? Object.entries(u.by_project).sort((a, b) => b[1].bytes - a[1].bytes) : []
+
+  return (
+    <div className="card storage-card">
+      <h2>File storage</h2>
+      {ready === false ? (
+        <p className="muted small">CAzen file storage (Cloudflare R2) isn’t set up yet. Follow “File storage” in the setup guide, then come back here.</p>
+      ) : !u ? (
+        <p className="muted small">{busy ? 'Counting…' : error ?? 'Loading…'}</p>
+      ) : (
+        <>
+          <div className="usage-head">
+            <span><strong>{size(u.bytes)}</strong> of {size(u.cap_bytes)} used · {u.objects} files</span>
+            <span className="muted small">
+              Counted {u.counted_at ? new Date(u.counted_at).toLocaleString() : 'never'}{' '}
+              <button className="link" onClick={() => load(true)} disabled={busy}>{busy ? 'Counting…' : 'Recount now'}</button>
+            </span>
+          </div>
+          <div className={`usage-bar ${pct >= 90 ? 'full' : pct >= 75 ? 'high' : ''}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-label="Storage used">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          {pct >= 90 && <p className="small bad-text">Nearly full. Uploads stop at the limit until an admin raises it.</p>}
+          {rows.length > 0 && (
+            <table className="usage-table">
+              <thead><tr><th>Project</th><th className="right">Files</th><th className="right">Size</th><th className="right">Share</th></tr></thead>
+              <tbody>
+                {rows.map(([id, r]) => (
+                  <tr key={id}>
+                    <td>{name(id)}</td>
+                    <td className="right">{r.objects}</td>
+                    <td className="right nowrap">{size(r.bytes)}</td>
+                    <td className="right">{u.bytes ? Math.round((r.bytes / u.bytes) * 100) : 0}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="muted small">Counted from the files actually in Cloudflare, so it stays right after files are removed there. It’s recounted when more than 10 minutes old; uploads in between are added as they happen.</p>
+        </>
+      )}
+      {error && u && <div className="notice error">{error}</div>}
+
+      <h3>Limits</h3>
+      <div className="form two-col">
+        <label>Storage limit (GB)
+          <input type="number" min="0.5" step="0.5" value={cap} disabled={!isAdmin} onChange={(e) => setCap(e.target.value)} />
+          <span className="hint">Cloudflare’s free allowance is 10 GB a month. Raise this past 10 only once billing is set up in Cloudflare.</span>
+        </label>
+        <label>Largest single file (MB)
+          <input type="number" min="1" step="1" value={maxFile} disabled={!isAdmin} onChange={(e) => setMaxFile(e.target.value)} />
+          <span className="hint">Applies to each sheet, form or photo after a set is split.</span>
+        </label>
+      </div>
+      {isAdmin && (
+        <div className="actions">
+          <button className="primary" onClick={saveLimits}>Save limits</button>
+          {saved && <span className="muted small">{saved}</span>}
+        </div>
       )}
     </div>
   )

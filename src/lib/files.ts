@@ -151,8 +151,8 @@ export interface ProjectStore {
 }
 
 // --- R2 links from the "files" Edge Function ---
-async function fileLink(action: 'put' | 'get', projectId: string, key: string): Promise<{ url: string; key?: string }> {
-  const { data, error } = await db().functions.invoke('files', { body: { action, project_id: projectId, key } })
+async function callFiles<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await db().functions.invoke('files', { body })
   if (error) {
     let msg = error.message
     try {
@@ -162,7 +162,25 @@ async function fileLink(action: 'put' | 'get', projectId: string, key: string): 
     } catch { /* keep the generic message */ }
     throw new Error(msg)
   }
-  return data as { url: string; key?: string }
+  return data as T
+}
+
+async function fileLink(action: 'put' | 'get' | 'confirm', projectId: string, key: string, size?: number) {
+  return callFiles<{ url: string; key?: string }>({ action, project_id: projectId, key, size })
+}
+
+export interface StorageUsage {
+  bytes: number
+  objects: number
+  by_project: Record<string, { bytes: number; objects: number }>
+  counted_at: string | null
+  cap_bytes: number
+  max_file_bytes: number
+}
+
+/** What's in CAzen file storage, counted from the bucket itself (recounted when over 10 minutes old, or when fresh). */
+export function storageUsage(fresh = false): Promise<StorageUsage> {
+  return callFiles<StorageUsage>({ action: 'usage', fresh })
 }
 
 /** Is CAzen's Cloudflare storage set up (the R2 secrets are in Supabase)? */
@@ -219,10 +237,11 @@ export async function putFile(project: ProjectStore, bytes: Uint8Array, cloudPat
     return FOLDER + used!.join('/')
   }
   if (project.storage === 'r2') {
-    const { url, key } = await fileLink('put', project.id, `${project.id}/${relParts(folder).join('/')}`)
+    const { url, key } = await fileLink('put', project.id, `${project.id}/${relParts(folder).join('/')}`, bytes.length)
     const res = await fetch(url, { method: 'PUT', body: bytes as BlobPart, headers: { 'Content-Type': type } })
     if (!res.ok) throw new Error(`Upload to CAzen file storage failed (${res.status}).`)
     const finalKey = key!
+    await fileLink('confirm', project.id, finalKey)
     // Best effort: keep the office copy in step. A failure here never loses the upload.
     try {
       const base = await folderIfReady(project.id)

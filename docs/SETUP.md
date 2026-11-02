@@ -123,4 +123,8 @@ On an office computer (Chrome or Edge), **Keep copies in the project folder** al
 into the project's CA folder (`CAzen\01 Contract … 11 Pay Applications`), and **Copy to project folder**
 catches up on files saved elsewhere, such as from a phone.
 
+**Limits.** CAzen stops uploads at 9.5 GB in total and 100 MB a file, so the free allowance can't be
+exceeded by accident. **Settings → File storage** shows how full it is, per project, counted from the
+bucket itself (so it stays right after files are removed in Cloudflare). Admins can change the limits there.
+
 Moving off the free allowance later: R2's paid storage is $0.015 per GB-month; nothing in CAzen changes.

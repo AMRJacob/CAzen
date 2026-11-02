@@ -380,3 +380,15 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .folder-bar.warn { background: #f8efd9; border-color: #ecdcb3; color: #5d4a1d; }
 .folder-bar button { padding: 5px 12px; font-size: 13px; }
 .folder-bar button.primary-lite { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.storage-card { margin-top: 28px; max-width: 760px; }
+.storage-card h2 { margin-top: 0; }
+.storage-card h3 { font-size: 15px; margin: 22px 0 6px; }
+.usage-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.usage-bar { height: 10px; border-radius: 6px; background: var(--wash); overflow: hidden; margin: 8px 0 4px; border: 1px solid var(--line); }
+.usage-bar > span { display: block; height: 100%; background: var(--moss); transition: width 0.4s; }
+.usage-bar.high > span { background: #c0953c; }
+.usage-bar.full > span { background: var(--danger); }
+.usage-table { margin-top: 12px; font-size: 13.5px; }
+.form.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 720px) { .form.two-col { grid-template-columns: 1fr; } }
