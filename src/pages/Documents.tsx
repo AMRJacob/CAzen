@@ -6,7 +6,7 @@ import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
 import {
-  listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
+  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { listTemplates, readPage, type TitleblockTemplate } from '../lib/titleblocks'
@@ -14,6 +14,7 @@ import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
 import { ProjectFolder } from '../components/ProjectFolder'
+import { ConfirmDelete } from '../components/ConfirmDelete'
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
@@ -26,7 +27,7 @@ const toView = (s: CurrentSheet): ViewSheet => ({
 
 export default function Documents() {
   const { current, reload: reloadProjects } = useProject()
-  const { firm } = useFirm()
+  const { firm, isAdmin } = useFirm()
   const [sheets, setSheets] = useState<CurrentSheet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -131,7 +132,7 @@ export default function Documents() {
       </div>
 
       {view === 'sets' ? (
-        <SetsList projectId={current.id} order={order} />
+        <SetsList project={current} order={order} isAdmin={isAdmin} onChanged={load} />
       ) : (
         <>
           <div className="toolbar">
@@ -192,7 +193,7 @@ export default function Documents() {
                 {groups.map((g) => (
                   <Fragment key={g.key}>
                     <tr className="group"><td colSpan={7}>{g.label}</td></tr>
-                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} onOpen={(v) => setViewing({ start: v })} />)}
+                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })} />)}
                   </Fragment>
                 ))}
               </tbody>
@@ -212,9 +213,10 @@ function snippet(s: string) {
   return s.split(/(«[^»]*»)/).map((part, i) => part.startsWith('«') ? <mark key={i}>{part.slice(1, -1)}</mark> : part)
 }
 
-function SheetRow({ sheet, onOpen }: { sheet: CurrentSheet; onOpen: (v: ViewSheet) => void }) {
+function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: CurrentSheet; project: Project; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void }) {
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   async function toggle() {
     if (!open && !history) setHistory(await listRevisions(sheet.sheet_id))
@@ -230,55 +232,100 @@ function SheetRow({ sheet, onOpen }: { sheet: CurrentSheet; onOpen: (v: ViewShee
         <td>{issuanceText(sheet.issuance_kind, sheet.issuance_number)}</td>
         <td>{usDate(sheet.issued_on)}</td>
         <td>
-          {sheet.revision_count > 1
-            ? <button className="link" onClick={toggle}>{open ? 'Hide' : `${sheet.revision_count} revisions`}</button>
+          {sheet.revision_count > 1 || isAdmin
+            ? <button className="link" onClick={toggle}>{open ? 'Hide' : sheet.revision_count > 1 ? `${sheet.revision_count} revisions` : 'original'}</button>
             : <span className="muted">original</span>}
         </td>
         <td className="right"><button onClick={() => onOpen(toView(sheet))}>View</button></td>
       </tr>
       {open && history?.map((r) => (
-        <tr key={r.id} className="history">
-          <td />
-          <td>{r.title_at_rev ?? ''}</td>
-          <td>{r.revision_label || r.revision_index}</td>
-          <td>{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
-          <td>{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
-          <td>{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
-          <td className="right">
-            <button onClick={() => onOpen({
-              number: sheet.number, title: r.title_at_rev ?? sheet.title, revisionId: r.id, revisionLabel: r.revision_label,
-              filePath: r.file_path, superseded: r.revision_index !== sheet.revision_index,
-            })}>View</button>
-          </td>
-        </tr>
+        <Fragment key={r.id}>
+          <tr className="history">
+            <td />
+            <td>{r.title_at_rev ?? ''}</td>
+            <td>{r.revision_label || r.revision_index}</td>
+            <td>{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
+            <td>{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
+            <td>{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
+            <td className="right nowrap">
+              {isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete</button>}{' '}
+              <button onClick={() => onOpen({
+                number: sheet.number, title: r.title_at_rev ?? sheet.title, revisionId: r.id, revisionLabel: r.revision_label,
+                filePath: r.file_path, superseded: r.revision_index !== sheet.revision_index,
+              })}>View</button>
+            </td>
+          </tr>
+          {deleting === r.id && (
+            <tr className="confirm-row"><td colSpan={7}>
+              <ConfirmDelete
+                what={`${sheet.number} revision ${r.revision_label || r.revision_index}`}
+                detail={history.length === 1 ? 'It’s the only revision, so the sheet is removed from the project.' : r.revision_index === sheet.revision_index ? 'The sheet goes back to its previous revision.' : ''}
+                folderOption
+                onCancel={() => setDeleting(null)}
+                onConfirm={async (alsoFolder) => {
+                  await deleteRevision(project, r.id, alsoFolder)
+                  setDeleting(null)
+                  setHistory(await listRevisions(sheet.sheet_id))
+                  onChanged()
+                }}
+              />
+            </td></tr>
+          )}
+        </Fragment>
       ))}
     </>
   )
 }
 
-function SetsList({ projectId, order }: { projectId: string; order: Discipline[] }) {
+function SetsList({ project, order, isAdmin, onChanged }: { project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void }) {
   const [rows, setRows] = useState<IssuanceRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { listIssuances(projectId).then(setRows).catch((e) => setError(message(e))) }, [projectId])
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const reload = useCallback(() => { listIssuances(project.id).then(setRows).catch((e) => setError(message(e))) }, [project.id])
+  useEffect(() => { reload() }, [reload])
   if (error) return <div className="notice error">{error}</div>
   if (!rows) return <p className="muted">Loading…</p>
-  if (!rows.length) return <div className="card muted">No sets uploaded yet.</div>
+  if (!rows.length) return <div className="card muted">No sets uploaded yet.{note && <> {note}</>}</div>
   return (
-    <table>
-      <thead><tr><th>Date</th><th>Issued as</th><th>Sheets</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <td className="nowrap">{usDate(r.issued_on)}</td>
-            <td className="nowrap">{issuanceText(r.kind, r.number)}{r.title ? ` · ${r.title}` : ''}</td>
-            <td className="small">
-              <strong>{r.sheets.length}</strong>{' '}
-              <span className="muted">{sortSheets(r.sheets, (s) => s.number, order).map((s) => s.number + (s.revision_label ? ` (${s.revision_label})` : '')).join(', ')}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      {note && <div className="notice">{note}</div>}
+      <table>
+        <thead><tr><th>Date</th><th>Issued as</th><th>Sheets</th>{isAdmin && <th />}</tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <Fragment key={r.id}>
+              <tr>
+                <td className="nowrap">{usDate(r.issued_on)}</td>
+                <td className="nowrap">{issuanceText(r.kind, r.number)}{r.title ? ` · ${r.title}` : ''}</td>
+                <td className="small">
+                  <strong>{r.sheets.length}</strong>{' '}
+                  <span className="muted">{sortSheets(r.sheets, (s) => s.number, order).map((s) => s.number + (s.revision_label ? ` (${s.revision_label})` : '')).join(', ')}</span>
+                </td>
+                {isAdmin && <td className="right"><button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button></td>}
+              </tr>
+              {deleting === r.id && (
+                <tr className="confirm-row"><td colSpan={4}>
+                  <ConfirmDelete
+                    what={issuanceText(r.kind, r.number)}
+                    detail={`Its ${r.sheets.length} ${r.sheets.length === 1 ? 'sheet is' : 'sheets are'} removed; sheets it revised go back to their previous revision.`}
+                    folderOption
+                    onCancel={() => setDeleting(null)}
+                    onConfirm={async (alsoFolder) => {
+                      const res = await deleteIssuance(project, r.id, alsoFolder)
+                      setDeleting(null)
+                      setNote(`Deleted ${issuanceText(r.kind, r.number)}: ${res.deleted} ${res.deleted === 1 ? 'file' : 'files'} removed from the cloud${alsoFolder ? `, ${res.localRemoved} from the project folder` : ''}${res.failed ? `; ${res.failed} couldn’t be removed (they’ll show in Settings → File storage)` : ''}.`)
+                      reload()
+                      onChanged()
+                    }}
+                  />
+                </td></tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </>
   )
 }
 
@@ -536,7 +583,10 @@ function usDate(iso: string) {
 }
 
 function issuanceText(kind: IssuanceKind, number: string | null) {
-  return number ? `${ISSUANCE_LABELS[kind]} · ${number}` : ISSUANCE_LABELS[kind]
+  const label = ISSUANCE_LABELS[kind]
+  if (!number) return label
+  // "Addendum 1" already says what it is; "2" or "Rev B" needs the label in front.
+  return number.toLowerCase().startsWith(label.toLowerCase()) ? number : `${label} · ${number}`
 }
 
 function message(e: unknown) {

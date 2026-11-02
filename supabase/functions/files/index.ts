@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   const account = env('R2_ACCOUNT_ID'), keyId = env('R2_ACCESS_KEY_ID'), secret = env('R2_SECRET_ACCESS_KEY'), bucket = env('R2_BUCKET')
   const configured = !!(account && keyId && secret && bucket)
 
-  let body: { action?: string; project_id?: string; key?: string; size?: number; fresh?: boolean }
+  let body: { action?: string; project_id?: string; key?: string; keys?: string[]; size?: number; fresh?: boolean }
   try { body = await req.json() } catch { return json({ error: 'Bad request.' }, 400) }
 
   if (body.action === 'status') return json({ configured })
@@ -97,6 +97,42 @@ Deno.serve(async (req) => {
 
   if (body.action === 'usage') {
     try { return json({ ...(await usage(!!body.fresh)), ...limits }) } catch (e) { return json({ error: (e as Error).message }, 502) }
+  }
+
+  // --- Deleting (firm admins only). Records are deleted first by the app; then the files go. ---
+  if (body.action === 'delete' || body.action === 'delete_project') {
+    const { data: isAdmin } = await supabase.rpc('is_firm_admin', { p_firm: firm.id })
+    if (!isAdmin) return json({ error: 'Only firm admins can delete files.' }, 403)
+    const pid = body.project_id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(pid)) return json({ error: 'Missing project.' }, 400)
+    let keys: string[]
+    if (body.action === 'delete') {
+      keys = (body.keys ?? []).filter((k) => typeof k === 'string')
+      if (keys.some((k) => !k.startsWith(pid + '/') || k.includes('..'))) return json({ error: 'Those files aren’t all in this project.' }, 400)
+    } else {
+      keys = []
+      let token = ''
+      do {
+        const q = new URL(base)
+        q.searchParams.set('list-type', '2')
+        q.searchParams.set('prefix', pid + '/')
+        if (token) q.searchParams.set('continuation-token', token)
+        const r = await aws.fetch(q.toString())
+        if (!r.ok) return json({ error: `File storage answered ${r.status} while listing.` }, 502)
+        const xml = await r.text()
+        for (const m of xml.matchAll(/<Key>([\s\S]*?)<\/Key>/g)) keys.push(decodeXml(m[1]))
+        token = /<IsTruncated>true<\/IsTruncated>/.test(xml) ? decodeXml(xml.match(/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/)?.[1] ?? '') : ''
+      } while (token)
+    }
+    let deleted = 0, failed = 0
+    for (const k of keys) {
+      const r = await aws.fetch(base + enc(k), { method: 'DELETE' })
+      if (r.ok || r.status === 404) deleted++
+      else failed++
+    }
+    let u: Usage | null = null
+    try { u = await recount() } catch { /* the next count catches up */ }
+    return json({ deleted, failed, usage: u })
   }
 
   const projectId = body.project_id ?? ''

@@ -392,3 +392,20 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .usage-table { margin-top: 12px; font-size: 13.5px; }
 .form.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 720px) { .form.two-col { grid-template-columns: 1fr; } }
+
+.confirm-delete { border: 1px solid #e6c4c4; background: #fbf3f2; border-radius: 8px; padding: 12px 14px; margin: 8px 0; font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
+.confirm-delete p { margin: 0; }
+.confirm-delete label { display: flex; flex-direction: column; gap: 4px; max-width: 280px; }
+.confirm-delete label.check { flex-direction: row; max-width: none; }
+.confirm-delete input:not([type]) , .confirm-delete input[type=text] { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.confirm-actions { display: flex; gap: 8px; }
+button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+button.danger:hover { background: #a83a3a; }
+button.danger-outline { color: var(--danger); border-color: #e6c4c4; }
+button.link.danger-link { color: var(--danger); }
+tr.confirm-row td { background: transparent; }
+.project-admin { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pa-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.pa-row p { margin: 2px 0 0; max-width: 620px; }
+.pa-row > button { flex: none; }
+button.primary-lite { background: var(--ink); color: var(--paper); border-color: var(--ink); }

@@ -1,5 +1,6 @@
 import { db } from './supabase'
-import { openFile, putFile, SECTIONS, type ProjectStore } from './files'
+import { copyToFolder, deleteProjectCloudFiles, deleteStoredFiles, folderReady, isFolderPath, isR2Path, openFile, putFile, SECTIONS, type ProjectStore } from './files'
+import { backupProject } from './projectData'
 import type { CurrentSheet, IssuanceKind, SheetRevision } from './types'
 
 export interface IssuanceInput {
@@ -191,4 +192,55 @@ export async function projectFilePaths(projectId: string): Promise<string[]> {
   if (revs.error) throw revs.error
   if (forms.error) throw forms.error
   return [...(revs.data ?? []), ...(forms.data ?? [])].map((r) => (r as { file_path: string | null }).file_path).filter((p): p is string => !!p)
+}
+
+/** setof text from an RPC comes back as strings (or one-key rows); take the text either way. */
+const asPaths = (data: unknown) => ((data ?? []) as unknown[]).map((x) => (typeof x === 'string' ? x : String(Object.values(x as object)[0] ?? ''))).filter(Boolean)
+
+/** Delete one upload round (firm admins): its records, then its files. Sheets fall back to their previous revision. */
+export async function deleteIssuance(project: ProjectStore, issuanceId: string, alsoFolder: boolean) {
+  const { data, error } = await db().rpc('delete_issuance', { p_issuance: issuanceId })
+  if (error) throw error
+  return deleteStoredFiles(project, asPaths(data), alsoFolder)
+}
+
+/** Delete one revision of a sheet (firm admins). */
+export async function deleteRevision(project: ProjectStore, revisionId: string, alsoFolder: boolean) {
+  const { data, error } = await db().rpc('delete_revision', { p_revision: revisionId })
+  if (error) throw error
+  return deleteStoredFiles(project, asPaths(data), alsoFolder)
+}
+
+/** Delete a whole project (firm admins): every record, then every cloud file. Project-folder copies are left alone. */
+export async function deleteProject(project: ProjectStore) {
+  const { error } = await db().from('projects').delete().eq('id', project.id)
+  if (error) throw error
+  // Nothing deleted means the database refused (not an admin, or already gone).
+  const { data: still } = await db().from('projects').select('id').eq('id', project.id).maybeSingle()
+  if (still) throw new Error('Only firm admins can delete projects.')
+  if (project.storage === 'r2' || !project.storage) return deleteProjectCloudFiles(project.id)
+  return { deleted: 0, failed: 0 }
+}
+
+/**
+ * Archive a finished project (firm admins), in steps that stop at the first problem:
+ * copy every file into the project folder and check each one is there, save the project data
+ * there too, point the records at the folder copies, then remove the files from the cloud.
+ */
+export async function archiveProject(project: ProjectStore & { number?: string }, step: (msg: string) => void) {
+  if (!(await folderReady(project.id))) throw new Error('Connect the project folder on this computer first.')
+  step('Listing files…')
+  const paths = await projectFilePaths(project.id)
+  const other = paths.filter((p) => !isR2Path(p) && !isFolderPath(p))
+  if (other.length) throw new Error(`${other.length} files are in CAzen’s starter storage, which archiving doesn’t handle yet. Nothing was changed.`)
+  const r = await copyToFolder(project, paths, (d, t) => step(`Copying files to the project folder: ${d} of ${t}…`))
+  if (r.failed) throw new Error(`${r.failed} of ${r.total} files couldn’t be copied to the project folder, so nothing was removed from the cloud. Try again.`)
+  step('Saving the project data…')
+  await backupProject(project)
+  step('Pointing the records at the folder copies…')
+  const { error } = await db().rpc('archive_project', { p_project: project.id })
+  if (error) throw error
+  step('Removing the files from the cloud…')
+  const d = await deleteProjectCloudFiles(project.id)
+  return { copied: r.copied, alreadyThere: r.already, removedFromCloud: d.deleted, failedToRemove: d.failed }
 }

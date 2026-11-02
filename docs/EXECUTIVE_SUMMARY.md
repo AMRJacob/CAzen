@@ -32,6 +32,7 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 | Sheet order by discipline | Live |
 | Sheet search and links between sheets | Live |
 | CAzen file storage on Cloudflare R2, with copies to the project's CA folder | Live, prototype (needs the Cloudflare setup in docs/SETUP.md) |
+| Delete a set or revision, archive or delete a project (admins only); daily project data backup to the project folder | Live |
 | Submittal cover sheet | Live |
 | Document creation (field reports, ASIs, RFI responses, PRs, CCDs) | Live |
 | Form template editor | Live |

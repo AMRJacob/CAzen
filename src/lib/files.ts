@@ -26,6 +26,7 @@ export const isR2Path = (p: string | null | undefined) => !!p?.startsWith(R2)
 /** CAzen's own folder inside the project folder, and its sections. Names are as they appear in Explorer. */
 export const ROOT = 'CAzen'
 export const SECTIONS = {
+  data: '00 Project Data',
   contract: '01 Contract',
   drawings: '02 Drawings',
   manual: '03 Project Manual',
@@ -347,4 +348,54 @@ export function describePath(path: string) {
   if (isFolderPath(path)) return path.slice(FOLDER.length).split('/').join('\\')
   if (isR2Path(path)) return 'CAzen file storage: ' + path.slice(R2.length).split('/').slice(1).join('\\')
   return 'CAzen starter storage'
+}
+
+/** Write a file into the connected project folder (for backups); returns its path inside the folder. */
+export async function saveToFolder(project: ProjectStore, dirs: string[], name: string, bytes: Uint8Array): Promise<string> {
+  const base = await readyFolder(project.id, project.folder_name ?? null)
+  const used = await writeToFolder(base, relParts({ dirs, name }), bytes)
+  return used!.join('\\')
+}
+
+/** Is the project folder connected and usable on this computer right now? */
+export async function folderReady(projectId: string) {
+  return (await folderStatus(projectId)) === 'ready'
+}
+
+async function removeFromFolder(base: FileSystemDirectoryHandle, parts: string[]) {
+  try {
+    let dir = base
+    for (const d of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(d)
+    await dir.removeEntry(parts[parts.length - 1])
+    return true
+  } catch { return false }
+}
+
+/**
+ * Remove stored files (firm admins only; the records are deleted first). Cloud files go from
+ * Cloudflare; with alsoFolder, the copies in the connected project folder go too.
+ */
+export async function deleteStoredFiles(project: ProjectStore, paths: string[], alsoFolder = false) {
+  const keys = paths.filter(isR2Path).map((p) => p.slice(R2.length))
+  let deleted = 0, failed = 0, localRemoved = 0
+  for (let i = 0; i < keys.length; i += 200) {
+    const r = await callFiles<{ deleted: number; failed: number }>({ action: 'delete', project_id: project.id, keys: keys.slice(i, i + 200) })
+    deleted += r.deleted
+    failed += r.failed
+  }
+  if (alsoFolder) {
+    const base = await folderIfReady(project.id).catch(() => null)
+    if (base) {
+      for (const p of paths) {
+        const parts = isR2Path(p) ? p.slice(R2.length).split('/').slice(1) : isFolderPath(p) ? p.slice(FOLDER.length).split('/') : null
+        if (parts && await removeFromFolder(base, parts)) localRemoved++
+      }
+    }
+  }
+  return { deleted, failed, localRemoved }
+}
+
+/** Remove every cloud file of a project (after its records are gone, or once it's archived). */
+export function deleteProjectCloudFiles(projectId: string) {
+  return callFiles<{ deleted: number; failed: number }>({ action: 'delete_project', project_id: projectId })
 }

@@ -4,9 +4,11 @@ import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
 import { useFirm } from '../lib/firm'
 import type { Project } from '../lib/types'
+import { ProjectAdmin } from '../components/ProjectAdmin'
 
 export default function Home() {
   const { projects, current, select, reload, loading } = useProject()
+  const { isAdmin } = useFirm()
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -39,13 +41,13 @@ export default function Home() {
             {projects.flatMap((p) => [
               <tr key={p.id} className={p.id === current?.id ? 'selected' : ''}>
                 <td>{p.number}</td>
-                <td>{p.name}</td>
+                <td>{p.name}{p.status === 'archived' && <> <span className="tag muted">archived</span></>}</td>
                 <td>{p.owner_name ?? ''}</td>
                 <td>{p.contractor_name ?? ''}</td>
                 <td className="right nowrap"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button>{' '}<button onClick={() => open(p)}>Open</button></td>
               </tr>,
               editing === p.id && (
-                <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /></td></tr>
+                <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
               ),
             ])}
           </tbody>

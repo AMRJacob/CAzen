@@ -3,6 +3,7 @@ import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
 import { chooseFolder, copyToFolder, folderStatus, folderSupported, r2Ready, reconnectFolder, ROOT } from '../lib/files'
 import { projectFilePaths } from '../lib/sheets'
+import { backedUpToday, backupProject } from '../lib/projectData'
 import type { Project } from '../lib/types'
 
 /**
@@ -25,6 +26,13 @@ export function ProjectFolder({ project, compact = false }: { project: Project; 
   const check = useCallback(() => { folderStatus(project.id).then(setStatus) }, [project.id])
   useEffect(() => { check() }, [check])
   useEffect(() => { r2Ready().then(setR2) }, [])
+
+  // Once a day per computer, with the project folder connected: save the project data there.
+  const [backedUp, setBackedUp] = useState(backedUpToday(project.id))
+  useEffect(() => {
+    if (status !== 'ready' || backedUp || mode === 'cloud') return
+    backupProject(project).then(() => setBackedUp(true)).catch(() => { /* try again next visit */ })
+  }, [status, backedUp, mode, project])
 
   async function run(fn: () => Promise<void>) {
     setBusy(true)
@@ -81,7 +89,7 @@ export function ProjectFolder({ project, compact = false }: { project: Project; 
         {folderSupported && (
           status === 'ready' ? (
             <>
-              <span className="muted">Copies also go to {folderName}\{ROOT} on this computer.</span>
+              <span className="muted">Copies also go to {folderName}\{ROOT} on this computer{backedUp ? '; project data backed up today' : ''}.</span>
               <button onClick={backfill} disabled={busy}>Copy to project folder</button>
               <button className="link" onClick={() => pick()} disabled={busy}>Change folder</button>
             </>
@@ -112,18 +120,19 @@ export function ProjectFolder({ project, compact = false }: { project: Project; 
     )
   }
 
-  // --- Project folder only (proof of concept) ---
+  // --- Project folder only (archived projects, and the proof of concept) ---
+  const isArchived = project.status === 'archived'
   if (!folderSupported) {
     return (
       <div className="folder-bar warn">
-        This project’s files are in the folder “{project.folder_name}” on your office computers. Open CAzen in Chrome or Edge on one of them to view or save files.
+        {isArchived ? 'This project is archived. ' : ''}Its files are in the folder “{project.folder_name}” on your office computers. Open CAzen in Chrome or Edge on one of them to view{isArchived ? '' : ' or save'} files.
       </div>
     )
   }
   return (
     <div className={`folder-bar ${status === 'ready' ? '' : 'warn'}`}>
       {status === 'ready' ? (
-        <span>Saving to {folderName}\{ROOT} on this computer.</span>
+        <span>{isArchived ? <>Archived: files open from {folderName}\{ROOT} on this computer.</> : <>Saving to {folderName}\{ROOT} on this computer.</>}</span>
       ) : status === 'ask' ? (
         <span>Files are in {folderName}. Allow CAzen to use it again on this computer.</span>
       ) : (
@@ -132,7 +141,7 @@ export function ProjectFolder({ project, compact = false }: { project: Project; 
       {status === 'ask' && <button className="primary-lite" onClick={() => run(async () => { await reconnectFolder(project.id) })} disabled={busy}>Allow</button>}
       {status === 'none' && <button className="primary-lite" onClick={() => pick()} disabled={busy}>Connect folder</button>}
       {!compact && status !== 'none' && <button className="link" onClick={() => pick()} disabled={busy}>Change folder</button>}
-      {!compact && toR2}
+      {!compact && !isArchived && toR2}
       {note && <span className="bad-text small">{note}</span>}
     </div>
   )
