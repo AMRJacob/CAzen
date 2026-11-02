@@ -181,3 +181,14 @@ function titleCase(t: string) {
   const small = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with'])
   return t.toLowerCase().split(' ').map((w, i) => (i > 0 && small.has(w) ? w : w.replace(/^([a-z])/, (m) => m.toUpperCase()))).join(' ')
 }
+
+/** Every stored file of a project (all sheet revisions and issued forms), for copying to the project folder. */
+export async function projectFilePaths(projectId: string): Promise<string[]> {
+  const [revs, forms] = await Promise.all([
+    db().from('sheet_revisions').select('file_path, sheets!inner(project_id)').eq('sheets.project_id', projectId),
+    db().from('issued_forms').select('file_path').eq('project_id', projectId),
+  ])
+  if (revs.error) throw revs.error
+  if (forms.error) throw forms.error
+  return [...(revs.data ?? []), ...(forms.data ?? [])].map((r) => (r as { file_path: string | null }).file_path).filter((p): p is string => !!p)
+}

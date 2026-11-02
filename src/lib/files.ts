@@ -3,6 +3,10 @@ import { db } from './supabase'
 /**
  * Where a project's files live.
  *
+ *  - "r2": CAzen's file storage in Cloudflare R2 (the prototype's main store, works on phones too).
+ *    Paths look like "r2:{project}/CAzen/02 Drawings/…/A-101 First Floor Plan.pdf": the same layout
+ *    as the project folder, so a copy can be kept there. The bucket is private; the browser gets
+ *    15-minute links from the "files" Edge Function, which checks project membership.
  *  - "cloud": CAzen's Supabase storage (the original setup). Paths look like "{project}/sheets/…".
  *  - "folder": a folder the user picked on their own computer, such as the project's CA folder on a
  *    mapped shared drive. CAzen builds its own subfolders there. Paths are stored relative to that
@@ -12,10 +16,12 @@ import { db } from './supabase'
  * Folder access uses the browser's File System Access API (desktop Chrome and Edge). The folder
  * itself can't be saved in the database, so each browser remembers its own connection (IndexedDB).
  */
-export type StorageMode = 'cloud' | 'folder'
+export type StorageMode = 'cloud' | 'folder' | 'r2'
 
 const FOLDER = 'folder:'
+const R2 = 'r2:'
 export const isFolderPath = (p: string | null | undefined) => !!p?.startsWith(FOLDER)
+export const isR2Path = (p: string | null | undefined) => !!p?.startsWith(R2)
 
 /** CAzen's own folder inside the project folder, and its sections. Names are as they appear in Explorer. */
 export const ROOT = 'CAzen'
@@ -144,44 +150,118 @@ export interface ProjectStore {
   folder_name?: string | null
 }
 
-/**
- * Save a file and return the path to keep in the database. Never overwrites: if the name is
- * taken, " (2)", " (3)"… is added.
- *  cloudPath: where it goes in cloud storage.
- *  folder:    subfolders under CAzen\ and the file name, for folder storage.
- */
-export async function putFile(project: ProjectStore, bytes: Uint8Array, cloudPath: string, folder: { dirs: string[]; name: string }, type = 'application/pdf'): Promise<string> {
-  if (project.storage !== 'folder') {
-    const up = await db().storage.from('documents').upload(cloudPath, new Blob([bytes as BlobPart], { type }), { upsert: false })
-    if (up.error) throw up.error
-    return cloudPath
+// --- R2 links from the "files" Edge Function ---
+async function fileLink(action: 'put' | 'get', projectId: string, key: string): Promise<{ url: string; key?: string }> {
+  const { data, error } = await db().functions.invoke('files', { body: { action, project_id: projectId, key } })
+  if (error) {
+    let msg = error.message
+    try {
+      const ctx = (error as { context?: Response }).context
+      const b = ctx ? await ctx.json() : null
+      if (b?.error) msg = b.error
+    } catch { /* keep the generic message */ }
+    throw new Error(msg)
   }
-  const base = await readyFolder(project.id, project.folder_name ?? null)
-  let dir = await base.getDirectoryHandle(ROOT, { create: true })
-  const parts = [ROOT]
-  for (const d of folder.dirs) {
-    const n = safeName(d)
-    dir = await dir.getDirectoryHandle(n, { create: true })
-    parts.push(n)
-  }
+  return data as { url: string; key?: string }
+}
+
+/** Is CAzen's Cloudflare storage set up (the R2 secrets are in Supabase)? */
+export async function r2Ready(): Promise<boolean> {
+  try {
+    const { data, error } = await db().functions.invoke('files', { body: { action: 'status' } })
+    return !error && !!(data as { configured?: boolean })?.configured
+  } catch { return false }
+}
+
+/** "CAzen", then the cleaned folder names, then the cleaned file name. */
+function relParts(folder: { dirs: string[]; name: string }): string[] {
   const dot = folder.name.lastIndexOf('.')
   const stem = safeName(dot > 0 ? folder.name.slice(0, dot) : folder.name)
   const ext = dot > 0 ? folder.name.slice(dot) : ''
-  let name = stem + ext
-  for (let i = 2; await exists(dir, name); i++) name = `${stem} (${i})${ext}`
+  return [ROOT, ...folder.dirs.map((d) => safeName(d)), stem + ext]
+}
+
+/** Write into the project folder at parts (CAzen/…/file). Never overwrites; returns the parts actually used. */
+async function writeToFolder(base: FileSystemDirectoryHandle, parts: string[], bytes: Uint8Array, renameIfTaken = true): Promise<string[] | null> {
+  let dir = base
+  for (const d of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(d, { create: true })
+  const file = parts[parts.length - 1]
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file, ext = dot > 0 ? file.slice(dot) : ''
+  let name = file
+  if (await exists(dir, name)) {
+    if (!renameIfTaken) return null
+    for (let i = 2; await exists(dir, name); i++) name = `${stem} (${i})${ext}`
+  }
   const fh = await dir.getFileHandle(name, { create: true })
   const w = await fh.createWritable()
   await w.write(bytes as BlobPart)
   await w.close()
-  return FOLDER + [...parts, name].join('/')
+  return [...parts.slice(0, -1), name]
+}
+
+/** The connected project folder, only if it's usable right now without asking. */
+async function folderIfReady(projectId: string): Promise<FileSystemDirectoryHandle | null> {
+  return (await folderStatus(projectId)) === 'ready' ? rememberedFolder(projectId) : null
+}
+
+/**
+ * Save a file and return the path to keep in the database. Never overwrites: if the name is
+ * taken, " (2)", " (3)"… is added.
+ *  cloudPath: where it goes in the original Supabase storage.
+ *  folder:    subfolders under CAzen\ and the file name, for R2 and the project folder.
+ * With R2, a copy also goes into the project folder when it's connected on this computer.
+ */
+export async function putFile(project: ProjectStore, bytes: Uint8Array, cloudPath: string, folder: { dirs: string[]; name: string }, type = 'application/pdf'): Promise<string> {
+  if (project.storage === 'folder') {
+    const base = await readyFolder(project.id, project.folder_name ?? null)
+    const used = await writeToFolder(base, relParts(folder), bytes)
+    return FOLDER + used!.join('/')
+  }
+  if (project.storage === 'r2') {
+    const { url, key } = await fileLink('put', project.id, `${project.id}/${relParts(folder).join('/')}`)
+    const res = await fetch(url, { method: 'PUT', body: bytes as BlobPart, headers: { 'Content-Type': type } })
+    if (!res.ok) throw new Error(`Upload to CAzen file storage failed (${res.status}).`)
+    const finalKey = key!
+    // Best effort: keep the office copy in step. A failure here never loses the upload.
+    try {
+      const base = await folderIfReady(project.id)
+      if (base) await writeToFolder(base, finalKey.slice(project.id.length + 1).split('/'), bytes, false)
+    } catch { /* the "Copy to project folder" button catches up later */ }
+    return R2 + finalKey
+  }
+  const up = await db().storage.from('documents').upload(cloudPath, new Blob([bytes as BlobPart], { type }), { upsert: false })
+  if (up.error) throw up.error
+  return cloudPath
 }
 
 async function exists(dir: FileSystemDirectoryHandle, name: string) {
   try { await dir.getFileHandle(name); return true } catch { return false }
 }
 
-/** Read a stored file, wherever it lives. */
+async function readFromFolder(base: FileSystemDirectoryHandle, parts: string[]): Promise<Uint8Array | null> {
+  try {
+    let dir = base
+    for (const d of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(d)
+    const f = await (await dir.getFileHandle(parts[parts.length - 1])).getFile()
+    return new Uint8Array(await f.arrayBuffer())
+  } catch { return null }
+}
+
+/** Read a stored file, wherever it lives. R2 files come from the office copy when it's there (faster). */
 export async function readFile(project: ProjectStore, path: string): Promise<Uint8Array> {
+  if (isR2Path(path)) {
+    const key = path.slice(R2.length)
+    const base = await folderIfReady(project.id).catch(() => null)
+    if (base) {
+      const local = await readFromFolder(base, key.slice(project.id.length + 1).split('/'))
+      if (local) return local
+    }
+    const { url } = await fileLink('get', project.id, key)
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Couldn’t download the file from CAzen file storage (${res.status}).`)
+    return new Uint8Array(await res.arrayBuffer())
+  }
   if (!isFolderPath(path)) {
     const { data, error } = await db().storage.from('documents').download(path)
     if (error) throw error
@@ -189,34 +269,27 @@ export async function readFile(project: ProjectStore, path: string): Promise<Uin
   }
   const base = await readyFolder(project.id, project.folder_name ?? null)
   const parts = path.slice(FOLDER.length).split('/')
-  let dir = base
-  for (const d of parts.slice(0, -1)) {
-    try { dir = await dir.getDirectoryHandle(d) } catch { throw new Error(`Can’t find the folder “${d}” in the project folder. It may have been moved or renamed.`) }
-  }
-  try {
-    const f = await (await dir.getFileHandle(parts[parts.length - 1])).getFile()
-    return new Uint8Array(await f.arrayBuffer())
-  } catch {
-    throw new Error(`Can’t find “${parts[parts.length - 1]}” in ${parts.slice(0, -1).join('\\')}. It may have been moved, renamed or deleted in Explorer.`)
-  }
+  const bytes = await readFromFolder(base, parts)
+  if (!bytes) throw new Error(`Can’t find “${parts[parts.length - 1]}” in ${parts.slice(0, -1).join('\\')}. It may have been moved, renamed or deleted in Explorer.`)
+  return bytes
 }
 
 /** Open a stored PDF in a new tab. */
 export async function openFile(project: ProjectStore, path: string) {
   // Open the tab first, inside the click, so pop-up blockers allow it.
   const tab = window.open('', '_blank')
+  const go = (url: string) => { if (tab) tab.location.href = url; else window.open(url, '_blank', 'noopener') }
   try {
+    if (isR2Path(path)) { go((await fileLink('get', project.id, path.slice(R2.length))).url); return }
     if (!isFolderPath(path)) {
       const { data, error } = await db().storage.from('documents').createSignedUrl(path, 600)
       if (error) throw error
-      if (tab) tab.location.href = data.signedUrl
-      else window.open(data.signedUrl, '_blank', 'noopener')
+      go(data.signedUrl)
       return
     }
     const bytes = await readFile(project, path)
     const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
-    if (tab) tab.location.href = url
-    else window.open(url, '_blank')
+    go(url)
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
   } catch (e) {
     tab?.close()
@@ -224,7 +297,35 @@ export async function openFile(project: ProjectStore, path: string) {
   }
 }
 
-/** Where a stored file is, in words, for tooltips: "CAzen\02 Drawings\…\A-101.pdf" or "CAzen cloud". */
+/**
+ * Copy every R2 file of the project into the connected project folder, skipping ones already
+ * there. Never deletes or overwrites anything in the folder.
+ */
+export async function copyToFolder(project: ProjectStore, paths: string[], onProgress?: (done: number, total: number) => void) {
+  const base = await readyFolder(project.id, project.folder_name ?? null)
+  const r2 = [...new Set(paths.filter(isR2Path))]
+  let copied = 0, already = 0, failed = 0, done = 0
+  for (const p of r2) {
+    const key = p.slice(R2.length)
+    const parts = key.slice(project.id.length + 1).split('/')
+    try {
+      if (await readFromFolder(base, parts)) already++
+      else {
+        const { url } = await fileLink('get', project.id, key)
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(String(res.status))
+        await writeToFolder(base, parts, new Uint8Array(await res.arrayBuffer()), false)
+        copied++
+      }
+    } catch { failed++ }
+    onProgress?.(++done, r2.length)
+  }
+  return { copied, already, failed, total: r2.length }
+}
+
+/** Where a stored file is, in words, for tooltips. */
 export function describePath(path: string) {
-  return isFolderPath(path) ? path.slice(FOLDER.length).split('/').join('\\') : 'CAzen cloud storage'
+  if (isFolderPath(path)) return path.slice(FOLDER.length).split('/').join('\\')
+  if (isR2Path(path)) return 'CAzen file storage: ' + path.slice(R2.length).split('/').slice(1).join('\\')
+  return 'CAzen starter storage'
 }

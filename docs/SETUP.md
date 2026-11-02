@@ -86,3 +86,41 @@ Drop the letterhead and titleblock PDFs into `templates/` (see `templates/README
 
 - Safe: everything in this repo, including the `anon` key in GitHub Secrets (it only works within the access policies).
 - Never commit: `.env`, the Supabase `service_role` key, the database password, or any project PDFs.
+
+## File storage: Cloudflare R2 (prototype)
+
+CAzen keeps drawings, forms and photos in a private Cloudflare R2 bucket. The browser never sees
+the Cloudflare key: the Supabase Edge Function `files` (in `supabase/functions/files`) checks the
+user is a member of the project and hands out 15-minute links for one file at a time.
+Free allowance: 10 GB of storage a month, no download fees (https://developers.cloudflare.com/r2/pricing).
+
+1. **Cloudflare account.** Sign up at dash.cloudflare.com, open **R2 Object Storage** and enable it.
+   Cloudflare may ask for a card even on the free plan; nothing is charged within the free allowance.
+2. **Bucket.** Create a bucket named `cazen-files` (location: Automatic). Leave public access off.
+3. **CORS.** In the bucket's **Settings → CORS policy**, add:
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://amrjacob.github.io", "http://localhost:5173"],
+       "AllowedMethods": ["GET", "PUT", "HEAD"],
+       "AllowedHeaders": ["Content-Type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+4. **API token.** In R2, **Manage API tokens → Create API token**: permission **Object Read & Write**,
+   applied to the `cazen-files` bucket only. Keep the page open: it shows the **Access Key ID** and
+   **Secret Access Key** once. Your **Account ID** is on the R2 overview page (also inside the S3
+   endpoint, `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`).
+5. **Supabase secrets.** In the Supabase dashboard for CAzen, **Edge Functions → Secrets**, add:
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` = `cazen-files`.
+   Paste the keys there only: never into the repo, a chat, or `.env` files that get committed.
+6. **Check.** Open CAzen → Drawings. The bar should say "Files are saved in CAzen file storage".
+   If it says file storage isn't set up yet, recheck the four secret names.
+
+New projects use R2 by default. Existing projects show **Use CAzen file storage** on the Drawings page.
+On an office computer (Chrome or Edge), **Keep copies in the project folder** also writes every file
+into the project's CA folder (`CAzen\01 Contract … 11 Pay Applications`), and **Copy to project folder**
+catches up on files saved elsewhere, such as from a phone.
+
+Moving off the free allowance later: R2's paid storage is $0.015 per GB-month; nothing in CAzen changes.
