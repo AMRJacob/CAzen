@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getDocument } from '../lib/pdf/pdfjs'
 import type { PageText, Region } from '../lib/pdf/pageText'
 import { textInRegion } from '../lib/pdf/pageText'
-import { readWith, REGION_LABELS, saveTemplate, SHEET_NUMBER, type RegionKey, type TitleblockTemplate } from '../lib/titleblocks'
+import { anchorsFrom, readWith, REGION_LABELS, saveTemplate, SHEET_NUMBER, type RegionKey, type TitleblockTemplate } from '../lib/titleblocks'
 
 const KEYS: RegionKey[] = ['number', 'title', 'revision']
 
@@ -220,7 +220,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
     setBusy(true)
     setError(null)
     try {
-      onSaved(await saveTemplate({ id: template?.id, firm_id: firmId, name: name || 'Title block', regions }))
+      onSaved(await saveTemplate({ id: template?.id, firm_id: firmId, name: name || 'Title block', regions, page_size: { w: Math.round(page.text.width), h: Math.round(page.text.height) }, anchors: anchorsFrom(page.text, { id: '', firm_id: firmId, name, regions }) }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setBusy(false)

@@ -9,7 +9,8 @@ import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
-import { COVER, listTemplates, readPage, type TitleblockTemplate } from '../lib/titleblocks'
+import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
+import { disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
@@ -372,6 +373,10 @@ interface Draft {
   title: string
   revision: string
   templateId: string | null
+  /** A template chosen for this sheet by hand ('none' = type it in), instead of the best fit. */
+  pinned?: string | null
+  /** Best fit was close between two templates. */
+  unsure?: boolean
   /** Fields typed by hand: kept when templates change. */
   touched: { number?: boolean; title?: boolean; revision?: boolean }
 }
@@ -402,10 +407,13 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
 
   // Re-read every page when the templates or the preferred one change; hand edits stay.
   const reread = useCallback((list: Draft[], tpls: TitleblockTemplate[], pref: string) => list.map((d) => {
-    const r = readPage(d.page.text, tpls, pref || null)
+    if (d.pinned === 'none') return { ...d, templateId: null, unsure: false }
+    const pinnedTpl = d.pinned ? tpls.find((t) => t.id === d.pinned) : undefined
+    const r = pinnedTpl ? readWith(d.page.text, pinnedTpl) : readPage(d.page.text, tpls, pref || null)
     return {
       ...d,
       templateId: r.templateId,
+      unsure: !pinnedTpl && !!r.unsure,
       number: d.touched.number ? d.number : r.number,
       title: d.touched.title ? d.title : r.title,
       revision: d.touched.revision ? d.revision : r.revision,
@@ -451,6 +459,29 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const type = (i: number, k: 'number' | 'title' | 'revision', v: string) =>
     setDrafts(drafts.map((d, j) => (j === i ? { ...d, [k]: v, touched: { ...d.touched, [k]: true } } : d)))
 
+  // Choose a template for one sheet (or 'none' to type it in, or null for best fit) and re-read it.
+  const pin = (i: number, value: string | null) => {
+    // Choosing a template for a sheet confirms it fits: a template that hasn't learned its fixed
+    // wording or sheet size learns them from this sheet, which sharpens best fit for the rest.
+    const t = templates.find((x) => x.id === value)
+    let tpls = templates
+    if (t && (!t.anchors?.length || !t.page_size)) {
+      const page = drafts[i].page.text
+      const learned: TitleblockTemplate = { ...t, anchors: t.anchors?.length ? t.anchors : anchorsFrom(page, t), page_size: t.page_size ?? { w: Math.round(page.width), h: Math.round(page.height) } }
+      tpls = templates.map((x) => (x.id === t.id ? learned : x))
+      setTemplates(tpls)
+      saveTemplate(learned).catch(() => { /* learning is a bonus */ })
+    }
+    setDrafts((ds) => reread(ds.map((d, j) => (j === i ? { ...d, pinned: value } : d)), tpls, preferred))
+  }
+  // The same choice for every other sheet with the same discipline letters (one consultant, one title block).
+  const letters = (d: Draft) => disciplineFor(d.number, order).discipline?.code ?? d.number.match(/^[A-Z]+/i)?.[0]?.toUpperCase() ?? ''
+  const pinLike = (i: number) => setDrafts((ds) => {
+    const src = ds[i], code = letters(src)
+    return reread(ds.map((d, j) => (j !== i && code && letters(d) === code && !d.touched.number ? { ...d, pinned: src.pinned } : d)), templates, preferred)
+  })
+  const sameLetters = (i: number) => { const code = letters(drafts[i]); return code ? drafts.filter((d, j) => j !== i && letters(d) === code && d.pinned !== drafts[i].pinned).length : 0 }
+
   const chosen = drafts.filter((d) => d.include)
   const numbers = chosen.map((d) => d.number.trim().toUpperCase())
   const duplicates = new Set(numbers.filter((n, i) => n && numbers.indexOf(n) !== i))
@@ -467,6 +498,11 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
         number: d.number, title: d.title, revisionLabel: d.revision || setRev, bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
       await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
+      // Templates drawn before CAzen recorded sheet sizes learn theirs from the sheets they read.
+      for (const t of templates.filter((t) => !t.page_size)) {
+        const d = chosen.find((x) => x.templateId === t.id && x.pinned === t.id) ?? chosen.find((x) => x.templateId === t.id && !x.unsure)
+        if (d) await saveTemplate({ ...t, page_size: { w: Math.round(d.page.text.width), h: Math.round(d.page.text.height) } }).catch(() => {})
+      }
       onDone()
     } catch (err) {
       setError(message(err))
@@ -562,9 +598,29 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                     <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
                     <td><input className="cell" value={d.title} onChange={(e) => type(i, 'title', e.target.value)} /></td>
                     <td><input className="cell short" value={d.revision} onChange={(e) => type(i, 'revision', e.target.value)} placeholder={setRev || '—'} /></td>
-                    <td className="small">
-                      {d.templateId ? tplName(d.templateId) : d.number === COVER && !d.touched.number ? <span className="muted" title="No sheet number in its title block, and it lists other sheets">cover sheet</span> : d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : (
-                        <button className="link" onClick={() => setEditing({ page: i })}>{d.number ? 'guessed · ' : ''}draw template</button>
+                    <td className="small read-by">
+                      {d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : templates.length === 0 ? (
+                        d.number === COVER && !d.touched.number
+                          ? <span className="muted" title="No sheet number in its title block, and it lists other sheets">cover sheet</span>
+                          : <button className="link" onClick={() => setEditing({ page: i })}>{d.number ? 'guessed · ' : ''}draw template</button>
+                      ) : (
+                        <>
+                          <select
+                            className={`cell ${d.unsure ? 'unsure' : ''}`}
+                            value={d.pinned ?? ''}
+                            onChange={(e) => pin(i, e.target.value || null)}
+                            aria-label={`Template for page ${d.pageIndex + 1}`}
+                            title={d.unsure ? 'Two templates fit about equally well: check this one' : undefined}
+                          >
+                            <option value="">{`Best fit: ${d.templateId ? tplName(d.templateId) : d.number === COVER ? 'cover sheet' : 'none'}`}</option>
+                            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            <option value="none">Type it myself</option>
+                          </select>
+                          {d.unsure && !d.pinned && <span className="unsure-note">check</span>}
+                          {d.pinned && d.pinned !== 'none' && sameLetters(i) > 0 && (
+                            <button className="link small" onClick={() => pinLike(i)}>Use for all {letters(d)} sheets ({sameLetters(i)})</button>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="small">{!d.include ? 'skip' : !n ? <span className="bad-text">needs number</span> : duplicates.has(n) ? <span className="bad-text">duplicate</span> : existingNumbers.has(n) ? 'replaces current' : 'new sheet'}</td>

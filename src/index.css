@@ -432,3 +432,9 @@ button.primary-lite { background: var(--ink); color: var(--paper); border-color:
 .dropzone input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .dz-icon { font-size: 26px; color: var(--moss); line-height: 1; }
 section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border-radius: 12px; }
+
+.read-by { white-space: nowrap; }
+.read-by select.cell { max-width: 190px; font-size: 12.5px; padding: 4px 6px; }
+.read-by select.unsure { border-color: #d9b45a; background: #fbf4e2; }
+.unsure-note { margin-left: 6px; font-size: 11px; color: #8a6a1d; background: #f8efd9; border-radius: 8px; padding: 1px 6px; }
+.read-by .link { display: block; margin-top: 2px; }
