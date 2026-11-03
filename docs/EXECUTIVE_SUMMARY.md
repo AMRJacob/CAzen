@@ -26,7 +26,7 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 | Feature | Status |
 | --- | --- |
 | Sign-in, invites, create password | Live |
-| Projects and sidebar project switcher | Live |
+| Projects and sidebar project switcher; project Location (address search, map pin, Open in Maps) | Live |
 | Drawings: upload rounds, split, revision history, set as of date | Live |
 | Title block templates | Live |
 | Sheet order by discipline | Live |

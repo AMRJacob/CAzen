@@ -7,6 +7,9 @@ export interface Project {
   owner_name: string | null
   contractor_name: string | null
   address: string | null
+  /** Where the site is, from the Location map (WGS84). */
+  latitude?: number | null
+  longitude?: number | null
   status: 'active' | 'closed' | 'archived'
   /** Sheet order for this project; null = the firm's. */
   discipline_order?: Discipline[] | null

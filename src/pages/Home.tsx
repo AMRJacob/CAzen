@@ -5,6 +5,7 @@ import { useProject } from '../lib/project'
 import { useFirm } from '../lib/firm'
 import type { Project } from '../lib/types'
 import { ProjectAdmin } from '../components/ProjectAdmin'
+import { LocationPicker, type Location } from '../components/LocationPicker'
 
 export default function Home() {
   const { projects, current, select, reload, loading } = useProject()
@@ -64,6 +65,7 @@ function ProjectForm({ project, onCreated }: { project?: Project; onCreated: (p:
     number: project?.number ?? '', name: project?.name ?? '', owner: project?.owner_name ?? '',
     contractor: project?.contractor_name ?? '', address: project?.address ?? '',
   })
+  const [loc, setLoc] = useState<Location>({ address: project?.address ?? '', lat: project?.latitude ?? null, lng: project?.longitude ?? null })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value })
@@ -75,7 +77,7 @@ function ProjectForm({ project, onCreated }: { project?: Project; onCreated: (p:
     if (project) {
       const { data, error } = await db().from('projects').update({
         number: f.number.trim(), name: f.name.trim(), owner_name: f.owner.trim() || null,
-        contractor_name: f.contractor.trim() || null, address: f.address.trim() || null,
+        contractor_name: f.contractor.trim() || null, address: loc.address.trim() || null, latitude: loc.lat, longitude: loc.lng,
       }).eq('id', project.id).select().single()
       setBusy(false)
       if (error) setError(error.message)
@@ -88,11 +90,14 @@ function ProjectForm({ project, onCreated }: { project?: Project; onCreated: (p:
       p_name: f.name.trim(),
       p_owner_name: f.owner.trim() || null,
       p_contractor_name: f.contractor.trim() || null,
-      p_address: f.address.trim() || null,
+      p_address: loc.address.trim() || null,
     })
+    if (!error && loc.lat != null) {
+      await db().from('projects').update({ latitude: loc.lat, longitude: loc.lng }).eq('id', (data as Project).id)
+    }
     setBusy(false)
     if (error) setError(error.message.includes('duplicate') ? 'That project number already exists.' : error.message)
-    else onCreated(data as Project)
+    else onCreated({ ...(data as Project), latitude: loc.lat, longitude: loc.lng })
   }
 
   return (
@@ -101,7 +106,10 @@ function ProjectForm({ project, onCreated }: { project?: Project; onCreated: (p:
       <label>Name<input required value={f.name} onChange={set('name')} placeholder="Westrock Landing WMO" /></label>
       <label>Owner<input value={f.owner} onChange={set('owner')} /></label>
       <label>Contractor<input value={f.contractor} onChange={set('contractor')} /></label>
-      <label className="wide">Address<input value={f.address} onChange={set('address')} /></label>
+      <div className="wide stack-field">
+        <span className="field-label">Location</span>
+        <LocationPicker value={loc} onChange={setLoc} />
+      </div>
       <div className="wide">
         <button className="primary" disabled={busy}>{busy ? 'Saving…' : project ? 'Save project' : 'Create project'}</button>
         {error && <div className="notice error">{error}</div>}
