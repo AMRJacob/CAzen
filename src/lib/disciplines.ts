@@ -61,6 +61,8 @@ export function cleanOrder(list: Discipline[]): Discipline[] {
  * so "FP-101" matches FP when FP is listed and F when it isn't.
  */
 export function disciplineFor(sheetNumber: string, order: Discipline[]): { index: number; discipline: Discipline | null } {
+  // A cover sheet with no number of its own (see titleblocks.COVER) comes before everything.
+  if (sheetNumber.toUpperCase() === 'COVER') return { index: -1, discipline: { code: 'COVER', name: 'Cover' } }
   const letters = sheetNumber.toUpperCase().match(/^[A-Z]+/)?.[0] ?? ''
   let best = -1
   for (let i = 0; i < order.length; i++) {
@@ -87,7 +89,7 @@ export function groupByDiscipline<T>(items: T[], numberOf: (t: T) => string, ord
     const n = numberOf(t)
     const { discipline } = disciplineFor(n, order)
     const key = discipline?.code ?? (n.toUpperCase().match(/^[A-Z]+/)?.[0] || '#')
-    const label = discipline ? `${discipline.code} · ${discipline.name}` : key === '#' ? 'Other' : `${key} · Not in sheet order`
+    const label = discipline?.code === 'COVER' ? 'Cover' : discipline ? `${discipline.code} · ${discipline.name}` : key === '#' ? 'Other' : `${key} · Not in sheet order`
     const last = groups[groups.length - 1]
     if (last?.key === key) last.items.push(t)
     else groups.push({ key, label, items: [t] })

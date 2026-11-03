@@ -86,7 +86,41 @@ export function readPage(text: PageText, templates: TitleblockTemplate[], prefer
     const score = found / boxes + found * 0.01 + (t.id === preferred ? 0.001 : 0)
     if (!best || score > best.score) best = { r, score }
   }
-  return best?.r ?? { number: guessNumber(text) ?? '', title: '', revision: '', templateId: null }
+  if (best) return best.r
+  // No title block number, but the page carries a sheet index: it's the cover.
+  if (hasSheetIndex(text)) {
+    const fromTemplate = templates.map((t) => readWith(text, t)).find((r) => r.title || r.revision)
+    return { number: COVER, title: fromTemplate?.title || 'Cover Sheet', revision: fromTemplate?.revision ?? '', templateId: null }
+  }
+  return { number: guessNumber(text) ?? '', title: '', revision: '', templateId: null }
+}
+
+/** The sheet number given to a cover sheet that has none of its own; it sorts first. */
+export const COVER = 'COVER'
+
+/**
+ * A sheet index: at least four different sheet numbers that each start a line, stacked in one
+ * column (left edges within a few points). Plan sheets have plenty of tags and references, but
+ * scattered, not lined up like this.
+ */
+export function hasSheetIndex(text: PageText): boolean {
+  const W = text.width, H = text.height
+  const starts = text.words
+    .filter((w) => !w.vertical)
+    .map((w) => ({ n: cleanNumber(w.str.trim().split(/\s+/)[0] ?? ''), x: w.x * W, y: w.y * H, h: w.h * H }))
+    .filter((c) => SHEET_NUMBER.test(c.n))
+  starts.sort((a, b) => a.x - b.x)
+  for (let i = 0; i < starts.length; i++) {
+    const col = starts.filter((c) => Math.abs(c.x - starts[i].x) <= 4).sort((a, b) => a.y - b.y)
+    if (new Set(col.map((c) => c.n)).size < 4) continue
+    // Rows close together, like a table: each gap under four line heights.
+    let run = 1
+    for (let j = 1; j < col.length; j++) {
+      run = col[j].y - col[j - 1].y <= Math.max(col[j].h, 6) * 4 ? run + 1 : 1
+      if (run >= 4) return true
+    }
+  }
+  return false
 }
 
 /** Without a template: the sheet-number-shaped word furthest to the lower right, larger text preferred. */

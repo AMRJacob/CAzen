@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getDocument } from '../lib/pdf/pdfjs'
 import type { PageText, Region } from '../lib/pdf/pageText'
 import { textInRegion } from '../lib/pdf/pageText'
@@ -31,32 +31,40 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const pageEl = useRef<HTMLDivElement>(null)
+  const sharp = useRef<HTMLCanvasElement>(null)
+  const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
   const startRef = useRef<{ x: number; y: number } | null>(null)
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  const [spaceDown, setSpaceDown] = useState(false)
   const page = pages[pageIx]
 
-  // Render the sample sheet once, large enough to read title block text when zoomed in.
+  // A quick overview image of the whole sheet; zoomed-in views are re-drawn sharply on top.
   useEffect(() => {
     let url: string | null = null
     let cancelled = false
     setImg(null)
     ;(async () => {
       const pdf = await getDocument({ data: page.bytes.slice() }).promise
+      if (cancelled) { await pdf.loadingTask.destroy(); return }
+      pdfRef.current?.loadingTask.destroy()
+      pdfRef.current = pdf
       const p = await pdf.getPage(1)
       const base = p.getViewport({ scale: 1 })
       setAspect(base.width / base.height)
-      const vp = p.getViewport({ scale: Math.min(3, 5200 / Math.max(base.width, base.height)) })
+      const vp = p.getViewport({ scale: 2400 / Math.max(base.width, base.height) })
       const c = document.createElement('canvas')
       c.width = vp.width
       c.height = vp.height
       await p.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport: vp }).promise
       const blob = await new Promise<Blob | null>((res) => c.toBlob(res))
-      await pdf.loadingTask.destroy()
       if (cancelled || !blob) return
       url = URL.createObjectURL(blob)
       setImg(url)
     })().catch((e) => setError(e instanceof Error ? e.message : String(e)))
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
   }, [page])
+  useEffect(() => () => { pdfRef.current?.loadingTask.destroy() }, [])
 
   const [fit, setFit] = useState(900)
   useEffect(() => {
@@ -67,17 +75,102 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
   }, [])
   const width = fit * zoom
   const height = width / aspect
+  const MAX_ZOOM = 24
 
-  // Title blocks usually sit at the right or bottom: zooming in starts there.
-  function zoomTo(z: number) {
-    setZoom(z)
+  // Zoom keeping one point of the sheet (fractions) under the same spot on screen.
+  const zoomAround = useCallback((z: number, fx: number, fy: number, screenX?: number, screenY?: number) => {
+    const el = scroller.current
+    if (!el) return
+    const nz = Math.min(MAX_ZOOM, Math.max(1, z))
+    setZoom(nz)
     requestAnimationFrame(() => {
-      const el = scroller.current
-      if (!el) return
-      const target = regions.number ?? { x: 0.85, y: 0.85, w: 0.1, h: 0.1 }
-      el.scrollTo({ left: (target.x + target.w / 2) * fit * z - el.clientWidth / 2, top: (target.y + target.h / 2) * (fit * z / aspect) - el.clientHeight / 2 })
+      const w = fit * nz, h = w / aspect
+      const sx = screenX ?? el.clientWidth / 2, sy = screenY ?? el.clientHeight / 2
+      el.scrollTo({ left: fx * w + 12 - sx, top: fy * h + 12 - sy })
     })
+  }, [fit, aspect])
+
+  const centre = () => {
+    const el = scroller.current
+    if (!el) return { fx: 0.5, fy: 0.5 }
+    return { fx: (el.scrollLeft - 12 + el.clientWidth / 2) / width, fy: (el.scrollTop - 12 + el.clientHeight / 2) / height }
   }
+  const zoomBy = (k: number) => { const c = centre(); zoomAround(zoom * k, c.fx, c.fy) }
+  // Title blocks usually sit at the right or bottom: jump to the number box, or the bottom-right corner.
+  function toTitleBlock() {
+    const t = regions.number ?? { x: 0.84, y: 0.86, w: 0.12, h: 0.1 }
+    zoomAround(Math.max(zoom, 6), t.x + t.w / 2, t.y + t.h / 2)
+  }
+
+  // Ctrl/⌘ + scroll, or a trackpad pinch, zooms around the pointer. Plain scrolling pans.
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const wheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      e.preventDefault()
+      const pr = pageEl.current!.getBoundingClientRect(), sr = el.getBoundingClientRect()
+      const fx = (e.clientX - pr.left) / pr.width, fy = (e.clientY - pr.top) / pr.height
+      zoomAround(zoom * Math.exp(-e.deltaY * 0.0025), fx, fy, e.clientX - sr.left, e.clientY - sr.top)
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [zoom, zoomAround])
+
+  // Hold the space bar to drag the sheet around instead of drawing.
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => { if (e.code === 'Space' && !(e.target as HTMLElement).closest('input, select, textarea')) { e.preventDefault(); setSpaceDown(true) } }
+    const ku = (e: KeyboardEvent) => { if (e.code === 'Space') setSpaceDown(false) }
+    window.addEventListener('keydown', kd)
+    window.addEventListener('keyup', ku)
+    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku) }
+  }, [])
+
+  // Re-draw the visible part sharply from the PDF once zooming or scrolling settles.
+  const [view, setView] = useState({ x: 0, y: 0, w: 0, h: 0 })
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    let t: number | undefined
+    const update = () => {
+      window.clearTimeout(t)
+      t = window.setTimeout(() => {
+        const pr = pageEl.current?.getBoundingClientRect(), sr = el.getBoundingClientRect()
+        if (!pr) return
+        const x0 = Math.max(0, sr.left - pr.left), y0 = Math.max(0, sr.top - pr.top)
+        const x1 = Math.min(pr.width, sr.right - pr.left), y1 = Math.min(pr.height, sr.bottom - pr.top)
+        setView({ x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) })
+      }, 120)
+    }
+    update()
+    el.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    return () => { window.clearTimeout(t); el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [zoom, width, img])
+  useEffect(() => {
+    const pdf = pdfRef.current, c = sharp.current
+    if (!pdf || !c || zoom <= 1.5 || view.w < 2 || view.h < 2) { if (c) c.style.display = 'none'; return }
+    let task: { cancel: () => void; promise: Promise<unknown> } | null = null
+    let cancelled = false
+    ;(async () => {
+      const p = await pdf.getPage(1)
+      const base = p.getViewport({ scale: 1 })
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const scale = (width / base.width) * dpr
+      const vp = p.getViewport({ scale, offsetX: -view.x * dpr, offsetY: -view.y * dpr })
+      const off = document.createElement('canvas')
+      off.width = Math.round(view.w * dpr)
+      off.height = Math.round(view.h * dpr)
+      task = p.render({ canvas: off, canvasContext: off.getContext('2d')!, viewport: vp }) as unknown as { cancel: () => void; promise: Promise<unknown> }
+      await task.promise
+      if (cancelled) return
+      c.width = off.width
+      c.height = off.height
+      c.getContext('2d')!.drawImage(off, 0, 0)
+      Object.assign(c.style, { display: 'block', left: `${view.x}px`, top: `${view.y}px`, width: `${view.w}px`, height: `${view.h}px` })
+    })().catch(() => { /* a newer view replaced this one */ })
+    return () => { cancelled = true; task?.cancel() }
+  }, [view, width, zoom])
 
   const frac = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -85,15 +178,27 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
   }
   const down = (e: React.PointerEvent) => {
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    if (spaceDown || e.button === 1) {
+      const el = scroller.current!
+      panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+      e.preventDefault()
+      return
+    }
     startRef.current = frac(e)
     setDraft({ ...startRef.current, w: 0, h: 0 })
   }
   const move = (e: React.PointerEvent) => {
+    if (panRef.current) {
+      const el = scroller.current!, p = panRef.current
+      el.scrollTo({ left: p.left - (e.clientX - p.x), top: p.top - (e.clientY - p.y) })
+      return
+    }
     if (!startRef.current) return
     const p = frac(e), s = startRef.current
     setDraft({ x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) })
   }
   const up = () => {
+    if (panRef.current) { panRef.current = null; return }
     if (!startRef.current) return
     startRef.current = null
     if (draft && draft.w > 0.002 && draft.h > 0.002) {
@@ -155,8 +260,13 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
           {scanned && <div className="notice small">This page has no text layer (it may be a scan), so nothing can be read from it. Choose another sample sheet.</div>}
           <div className="tb-zoom">
             <span className="muted small">Zoom</span>
-            {[1, 2, 4, 8].map((z) => <button key={z} type="button" className={zoom === z ? 'on' : ''} onClick={() => zoomTo(z)}>{z === 1 ? 'Fit' : `${z}×`}</button>)}
+            <button type="button" onClick={() => zoomBy(1 / 1.6)} disabled={zoom <= 1} aria-label="Zoom out">−</button>
+            <span className="tb-zoom-level">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => zoomBy(1.6)} disabled={zoom >= MAX_ZOOM} aria-label="Zoom in">+</button>
+            <button type="button" onClick={() => zoomAround(1, 0.5, 0.5)}>Fit</button>
+            <button type="button" className="primary-lite" onClick={toTitleBlock}>Title block</button>
           </div>
+          <p className="muted small tb-hint">Ctrl + scroll (or pinch) to zoom where you point; scroll to move around; hold Space and drag to pan.</p>
           <div className="actions">
             <button type="button" className="primary" onClick={save} disabled={busy || !regions.number}>{busy ? 'Saving…' : 'Save template'}</button>
             <button type="button" onClick={onCancel}>Cancel</button>
@@ -165,8 +275,9 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
         </div>
 
         <div className="tb-scroll" ref={scroller}>
-          <div className="tb-page" style={{ width, height }} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+          <div className={`tb-page ${spaceDown ? 'panning' : ''}`} ref={pageEl} style={{ width, height }} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
             {img ? <img src={img} alt="" draggable={false} style={{ width, height }} /> : <p className="muted">Rendering sheet…</p>}
+            <canvas ref={sharp} className="tb-sharp" />
             {KEYS.map((k) => regions[k] && (
               <span key={k} className={`tb-box key-${k} ${active === k ? 'on' : ''} ${regions[k]!.x + regions[k]!.w > 0.8 ? 'label-right' : ''}`} style={pct(regions[k]!)}><span>{REGION_LABELS[k]}</span></span>
             ))}

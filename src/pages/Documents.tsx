@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from '../lib/project'
 import { useFirm } from '../lib/firm'
@@ -9,7 +9,7 @@ import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
-import { listTemplates, readPage, type TitleblockTemplate } from '../lib/titleblocks'
+import { COVER, listTemplates, readPage, type TitleblockTemplate } from '../lib/titleblocks'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
@@ -32,6 +32,8 @@ export default function Documents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [dropped, setDropped] = useState<File[] | undefined>(undefined)
+  const [pageDrag, setPageDrag] = useState(false)
   const [view, setView] = useState<'sheets' | 'sets'>('sheets')
   const [asOf, setAsOf] = useState('')
   const [asOfRows, setAsOfRows] = useState<Awaited<ReturnType<typeof listSheetsAsOf>> | null>(null)
@@ -101,8 +103,15 @@ export default function Documents() {
     highlight: query.trim(),
   })
 
+  // Dropping PDFs anywhere on the page starts an upload with them.
+  const pageDropProps = uploading ? {} : {
+    onDragOver: (e: React.DragEvent) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); setPageDrag(true) } },
+    onDragLeave: (e: React.DragEvent) => { if (e.currentTarget === e.target) setPageDrag(false) },
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setPageDrag(false); const f = [...e.dataTransfer.files]; if (f.length) { setDropped(f); setUploading(true) } },
+  }
+
   return (
-    <section>
+    <section {...pageDropProps} className={pageDrag ? 'page-drop' : ''}>
       <div className="page-head">
         <div>
           <h1>Drawings</h1>
@@ -119,8 +128,9 @@ export default function Documents() {
           firmId={firm.id}
           order={order}
           existingNumbers={new Set(sheets.map((s) => s.number))}
-          onDone={() => { setUploading(false); load() }}
-          onCancel={() => setUploading(false)}
+          initialFiles={dropped}
+          onDone={() => { setUploading(false); setDropped(undefined); load() }}
+          onCancel={() => { setUploading(false); setDropped(undefined) }}
         />
       )}
 
@@ -366,8 +376,9 @@ interface Draft {
   touched: { number?: boolean; title?: boolean; revision?: boolean }
 }
 
-function UploadIssuance({ project, firmId, order, existingNumbers, onDone, onCancel }: {
+function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
   project: Project
+  initialFiles?: File[]
   firmId: string
   order: Discipline[]
   existingNumbers: Set<string>
@@ -402,24 +413,39 @@ function UploadIssuance({ project, firmId, order, existingNumbers, onDone, onCan
   }), [])
 
   useEffect(() => { setDrafts((ds) => reread(ds, templates, preferred)) }, [templates, preferred, reread])
+  // Files dropped before the templates loaded are read with whatever is current when they finish.
+  const tplRef = useRef({ templates, preferred })
+  tplRef.current = { templates, preferred }
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const [dragOver, setDragOver] = useState(false)
+
+  async function onFiles(list: File[]) {
+    const files = list.filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+    if (!files.length) { setError('Drop PDF files only.'); return }
     setStep('splitting')
     setError(null)
     try {
-      const pages = await splitDrawingSet(await file.arrayBuffer(), (done, total) => setProgress(`${done} of ${total}`))
-      setSizeWarning(sizeCheck(file.size, pages))
+      // Several PDFs make one upload round, pages numbered straight through.
+      const pages: SplitSheet[] = []
+      let bytesTotal = 0
+      for (const [i, file] of files.entries()) {
+        const label = files.length > 1 ? `${file.name} (${i + 1} of ${files.length}): ` : ''
+        const split = await splitDrawingSet(await file.arrayBuffer(), (done, total) => setProgress(`${label}${done} of ${total}`))
+        for (const p of split) pages.push({ ...p, pageIndex: pages.length })
+        bytesTotal += file.size
+      }
+      setSizeWarning(sizeCheck(bytesTotal, pages))
       setDrafts(reread(pages.map((p) => ({
         pageIndex: p.pageIndex, page: p, include: true, number: '', title: '', revision: '', templateId: null, touched: {},
-      })), templates, preferred))
+      })), tplRef.current.templates, tplRef.current.preferred))
       setStep('review')
     } catch (err) {
       setError(message(err))
       setStep('pick')
     }
   }
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => onFiles([...(e.target.files ?? [])])
+  useEffect(() => { if (initialFiles?.length) onFiles(initialFiles) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (i: number, patch: Partial<Draft>) => setDrafts(drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)))
   const type = (i: number, k: 'number' | 'title' | 'revision', v: string) =>
@@ -486,9 +512,16 @@ function UploadIssuance({ project, firmId, order, existingNumbers, onDone, onCan
 
       {step === 'pick' && (
         <>
-          <label className="upload">
-            <input type="file" accept="application/pdf" onChange={onFile} />
-            Choose a PDF: a full set, a few sheets or a single sheet
+          <label
+            className={`dropzone ${dragOver ? 'over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); onFiles([...e.dataTransfer.files]) }}
+          >
+            <input type="file" accept="application/pdf,.pdf" multiple onChange={onFile} />
+            <span className="dz-icon" aria-hidden="true">⇪</span>
+            <strong>Drop PDFs here</strong>
+            <span className="muted small">or click to choose: a full set, a few sheets or single sheets. Several PDFs become one upload.</span>
           </label>
           <button className="link" onClick={onCancel}>Cancel</button>
         </>
@@ -530,7 +563,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, onDone, onCan
                     <td><input className="cell" value={d.title} onChange={(e) => type(i, 'title', e.target.value)} /></td>
                     <td><input className="cell short" value={d.revision} onChange={(e) => type(i, 'revision', e.target.value)} placeholder={setRev || '—'} /></td>
                     <td className="small">
-                      {d.templateId ? tplName(d.templateId) : d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : (
+                      {d.templateId ? tplName(d.templateId) : d.number === COVER && !d.touched.number ? <span className="muted" title="No sheet number in its title block, and it lists other sheets">cover sheet</span> : d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : (
                         <button className="link" onClick={() => setEditing({ page: i })}>{d.number ? 'guessed · ' : ''}draw template</button>
                       )}
                     </td>

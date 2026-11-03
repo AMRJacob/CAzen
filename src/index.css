@@ -420,3 +420,15 @@ button.primary-lite { background: var(--ink); color: var(--paper); border-color:
 .loc-map { height: 260px; border-radius: 8px; border: 1px solid var(--line); margin-top: 10px; z-index: 0; }
 .loc-foot { margin: 6px 0 0; }
 .loc-pin span { display: block; width: 22px; height: 22px; border-radius: 50% 50% 50% 0; background: var(--moss); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.35); transform: rotate(-45deg); }
+
+.tb-sharp { position: absolute; display: none; pointer-events: none; }
+.tb-page.panning { cursor: grab; }
+.tb-zoom-level { min-width: 46px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tb-zoom .primary-lite { margin-left: auto; }
+.tb-hint { margin: 2px 0 0; }
+
+.dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; margin-top: 18px; padding: 34px 20px; border: 2px dashed #cfc9bb; border-radius: 12px; background: var(--paper); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.dropzone:hover, .dropzone.over { border-color: var(--moss); background: var(--moss-soft); }
+.dropzone input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.dz-icon { font-size: 26px; color: var(--moss); line-height: 1; }
+section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border-radius: 12px; }
