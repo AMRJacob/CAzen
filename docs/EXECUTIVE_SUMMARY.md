@@ -37,6 +37,7 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 | Document creation (field reports, ASIs, RFI responses, PRs, CCDs) | Live |
 | Form template editor | Live |
 | Firm branding in Settings | Live |
+| Requests & issues list in Settings, with "Suggest or report" in the sidebar; holds the wishlist | Live |
 | Start a template from a firm PDF | In progress (engine done; editor button next) |
 | ASI and PR packages | Planned |
 | Pay applications | Planned |
@@ -53,6 +54,7 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 - One firm per deployment, branding editable in Settings.
 - The architect uploads contractor submittals and RFIs for now; outside logins come later.
 - Default templates follow AMR's existing forms; each firm can edit its own.
+- Wishlist and bug reports live in the app (Settings → Requests & issues). Anyone in the firm can add; admins set status (under review, planned, in progress, complete, infeasible, duplicate, won't do) and reply. Claude works the list through the database.
 - Files (prototype): Cloudflare R2 free allowance (10 GB a month, no download fees) so files open on a phone, with copies written to each project's CA folder from office computers. A cap (9.5 GB total, 100 MB a file, editable by admins) keeps it inside the free allowance, and Settings shows usage per project. Move to R2 paid storage ($0.015 per GB-month) if adopted; Google Drive via a firm-approved CAzen account stays an option.
 
 ## Open items
