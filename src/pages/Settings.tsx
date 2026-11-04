@@ -15,6 +15,7 @@ import { effectiveOrder, type Discipline } from '../lib/disciplines'
 import { deleteTemplate, listTemplates, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
 import { r2Ready, storageUsage, type StorageUsage } from '../lib/files'
 import { useProject } from '../lib/project'
+import { FeedbackList } from '../components/Feedback'
 
 const SWATCHES = ['#5f7a61', '#4a6b82', '#8a6f4e', '#6b5b73', '#2f3a34', '#c8323a']
 
@@ -198,6 +199,7 @@ export default function Settings() {
         <TitleblockList firmId={firm.id} isAdmin={isAdmin} />
       </div>
       <StorageCard firm={firm} isAdmin={isAdmin} onSaved={reload} />
+      <FeedbackList />
     </section>
   )
 }

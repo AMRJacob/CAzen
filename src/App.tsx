@@ -5,6 +5,7 @@ import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
 import { FirmProvider } from './lib/firm'
 import { ProjectProvider, useProject } from './lib/project'
 import { Logo } from './components/Logo'
+import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import Documents from './pages/Documents'
 import Submittals from './pages/Submittals'
@@ -59,6 +60,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <div className="sidebar-foot">
             <NavLink to="/templates" className="settings-link">Form templates</NavLink>
             <NavLink to="/settings" className="settings-link">Settings</NavLink>
+            <FeedbackButton />
             <SignOut />
           </div>
         )}
