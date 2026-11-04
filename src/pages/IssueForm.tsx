@@ -223,17 +223,20 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
   f: FieldDef; value: string; onChange: (v: string) => void; layout: Layout
   autoValue?: string; overridden: boolean; onReset: () => void; suggestions?: { value: string; label: string }[]
 }) {
-  const tag = overridden
+  const tag = overridden && value !== autoValue
     ? <button type="button" className="auto-reset" onClick={onReset} title={`Back to: ${autoValue}`}>↺ reset</button>
     : autoValue ? <span className="auto-tag">auto</span> : null
   const label = <span className="field-head">{f.label}{tag}</span>
+  // Grey = filled in for you; bold = filled in for you and then changed.
+  const changed = !!autoValue && value !== autoValue
+  const state = !autoValue ? '' : changed ? 'is-changed' : 'is-auto'
 
   if (f.choices) {
     const el = layout.elements.find((e) => e.type === 'choices' && e.field === f.key)
     const options = el && el.type === 'choices' ? el.options : f.choices
     return (
       <label>{label}
-        <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={state}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </label>
@@ -251,7 +254,7 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
           placeholder={table ? 'One per line: Name | Company | Email' : ''}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={rich ? (e) => indentKeys(e, onChange) : undefined}
-          className={`${rich ? 'mono-ish' : ''} ${autoValue && !overridden ? 'is-auto' : ''}`}
+          className={`${rich ? 'mono-ish' : ''} ${state}`}
         />
         {f.hint && <span className="hint">{f.hint}</span>}
         {rich && <span className="hint">Start lines with 1. or - for lists. Tab indents a sub-item (Shift+Tab outdents). Start a line with # for a bold heading.</span>}
@@ -261,7 +264,7 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
   const listId = suggestions.length ? `dl-${f.key.replace('.', '-')}` : undefined
   return (
     <label>{label}
-      <input value={value} onChange={(e) => onChange(e.target.value)} className={autoValue && !overridden ? 'is-auto' : ''}
+      <input value={value} onChange={(e) => onChange(e.target.value)} className={state}
         list={listId} autoComplete="off" placeholder={f.csi === 'section' ? 'Type a section, e.g. 09 30 00' : f.csi === 'division' ? 'Type a number or name' : ''} />
       {listId && (
         <datalist id={listId}>
