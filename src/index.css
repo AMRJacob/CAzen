@@ -718,11 +718,14 @@ tr.opens:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }
    go too is the browser's call, and on an iPhone it has usually been no — so this has to be worth
    having on its own, and the way out has to be obvious without the chrome to go back to. */
 body.immersive .sidebar,
-body.immersive .page-head .lead,
+body.immersive .page-head,
 body.immersive .settings-link { display: none; }
-body.immersive .content { padding-top: 14px; padding-bottom: 96px; }
-body.immersive .page-head { margin-bottom: 10px; }
-body.immersive h1 { font-size: 20px; }
+body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
+
+/* Only where it buys anything. On a desktop the window is already the screen, and the sidebar is
+   how you get around; giving that up to save a strip of chrome is a poor trade. */
+.fs-enter { display: none; }
+@media (max-width: 899px) { .fs-enter { display: inline-block; } }
 
 .fs-exit {
   position: fixed; z-index: 70;
