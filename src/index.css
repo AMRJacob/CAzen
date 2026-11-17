@@ -763,3 +763,15 @@ body.immersive h1 { font-size: 20px; }
   /* Five links across a 382px screen won't fit on one line; let them fall to the next. */
   .sidebar-foot { flex-wrap: wrap; row-gap: 6px; }
 }
+
+/* The sheets in one set: counts first, the numbers themselves on request. */
+.issued-sheets .link { margin-right: 8px; }
+.issued-grid { margin-top: 10px; display: grid; gap: 8px; }
+.issued-group { display: grid; grid-template-columns: 170px 1fr; gap: 10px; align-items: baseline; }
+.issued-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.issued-numbers { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.issued-numbers .mono { font-size: 13px; }
+@media (max-width: 619px) {
+  .issued-group { grid-template-columns: 1fr; gap: 2px; }
+  .issued-numbers { gap: 4px 10px; }
+}

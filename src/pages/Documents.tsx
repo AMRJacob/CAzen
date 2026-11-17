@@ -248,6 +248,46 @@ function snippet(s: string) {
 }
 
 /**
+ * The sheets in one set, readable at a glance.
+ *
+ * Eighty-seven sheet numbers in one run of commas is a wall of text that answers nothing: the
+ * question a set list is asked is what is in it — how much of each discipline — and only then
+ * which sheets exactly. So the count by discipline comes first, and the numbers themselves open
+ * underneath, grouped and lined up, for when that is the question.
+ */
+function IssuanceSheets({ sheets, order }: { sheets: { number: string; revision_label: string | null }[]; order: Discipline[] }) {
+  const [open, setOpen] = useState(false)
+  const groups = groupByDiscipline(sheets, (s) => s.number, order)
+
+  return (
+    <div className="issued-sheets">
+      <button className="link" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <strong>{sheets.length}</strong> {sheets.length === 1 ? 'sheet' : 'sheets'}
+      </button>
+      <span className="muted">
+        {groups.map((g) => `${g.key === 'COVER' ? 'Cover' : g.key} ${g.items.length}`).join(' · ')}
+      </span>
+      {open && (
+        <div className="issued-grid">
+          {groups.map((g) => (
+            <div key={g.key} className="issued-group">
+              <div className="issued-label">{g.label}</div>
+              <div className="issued-numbers">
+                {g.items.map((s) => (
+                  <span key={s.number} className="mono">
+                    {s.number}{s.revision_label ? <span className="muted"> {s.revision_label}</span> : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Download a set as one PDF. Sheets live one file each, which is what makes revisions and search
  * work, but nobody sends them that way — a set goes out as a single file in sheet order.
  */
@@ -383,10 +423,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
               <tr>
                 <td className="nowrap">{usDate(r.issued_on)}</td>
                 <td className="nowrap">{issuanceText(r.kind, r.number)}{r.title ? ` · ${r.title}` : ''}</td>
-                <td className="small">
-                  <strong>{r.sheets.length}</strong>{' '}
-                  <span className="muted">{sortSheets(r.sheets, (s) => s.number, order).map((s) => s.number + (s.revision_label ? ` (${s.revision_label})` : '')).join(', ')}</span>
-                </td>
+                <td className="small"><IssuanceSheets sheets={r.sheets} order={order} /></td>
                 <td className="right nowrap">
                   <DownloadSet
                     project={project}
