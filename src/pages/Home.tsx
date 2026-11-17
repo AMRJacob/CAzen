@@ -36,16 +36,20 @@ export default function Home() {
       ) : projects.length === 0 ? (
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
-        <table>
+        <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /></tr></thead>
           <tbody>
             {projects.flatMap((p) => [
-              <tr key={p.id} className={p.id === current?.id ? 'selected' : ''}>
-                <td>{p.number}</td>
-                <td>{p.name}{p.status === 'archived' && <> <span className="tag muted">archived</span></>}</td>
-                <td>{p.owner_name ?? ''}</td>
-                <td>{p.contractor_name ?? ''}</td>
-                <td className="right nowrap"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button>{' '}<button onClick={() => open(p)}>Open</button></td>
+              // The whole row opens the project; on a phone it becomes one tappable block.
+              <tr key={p.id} className={`opens${p.id === current?.id ? ' selected' : ''}`}
+                tabIndex={0} role="button" aria-label={`Open ${p.number} ${p.name}`}
+                onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) open(p) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(p) } }}>
+                <td className="p-number">{p.number}</td>
+                <td className="p-name">{p.name}{p.status === 'archived' && <> <span className="tag muted">archived</span></>}</td>
+                <td className="p-who">{p.owner_name ?? ''}</td>
+                <td className="p-who">{p.contractor_name ?? ''}</td>
+                <td className="right nowrap p-edit"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button></td>
               </tr>,
               editing === p.id && (
                 <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>

@@ -135,8 +135,49 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
     }
   }, [scroller])
 
-  // Touch gestures. Registered by hand rather than through React because the two-finger case has
-  // to be able to stop the browser scrolling or zooming the whole page along with it.
+  /**
+   * Pinch on iOS.
+   *
+   * Safari handles a two-finger pinch above the level of touch events — touch-action doesn't stop
+   * it and neither does preventing the touchmove, so the page itself zooms and the handler below
+   * never gets a look in. WebKit's own gesture events are the way in: preventing gesturestart
+   * stops Safari zooming the page, and gesturechange carries the scale since the pinch began.
+   */
+  useEffect(() => {
+    const el = scroller.current
+    if (!el || !('ongesturestart' in window)) return
+    let startZoom = 1
+
+    type GestureEvent = Event & { scale: number; clientX: number; clientY: number }
+    const start = (e: Event) => {
+      e.preventDefault()
+      startZoom = zoomRef.current
+    }
+    const change = (e: Event) => {
+      e.preventDefault()
+      const g = e as GestureEvent
+      const r = el.getBoundingClientRect()
+      anchor.current = { x: (g.clientX - r.left) / r.width, y: (g.clientY - r.top) / r.height }
+      centre.current = {
+        x: (el.scrollLeft + (g.clientX - r.left)) / Math.max(1, el.scrollWidth),
+        y: (el.scrollTop + (g.clientY - r.top)) / Math.max(1, el.scrollHeight),
+      }
+      setZoom(clampZoom(startZoom * g.scale))
+    }
+    const end = (e: Event) => e.preventDefault()
+
+    el.addEventListener('gesturestart', start, { passive: false })
+    el.addEventListener('gesturechange', change, { passive: false })
+    el.addEventListener('gestureend', end, { passive: false })
+    return () => {
+      el.removeEventListener('gesturestart', start)
+      el.removeEventListener('gesturechange', change)
+      el.removeEventListener('gestureend', end)
+    }
+  }, [scroller])
+
+  // Touch gestures, for everything that isn't Safari. Registered by hand rather than through React
+  // because the two-finger case has to be able to stop the browser scrolling along with it.
   useEffect(() => {
     const el = scroller.current
     if (!el) return

@@ -13,6 +13,7 @@ import CaLogs from './pages/CaLogs'
 import Contracts from './pages/Contracts'
 import Settings from './pages/Settings'
 import Templates from './pages/Templates'
+import { useFullscreen } from './lib/fullscreen'
 
 const nav = [
   { to: '/', label: 'Projects' },
@@ -46,8 +47,13 @@ function Gate() {
 }
 
 function Shell({ offline = false }: { offline?: boolean }) {
+  const screen = useFullscreen()
   return (
     <div className="shell">
+      {/* Always there while full screen, never hidden behind anything, and it says what it does. */}
+      {screen.on && (
+        <button className="fs-exit" onClick={screen.toggle}>Exit full screen</button>
+      )}
       <aside className="sidebar">
         <div className="sidebar-logo"><Logo size={23} /></div>
         {!offline && <ProjectSwitcher />}
@@ -61,6 +67,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
             <NavLink to="/templates" className="settings-link">Form templates</NavLink>
             <NavLink to="/settings" className="settings-link">Settings</NavLink>
             <FeedbackButton />
+            <button className="link fs-enter" onClick={screen.toggle}>Full screen</button>
             <SignOut />
           </div>
         )}
@@ -137,7 +144,7 @@ function SignOut() {
   const { session, signOut } = useAuth()
   return (
     <div className="signout">
-      <span>{session?.user.email}</span>
+      <span className="who">{session?.user.email}</span>
       <button className="link" onClick={signOut}>Sign out</button>
     </div>
   )

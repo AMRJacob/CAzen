@@ -712,3 +712,54 @@ tr.opens:hover td { background: var(--panel); }
 tr.opens:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }
 .set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: 0 0 10px; }
 .notice.small { padding: 8px 10px; font-size: 13px; margin-top: 8px; }
+
+/* ---------- Full screen ----------
+   What CAzen can give up: its sidebar, its headings, its padding. Whether the browser's own bars
+   go too is the browser's call, and on an iPhone it has usually been no — so this has to be worth
+   having on its own, and the way out has to be obvious without the chrome to go back to. */
+body.immersive .sidebar,
+body.immersive .page-head .lead,
+body.immersive .settings-link { display: none; }
+body.immersive .content { padding-top: 14px; padding-bottom: 96px; }
+body.immersive .page-head { margin-bottom: 10px; }
+body.immersive h1 { font-size: 20px; }
+
+.fs-exit {
+  position: fixed; z-index: 70;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  padding: 12px 18px; min-height: 44px;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: var(--ink); color: var(--paper); font: inherit; font-size: 14px;
+  box-shadow: 0 6px 20px rgba(43, 45, 44, 0.28);
+}
+.fs-exit:hover { background: var(--ink); }
+
+/* ---------- The phone ----------
+   Standing at a wall, the questions are which project and which sheet. Everything that answers
+   neither gets out of the way, and what is left is big enough to hit with a thumb. */
+@media (max-width: 619px) {
+  /* Projects: one tappable block each, not a row of columns to read across. */
+  .projects, .projects tbody, .projects tr, .projects td { display: block; width: auto; }
+  .projects thead { display: none; }
+  .projects tr.opens {
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 10px; background: var(--paper);
+  }
+  .projects tr.opens:hover td { background: none; }
+  .projects td { border: none; padding: 1px 0; }
+  .projects td.p-number { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; color: var(--muted); }
+  .projects td.p-name { font-size: 17px; font-weight: 500; }
+  .projects td.p-who, .projects td.p-edit { display: none; }
+  .projects tr.selected { border-color: var(--moss); background: var(--moss-soft); }
+
+  /* The register: which sheet, what it is, which revision. The rest is desk reading. */
+  .register td.col-history, .register th.col-history { display: none; }
+  .register td, .register th { padding: 12px 8px; }
+  .register td.col-title { font-size: 13.5px; }
+
+  /* The sidebar is navigation, not a profile. */
+  .signout .who { display: none; }
+  /* Five links across a 382px screen won't fit on one line; let them fall to the next. */
+  .sidebar-foot { flex-wrap: wrap; row-gap: 6px; }
+}
