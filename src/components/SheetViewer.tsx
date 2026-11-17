@@ -6,9 +6,13 @@ import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
+import { bringForward, listMarkups, MARKUP_COLOURS, type Markup, type MarkupKind, type Point } from '../lib/markups'
+import { MarkupLayer } from './MarkupLayer'
 
 /** A sheet the viewer can show: the current revision of a sheet, or a specific older one. */
 export interface ViewSheet {
+  /** The sheet itself, which is what markups belong to. */
+  sheetId?: string
   number: string
   title: string | null
   revisionId: string
@@ -55,6 +59,14 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const [indexOpen, setIndexOpen] = useState(false)
   const [more, setMore] = useState(false)
   const [filter, setFilter] = useState('')
+  const [markups, setMarkups] = useState<Markup[]>([])
+  const [tool, setTool] = useState<MarkupKind | 'erase' | null>(null)
+  const [colour, setColour] = useState<string>(MARKUP_COLOURS[0])
+  const [settingScale, setSettingScale] = useState(false)
+  const [pendingScale, setPendingScale] = useState<{ from: Point; to: Point } | null>(null)
+  const [scaleLength, setScaleLength] = useState('')
+  const [scale, setScale] = useState<{ from: Point; to: Point; inches: number } | null>(null)
+  const [me, setMe] = useState<string | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
@@ -95,6 +107,20 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
         setText(await readPageText(first))
         const links = await db().from('sheet_links').select('id, target_number, label, x, y, w, h').eq('revision_id', sheet.revisionId)
         if (!cancelled) setManual((links.data ?? []) as ManualLink[])
+        const { data: who } = await db().auth.getUser()
+        if (!cancelled) setMe(who.user?.id ?? null)
+        if (sheet.sheetId) {
+          const [drawn, row] = await Promise.all([
+            listMarkups(sheet.sheetId),
+            db().from('sheets').select('scale').eq('id', sheet.sheetId).single(),
+          ])
+          if (!cancelled) {
+            setMarkups(drawn)
+            setScale((row.data?.scale ?? null) as typeof scale)
+          }
+        } else if (!cancelled) {
+          setMarkups([])
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -218,6 +244,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
 
   const pct = (b: Box) => ({ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` })
 
+  const stale = markups.filter((m) => m.revision_id && m.revision_id !== sheet.revisionId).length
   const q = filter.trim().toUpperCase()
   const listed = q
     ? sheets.filter((s) => norm(s.number).includes(norm(q)) || (s.title ?? '').toUpperCase().includes(q))
@@ -267,6 +294,10 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 <button onClick={fit}>Fit</button>
                 <button onClick={zoomIn} aria-label="Zoom in">+</button>
               </div>
+              <button className={tool !== null ? 'on' : ''} onClick={() => { setTool(tool === null ? 'ink' : null); setMore(false) }}
+                disabled={!sheet.sheetId} title={sheet.sheetId ? undefined : 'Open this sheet from the register to mark it up'}>
+                {tool !== null ? 'Done marking up' : 'Mark up'}
+              </button>
               <button className={linkMode ? 'on' : ''} onClick={() => { setLinkMode(!linkMode); setPending(null); setMore(false) }}>
                 {linkMode ? 'Done linking' : 'Add link'}
               </button>
@@ -280,6 +311,65 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           <button onClick={onClose} aria-label="Close">Close</button>
         </div>
       </div>
+      {tool !== null && (
+        <div className="mk-bar">
+          <div className="mk-tools">
+            {([['ink', 'Draw'], ['arrow', 'Arrow'], ['rect', 'Box'], ['cloud', 'Cloud'], ['text', 'Note'], ['dimension', 'Measure'], ['erase', 'Erase']] as const).map(([k, label]) => (
+              <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}
+                disabled={k === 'dimension' && !scale && !settingScale}
+                title={k === 'dimension' && !scale ? 'Set the scale first' : undefined}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mk-colours">
+            {MARKUP_COLOURS.map((c) => (
+              <button key={c} className={`swatch${colour === c ? ' on' : ''}`} style={{ background: c }}
+                aria-label={`Draw in ${c}`} onClick={() => setColour(c)} />
+            ))}
+          </div>
+          <div className="mk-right">
+            <button onClick={() => setSettingScale(true)} className={settingScale ? 'on' : ''}>
+              {scale ? 'Reset scale' : 'Set scale'}
+            </button>
+            {stale > 0 && (
+              <button onClick={async () => {
+                if (!sheet.sheetId) return
+                await bringForward(sheet.sheetId, sheet.revisionId)
+                setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
+              }}>Bring {stale} forward</button>
+            )}
+            <button onClick={() => { setTool(null); setSettingScale(false) }}>Done</button>
+          </div>
+        </div>
+      )}
+      {settingScale && !pendingScale && (
+        <div className="sv-hint">Draw a line along something you know the length of — a grid bay, a room, a wall.</div>
+      )}
+      {pendingScale && (
+        <div className="sv-hint mk-scale-ask">
+          That line is{' '}
+          <input value={scaleLength} onChange={(e) => setScaleLength(e.target.value)} placeholder="20' or 240&quot;"
+            aria-label="What that line measures" autoFocus />
+          <button className="primary" disabled={!parseLength(scaleLength)} onClick={async () => {
+            const inches = parseLength(scaleLength)
+            if (!inches || !sheet.sheetId) return
+            const next = { ...pendingScale, inches }
+            await db().from('sheets').update({ scale: next }).eq('id', sheet.sheetId)
+            setScale(next)
+            setPendingScale(null)
+            setScaleLength('')
+            setSettingScale(false)
+            setTool('dimension')
+          }}>Set the scale</button>
+          <button onClick={() => { setPendingScale(null); setScaleLength('') }}>Try again</button>
+        </div>
+      )}
+      {tool !== null && stale > 0 && (
+        <div className="sv-hint">
+          {stale} of these markups {stale === 1 ? 'was' : 'were'} drawn on an earlier revision of this sheet.
+        </div>
+      )}
       {linkMode && <div className="sv-hint">Drag a box over a detail tag or note, then choose the sheet it should open. Click × on a link you drew to remove it.</div>}
       <div className="sv-body">
         <aside className={`sv-index${indexOpen ? ' open' : ''}`} aria-label="Sheets in this set">
@@ -315,6 +405,15 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 <span className="sv-tag">{l.target_number}</span>
               </span>
             ))}
+            {sheet.sheetId && (
+              <MarkupLayer
+                markups={markups} tool={settingScale ? 'dimension' : tool} colour={colour}
+                projectId={project.id} sheetId={sheet.sheetId} revisionId={sheet.revisionId}
+                scale={scale} aspect={aspect} me={me}
+                onChange={setMarkups}
+                onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
+              />
+            )}
             {draft && <span className="sv-draft" style={pct(draft)} />}
             {pending && (
               <>
@@ -334,6 +433,30 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       </div>
     </div>
   )
+}
+
+/**
+ * A length as an architect types it: 20', 20 ft, 12'6", 12' 6 1/2", 240". Returns inches.
+ */
+export function parseLength(text: string): number | null {
+  const t = text.trim().replace(/\s+/g, ' ')
+  if (!t) return null
+  const fraction = (s: string) => {
+    const [a, b] = s.split('/').map(Number)
+    return b ? a / b : Number(s)
+  }
+  const feet = t.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet|f)\s*(.*)$/i)
+  if (feet) {
+    const rest = feet[2].replace(/["in]+$/i, '').trim()
+    const inches = rest ? rest.split(' ').reduce((n, part) => n + fraction(part), 0) : 0
+    return Number(feet[1]) * 12 + (Number.isFinite(inches) ? inches : 0)
+  }
+  const inchesOnly = t.match(/^([\d\s./]+)\s*(?:"|in|inches)?$/i)
+  if (inchesOnly) {
+    const n = inchesOnly[1].trim().split(' ').reduce((acc, part) => acc + fraction(part), 0)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  return null
 }
 
 /** Pieces of a text run that could be sheet numbers: "SEE 3/A501" → "SEE", "3", "A501". */

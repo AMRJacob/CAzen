@@ -27,6 +27,7 @@ import { DisciplineOrderEditor } from '../components/DisciplineOrder'
 const today = () => new Date().toISOString().slice(0, 10)
 
 const toView = (s: CurrentSheet): ViewSheet => ({
+  sheetId: s.sheet_id,
   number: s.number, title: s.title, revisionId: s.revision_id, revisionLabel: s.revision_label, filePath: s.file_path,
 })
 
@@ -104,7 +105,7 @@ export default function Documents() {
   }
 
   const openHit = (h: SearchHit) => setViewing({
-    start: { number: h.number, title: h.title, revisionId: h.revision_id, revisionLabel: null, filePath: h.file_path, superseded: !h.is_current },
+    start: { sheetId: h.sheet_id, number: h.number, title: h.title, revisionId: h.revision_id, revisionLabel: null, filePath: h.file_path, superseded: !h.is_current },
     highlight: query.trim(),
   })
 
@@ -341,6 +342,7 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
   }
 
   const openRevision = (r: SheetRevision) => onOpen({
+    sheetId: sheet.sheet_id,
     number: sheet.number, title: r.title_at_rev ?? sheet.title, revisionId: r.id, revisionLabel: r.revision_label,
     filePath: r.file_path, superseded: r.revision_index !== sheet.revision_index,
   })
