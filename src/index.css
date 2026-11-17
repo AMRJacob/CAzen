@@ -34,8 +34,8 @@ a { color: var(--moss); }
 .wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); }
 
 /* ---------- Layout ---------- */
-.shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
-.sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; min-height: 100dvh; }
+.sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; padding-left: env(safe-area-inset-left); }
 .sidebar-logo { padding: 0 24px 28px; }
 .context { padding: 0 12px 18px; position: relative; }
 .project-switch { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 12px; color: var(--ink); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
@@ -127,7 +127,7 @@ tr.skipped td { opacity: 0.4; }
 .upload-panel .upload { margin-top: 18px; }
 
 /* ---------- Sign-in & setup ---------- */
-.signin { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--paper); }
+.signin { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; background: var(--paper); }
 .signin form { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; padding: 32px; }
 .signin .wide-card { max-width: 460px; }
 .signin label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; }
@@ -154,12 +154,18 @@ tr.skipped td { opacity: 0.4; }
 .preview-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .preview iframe { width: 100%; aspect-ratio: 8.5 / 11; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 
-/* ---------- Small screens ---------- */
+/* ---------- Small screens ----------
+   Three bands, because a folding phone lands in all of them:
+     ≤ 619px   one narrow column (a folded phone, any ordinary phone)
+     620–899px top nav, but wide enough for two-column forms and full tables
+     ≥ 900px   the sidebar layout
+   A 232px sidebar would eat a third of the width in the middle band, so the nav
+   stays across the top until 900px. */
 @media (max-width: 900px) {
   .settings-grid { grid-template-columns: 1fr; }
   .preview { position: static; }
 }
-@media (max-width: 720px) {
+@media (max-width: 899px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); padding: 18px 0 10px; position: static; height: auto; }
   .sidebar-logo { padding: 0 16px 14px; }
@@ -168,8 +174,11 @@ tr.skipped td { opacity: 0.4; }
   .sidebar-foot { flex-direction: row; justify-content: space-between; align-items: center; border-top: none; margin: 0; gap: 12px; }
   .signout { min-width: 0; word-break: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-items: flex-end; }
   .inline-form input { min-width: 0; flex: 1; }
+  .content { padding: 28px 24px 60px; }
+}
+@media (max-width: 619px) {
   .content { padding: 24px 16px 60px; }
-  .form, .form.three, .two { grid-template-columns: 1fr; }
+  .form, .form.three, .two, .form.four { grid-template-columns: 1fr; }
   table { display: block; overflow-x: auto; }
 }
 
@@ -393,7 +402,7 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .usage-bar.full > span { background: var(--danger); }
 .usage-table { margin-top: 12px; font-size: 13.5px; }
 .form.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 720px) { .form.two-col { grid-template-columns: 1fr; } }
+@media (max-width: 619px) { .form.two-col { grid-template-columns: 1fr; } }
 
 .confirm-delete { border: 1px solid #e6c4c4; background: #fbf3f2; border-radius: 8px; padding: 12px 14px; margin: 8px 0; font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
 .confirm-delete p { margin: 0; }
@@ -472,4 +481,214 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 .fb-quick { position: relative; }
 .fb-quick-btn { background: none; border: none; text-align: left; width: 100%; }
 .fb-pop { position: fixed; left: 244px; bottom: 16px; width: 360px; z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px 10px; }
-@media (max-width: 720px) { .fb-pop { position: fixed; left: 12px; right: 12px; bottom: 12px; width: auto; } }
+@media (max-width: 899px) { .fb-pop { position: fixed; left: 12px; right: 12px; bottom: 12px; width: auto; } }
+
+/* ==========================================================================
+   In the field
+   Written for a phone that changes shape. A folding phone hands the page four
+   different viewports with no reload and no way to ask which one it is:
+   narrow and tall when shut, wide and short when open, and shorter still when
+   either pose is turned sideways. So nothing here keys off a device — only off
+   how much width and height the page actually has, and whether the pointer is
+   a finger. CSS Viewport Segments, which would report the fold, is not in
+   Safari, so the crease is simply left alone.
+   ========================================================================== */
+
+/* Keep content clear of the notch, the home indicator and, when the phone is
+   shut, the strip Safari puts down the side. */
+.content { padding-left: max(56px, env(safe-area-inset-left)); padding-right: max(56px, env(safe-area-inset-right)); }
+@media (max-width: 899px) {
+  .content { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+}
+@media (max-width: 619px) {
+  .content { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+}
+
+/* ---------- Short viewports ----------
+   Sideways, the page can be barely 340px tall. Vertical padding is the first
+   thing to go, before anything starts scrolling that shouldn't. */
+@media (max-height: 640px) {
+  .content { padding-top: 20px; padding-bottom: 32px; }
+  h1 { font-size: 22px; }
+  h2 { margin: 22px 0 10px; }
+  .lead { margin-bottom: 16px; }
+  .sidebar { padding: 10px 0 6px; }
+  .sidebar-logo { padding: 0 16px 8px; }
+  .context { padding: 0 4px 6px; }
+}
+@media (max-height: 430px) {
+  .content { padding-top: 12px; padding-bottom: 20px; }
+  .lead { display: none; }
+  .sidebar-logo { display: none; }
+  .sv-scroll { padding: 6px; }
+}
+
+/* ---------- Finger-sized ----------
+   Applies to touch pointers only, so the desktop keeps its compact controls.
+   Text links are left alone: a minimum height on an inline link only pads the
+   line. 16px on the fields that get used standing up: below that, iOS zooms
+   the whole page in when a field takes focus, and the layout has to be pinched
+   back out one-handed. */
+@media (pointer: coarse) {
+  button:not(.link):not(.fb-check):not(.swatch):not(.sv-x):not(.sv-fill):not(.sv-link),
+  .button, .upload, label.dropzone { min-height: 44px; }
+  button.icon { min-width: 44px; min-height: 44px; }
+  .sidebar nav a, .settings-link { padding: 12px 14px; }
+  .form input, .form select, .form textarea,
+  label.stack input, label.stack textarea,
+  .toolbar input, .inline-form input, .signin input, .sv-find, .sv-jump input {
+    font-size: 16px;
+  }
+  .tabs button { padding: 12px 14px; }
+  .hit { padding: 12px 4px; }
+  /* A finger has no hover, so the row tint only ever flickered. */
+  tbody tr:hover td { background: var(--panel); }
+}
+
+/* ---------- The drawings register on a small screen ----------
+   Seven columns do not fit a phone, and side-scrolling a table one-handed on a
+   ladder is no good. The columns drop in order of what a sheet list is for:
+   which sheet, what it is, which revision, open it. */
+@media (max-width: 899px) {
+  .register td.col-from, .register th.col-from { display: none; }
+}
+@media (max-width: 619px) {
+  .register { display: table; }
+  .register td.col-date, .register th.col-date { display: none; }
+  .register th, .register td { padding: 10px 8px; }
+  .register td.col-title { font-size: 13.5px; }
+  .register tr.group td { padding-top: 12px; }
+}
+
+/* ---------- Sheet viewer ---------- */
+.sheet-viewer {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  height: 100vh; height: 100dvh;
+}
+.sv-body { flex: 1; display: flex; min-height: 0; }
+/* Centre the sheet in whatever room it has instead of pinning it to the top
+   corner. The auto margin does it without the clipping that centring a flex
+   item causes once it is zoomed past the edges of the screen. */
+.sv-scroll { padding: 16px; display: flex; }
+.sv-page { margin: auto; }
+
+/* One finger pans the sheet, two fingers pinch it (handled in SheetViewer so
+   the zoom can stay anchored where the fingers are). Naming the pans rather
+   than leaving it to the browser is what keeps a two-finger gesture from
+   becoming a zoom of the whole page. While a link is being drawn the page
+   takes the gesture instead. */
+.sv-scroll { touch-action: pan-x pan-y; }
+.sv-page { touch-action: pan-x pan-y; }
+.sv-page.linking { touch-action: none; }
+
+/* The sheet index: the fastest way to the next sheet, which beats stepping
+   through 200 of them with arrows. Where it sits depends on which way the
+   room runs, because a sheet is landscape and a screen often isn't:
+     - taller than the sheet needs    a column down the left; the width it
+                                      takes was going spare anyway
+     - wider than the sheet needs     a strip along the bottom, in the band of
+                                      dead paper a landscape sheet leaves under
+                                      itself on a near-square screen
+     - neither                        a panel that slides over the sheet
+   The 3:2 in these queries is the shape of a D-size sheet: past it the screen's
+   height is what limits the drawing, so the index is free. */
+.sv-index {
+  flex: none; width: 232px; display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel); border-right: 1px solid var(--line);
+  position: absolute; z-index: 3; top: 0; bottom: 0; left: 0;
+  width: min(300px, 82vw); box-shadow: 0 0 24px rgba(43, 45, 44, 0.18);
+  transform: translateX(-100%); transition: transform 0.18s ease-out;
+}
+.sv-index.open { transform: translateX(0); }
+.sv-body { position: relative; }
+.sv-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: rgba(43, 45, 44, 0.3); border: none; padding: 0; }
+.sv-jump { padding: 8px; border-bottom: 1px solid var(--line); }
+.sv-jump input {
+  font: inherit; font-size: 13px; width: 100%; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--paper);
+}
+.sv-index-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px; }
+.sv-index-list button {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  border: none; background: none; border-radius: 6px; padding: 8px 9px; color: var(--ink);
+}
+.sv-index-list button:hover { background: var(--wash); }
+.sv-index-list button.on { background: var(--moss-soft); }
+.sv-index-list .sv-ix-number { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.sv-index-list .sv-ix-title { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-index-empty { padding: 12px 10px; font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .sv-index { transition: none; } }
+
+/* A column down the left: a wide window, or a screen whose height is what
+   limits the drawing anyway — an open phone held sideways, where the index
+   costs the sheet nothing at all. */
+@media (min-width: 1100px), (min-width: 860px) and (min-aspect-ratio: 3/2) {
+  .sv-index {
+    position: static; transform: none; box-shadow: none; width: 232px;
+    border-right: 1px solid var(--line);
+  }
+  .sv-scrim, .sv-index-toggle { display: none; }
+}
+
+/* A strip along the bottom, where a near-square screen is taller than a
+   landscape sheet needs: the sheet keeps the full width, and the band under it
+   carries the index instead of nothing. */
+@media (min-width: 620px) and (max-width: 1099px) and (max-aspect-ratio: 299/200) and (min-height: 700px) {
+  .sv-body { flex-direction: column; }
+  .sv-index {
+    position: static; transform: none; box-shadow: none;
+    width: auto; height: min(26vh, 220px); flex: none; order: 2;
+    border-right: none; border-top: 1px solid var(--line); flex-direction: row;
+  }
+  .sv-jump { border-bottom: none; border-right: 1px solid var(--line); display: flex; align-items: center; width: 180px; flex: none; }
+  .sv-index-list { display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start; overflow-x: auto; overflow-y: hidden; gap: 2px; }
+  .sv-index-list button { width: 168px; flex: none; }
+  .sv-index-toggle { display: none; }
+}
+
+/* ---------- Viewer toolbar ----------
+   Shut and sideways the page is ~340px tall: a toolbar that wraps to three
+   rows would take a third of it. Only what is needed to read a drawing stays
+   on the bar; the rest moves behind "More", and on a narrow screen the step
+   and zoom controls go there too, since pinch and the index cover both. */
+.sv-bar { flex-wrap: nowrap; gap: 8px; }
+.sv-bar-group { display: flex; gap: 6px; align-items: center; flex: none; }
+.sv-more-wrap { position: relative; flex: none; }
+.sv-more {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+  min-width: 232px; padding: 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(43, 45, 44, 0.16);
+}
+.sv-more .sv-find { width: 100%; }
+.sv-more-row { display: flex; gap: 6px; align-items: center; }
+.sv-more-row > button { flex: 1; }
+.sv-narrow-only, .sv-mid-only { display: none; }
+.sv-title .mono { white-space: nowrap; }
+
+/* Under 900px the find field is the first thing off the bar — it is the widest
+   control on it and the least used of them standing at a wall. */
+.sv-find-group { display: flex; gap: 6px; align-items: center; }
+/* Nothing in the title may wrap: a second line there costs the drawing a
+   second line of toolbar, and the screen is short enough already. */
+.sv-title .tag { white-space: nowrap; }
+.sv-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 899px) {
+  .sv-title { min-width: 0; }
+  .sv-find-group { display: none; }
+  .sv-mid-only { display: block; }
+}
+@media (max-width: 619px) {
+  .sv-bar { padding: 6px 8px; gap: 6px; }
+  .sv-inline-tools { display: none; }
+  .sv-narrow-only { display: flex; }
+  .sv-title { font-size: 13px; }
+}
+@media (max-height: 430px) {
+  .sv-bar { padding: 4px 8px; }
+  /* Sideways and shut there are 340px of screen; 44px of toolbar button is too
+     much of it to spend. */
+  .sv-bar button { min-height: 36px; }
+  .sv-hint { padding: 4px 10px; font-size: 12px; }
+}

@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { useFirm } from '../lib/firm'
 import { useProject } from '../lib/project'
 import { ProjectFolder } from '../components/ProjectFolder'
+import { PdfPreview } from '../components/PdfPreview'
 import { listIssued, nextNumber, openIssued, saveIssued, type IssuedForm } from '../lib/issued'
 import { DIVISION_OPTIONS, divisionFor, nextInSection, normaliseSection, sectionOf } from '../lib/csi'
 import { db } from '../lib/supabase'
@@ -62,6 +63,7 @@ function Form({ kind, brand, layouts, project, signer }: {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ bytes: Uint8Array; name: string } | null>(null)
 
   const loadLog = useCallback(async () => {
     if (project) setLog(await listIssued(project.id, kind).catch(() => []))
@@ -134,13 +136,10 @@ function Form({ kind, brand, layouts, project, signer }: {
       const v = values()
       let bytes = await renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand) } })
       if (attachment) bytes = await prependTo(bytes, attachment)
-      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
-      if (mode === 'preview') { window.open(url, '_blank'); return }
-      const a = document.createElement('a')
       const num = Object.entries(v).find(([k]) => k.endsWith('.number') && !k.startsWith('project.'))?.[1]
-      a.href = url
-      a.download = `${[v['project.number'], FORM_LABELS[kind], num].filter(Boolean).join(' - ')}.pdf`
-      a.click()
+      const name = `${[v['project.number'], FORM_LABELS[kind], num].filter(Boolean).join(' - ')}.pdf`
+      if (mode === 'preview') { setPreview({ bytes, name }); return }
+      download(bytes, name)
       if (project && isConfigured) {
         await saveIssued(project, kind, v, bytes)
         setOverrides({})
@@ -153,6 +152,17 @@ function Form({ kind, brand, layouts, project, signer }: {
     } finally {
       setBusy(false)
     }
+  }
+
+  /** Hand the finished PDF to the browser to save. */
+  function download(bytes: Uint8Array, name: string) {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    // Long enough for the download to have started, then the blob can go.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   /** Start a new form from an earlier one (everything except its number and dates). */
@@ -214,6 +224,15 @@ function Form({ kind, brand, layouts, project, signer }: {
             </tbody>
           </table>
         </>
+      )}
+
+      {preview && (
+        <PdfPreview
+          bytes={preview.bytes}
+          title={preview.name}
+          onClose={() => setPreview(null)}
+          onDownload={() => download(preview.bytes, preview.name)}
+        />
       )}
     </div>
   )

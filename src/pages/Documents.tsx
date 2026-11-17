@@ -198,7 +198,8 @@ export default function Documents() {
           ) : (
             <table className="register">
               <thead>
-                <tr><th>Sheet</th><th>Title</th><th>Rev.</th><th>From</th><th>Date</th><th>History</th><th /></tr>
+                {/* col-* classes set which columns give way first on a small screen (index.css). */}
+                <tr><th>Sheet</th><th className="col-title">Title</th><th>Rev.</th><th className="col-from">From</th><th className="col-date">Date</th><th className="col-history">History</th><th /></tr>
               </thead>
               <tbody>
                 {groups.map((g) => (
@@ -238,11 +239,11 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
     <>
       <tr>
         <td className="mono">{sheet.number}</td>
-        <td>{sheet.title ?? ''}</td>
+        <td className="col-title">{sheet.title ?? ''}</td>
         <td>{sheet.revision_label || sheet.revision_index}</td>
-        <td>{issuanceText(sheet.issuance_kind, sheet.issuance_number)}</td>
-        <td>{usDate(sheet.issued_on)}</td>
-        <td>
+        <td className="col-from">{issuanceText(sheet.issuance_kind, sheet.issuance_number)}</td>
+        <td className="col-date">{usDate(sheet.issued_on)}</td>
+        <td className="col-history">
           {sheet.revision_count > 1 || isAdmin
             ? <button className="link" onClick={toggle}>{open ? 'Hide' : sheet.revision_count > 1 ? `${sheet.revision_count} revisions` : 'original'}</button>
             : <span className="muted">original</span>}
@@ -253,11 +254,11 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
         <Fragment key={r.id}>
           <tr className="history">
             <td />
-            <td>{r.title_at_rev ?? ''}</td>
+            <td className="col-title">{r.title_at_rev ?? ''}</td>
             <td>{r.revision_label || r.revision_index}</td>
-            <td>{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
-            <td>{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
-            <td>{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
+            <td className="col-from">{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
+            <td className="col-date">{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
+            <td className="col-history">{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
             <td className="right nowrap">
               {isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete</button>}{' '}
               <button onClick={() => onOpen({
