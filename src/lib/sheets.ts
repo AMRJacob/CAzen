@@ -2,6 +2,7 @@ import { db } from './supabase'
 import { copyToFolder, deleteProjectCloudFiles, deleteStoredFiles, folderReady, isFolderPath, isR2Path, openFile, putFile, SECTIONS, type ProjectStore } from './files'
 import { backupProject } from './projectData'
 import type { CurrentSheet, IssuanceKind, SheetRevision } from './types'
+import type { BundleSheet } from './pdf/bundle'
 
 export interface IssuanceInput {
   kind: IssuanceKind
@@ -173,6 +174,23 @@ export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
   return ((data ?? []) as unknown as Raw[]).map((r) => ({
     id: r.id, kind: r.kind, number: r.number, title: r.title, issued_on: r.issued_on,
     sheets: r.sheet_revisions.map((x) => ({ number: x.sheets?.number ?? '', revision_label: x.revision_label })),
+  }))
+}
+
+/** The sheets one set or revision round brought in, for downloading that package. */
+// BundleSheet is defined with the bundler, since that is what consumes it.
+export async function listIssuanceSheets(issuanceId: string): Promise<BundleSheet[]> {
+  const { data, error } = await db()
+    .from('sheet_revisions')
+    .select('revision_label, title_at_rev, file_path, sheets(number, title)')
+    .eq('issuance_id', issuanceId)
+  if (error) throw error
+  type Raw = { revision_label: string | null; title_at_rev: string | null; file_path: string; sheets: { number: string; title: string | null } | null }
+  return ((data ?? []) as unknown as Raw[]).map((r) => ({
+    number: r.sheets?.number ?? '',
+    title: r.title_at_rev ?? r.sheets?.title ?? null,
+    revisionLabel: r.revision_label,
+    filePath: r.file_path,
   }))
 }
 

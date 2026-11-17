@@ -710,3 +710,5 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 tr.opens { cursor: pointer; }
 tr.opens:hover td { background: var(--panel); }
 tr.opens:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }
+.set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: 0 0 10px; }
+.notice.small { padding: 8px 10px; font-size: 13px; margin-top: 8px; }

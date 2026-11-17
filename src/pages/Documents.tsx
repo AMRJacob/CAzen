@@ -6,12 +6,14 @@ import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
 import { DEFAULT_DPI } from '../lib/pdf/shrink'
+import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
+import { listIssuanceSheets } from '../lib/sheets'
 import { disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
@@ -191,6 +193,24 @@ export default function Documents() {
             </div>
           )}
 
+          {(asOfRows ? asOfRows.length > 0 : sheets.length > 0) && (
+            <div className="set-actions">
+              <span className="muted small">
+                {asOfRows
+                  ? `${asOfRows.length} sheets as of ${usDate(asOf)}`
+                  : `${sheets.length} current sheets`}
+              </span>
+              <DownloadSet
+                project={current}
+                order={order}
+                label={asOfRows ? `Set as of ${usDate(asOf).replace(/\//g, '-')}` : 'Record set'}
+                gather={async () => (asOfRows
+                  ? asOfRows.map((r) => ({ number: r.sheet_number, title: r.sheet_title, revisionLabel: null, filePath: r.file_path }))
+                  : sheets.map((s) => ({ number: s.number, title: s.title, revisionLabel: s.revision_label, filePath: s.file_path })))}
+              />
+            </div>
+          )}
+
           {asOfRows ? (
             <AsOfTable rows={asOfRows} date={asOf} order={order} onOpen={(p) => openFile(current, p).catch((e) => setError(message(e)))} />
           ) : loading ? (
@@ -225,6 +245,49 @@ export default function Documents() {
 
 function snippet(s: string) {
   return s.split(/(«[^»]*»)/).map((part, i) => part.startsWith('«') ? <mark key={i}>{part.slice(1, -1)}</mark> : part)
+}
+
+/**
+ * Download a set as one PDF. Sheets live one file each, which is what makes revisions and search
+ * work, but nobody sends them that way — a set goes out as a single file in sheet order.
+ */
+function DownloadSet({ project, order, label, date, gather, className }: {
+  project: Project
+  order: Discipline[]
+  /** What this set is, for the file name: "Record set", "Addendum 2". */
+  label: string
+  date?: string
+  gather: () => Promise<BundleSheet[]>
+  className?: string
+}) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function go() {
+    setProblem(null)
+    setBusy('gathering')
+    try {
+      const sheets = await gather()
+      if (!sheets.length) { setProblem('No sheets in this set.'); return }
+      const bundle = await bundleSheets(project, sheets, order, (done, total, number) =>
+        setBusy(done >= total ? 'writing the file' : `sheet ${done + 1} of ${total} · ${number}`))
+      saveBundle(bundle.bytes, bundleName(project.number, label, date))
+      if (bundle.missing.length) setProblem(`${bundle.missing.length} sheet${bundle.missing.length === 1 ? '' : 's'} could not be read and ${bundle.missing.length === 1 ? 'is' : 'are'} not in the file: ${bundle.missing.join(', ')}.`)
+    } catch (e) {
+      setProblem(message(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <>
+      <button className={className} onClick={go} disabled={!!busy}>
+        {busy ? `Building… ${busy}` : 'Download'}
+      </button>
+      {problem && <div className="notice warn small">{problem}</div>}
+    </>
+  )
 }
 
 function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: CurrentSheet; project: Project; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void }) {
@@ -313,7 +376,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
     <>
       {note && <div className="notice">{note}</div>}
       <table>
-        <thead><tr><th>Date</th><th>Issued as</th><th>Sheets</th>{isAdmin && <th />}</tr></thead>
+        <thead><tr><th>Date</th><th>Issued as</th><th>Sheets</th><th /><th /></tr></thead>
         <tbody>
           {rows.map((r) => (
             <Fragment key={r.id}>
@@ -324,10 +387,19 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                   <strong>{r.sheets.length}</strong>{' '}
                   <span className="muted">{sortSheets(r.sheets, (s) => s.number, order).map((s) => s.number + (s.revision_label ? ` (${s.revision_label})` : '')).join(', ')}</span>
                 </td>
-                {isAdmin && <td className="right"><button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button></td>}
+                <td className="right nowrap">
+                  <DownloadSet
+                    project={project}
+                    order={order}
+                    label={issuanceText(r.kind, r.number)}
+                    date={r.issued_on.slice(0, 10)}
+                    gather={() => listIssuanceSheets(r.id)}
+                  />
+                </td>
+                <td className="right">{isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button>}</td>
               </tr>
               {deleting === r.id && (
-                <tr className="confirm-row"><td colSpan={4}>
+                <tr className="confirm-row"><td colSpan={5}>
                   <ConfirmDelete
                     what={issuanceText(r.kind, r.number)}
                     detail={`Its ${r.sheets.length} ${r.sheets.length === 1 ? 'sheet is' : 'sheets are'} removed; sheets it revised go back to their previous revision.`}
