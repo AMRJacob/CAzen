@@ -5,7 +5,7 @@ import { useFirm } from '../lib/firm'
 import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
-import { shrinkSheet } from '../lib/pdf/shrink'
+import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
@@ -409,7 +409,6 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const [reducing, setReducing] = useState<Set<number>>(new Set())
   const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
   const [run, setRun] = useState<{ done: number; total: number; sheet: string; stage: string } | null>(null)
-  const stopRef = useRef(false)
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
@@ -494,12 +493,20 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
    * Make one sheet lighter. Which way that happens is decided per sheet by whether the page has a
    * text layer — see shrinkSheet. The full-size original is kept so it can be put back.
    */
+  /** The workers that do the reducing. Made on first use and kept for the rest of the upload. */
+  const poolRef = useRef<ShrinkPool | null>(null)
+  const pool = () => {
+    if (!poolRef.current || poolRef.current.closed) poolRef.current = new ShrinkPool()
+    return poolRef.current
+  }
+  useEffect(() => () => poolRef.current?.close(), [])
+
   async function reduce(i: number, onStage?: (stage: string) => void) {
     const d = drafts[i]
     if (d.full) return
     setReducing((s) => new Set(s).add(i))
     try {
-      const r = await shrinkSheet(d.page.bytes, d.page.text.words.length > 0, {
+      const r = await pool().shrink(d.page.bytes, d.page.text.words.length > 0, {
         onStage: (stage) => {
           onStage?.(stage)
           setReduceNote((n) => ({ ...n, [i]: stage }))
@@ -520,24 +527,29 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const heavy = (d: Draft) => d.page.bytes.length > 5 * MB
 
   /**
-   * Reduce every heavy sheet, one after another. Each sheet is a second or so of work that can't
-   * be broken up, so the set is walked with the progress shown and a way to stop part way; what is
-   * already done stays done.
+   * Reduce every heavy sheet. They go to the pool together and come back as they finish, several
+   * at a time, so this is as fast as the machine allows rather than one sheet after another.
+   * Stopping leaves the sheets already in hand to finish; everything done stays done.
    */
   async function reduceAll() {
     const queue = drafts.map((d, i) => [i, d] as const).filter(([, d]) => heavy(d) && !d.full)
-    stopRef.current = false
+    if (!queue.length) return
+    const p = pool()
+    let done = 0
+    setRun({ done: 0, total: queue.length, sheet: `${queue.length} sheets`, stage: p.onMainThread ? 'starting' : `${p.width} at a time` })
     try {
-      for (const [n, [i, d]] of queue.entries()) {
-        if (stopRef.current) break
-        setRun({ done: n, total: queue.length, sheet: d.number || `page ${d.pageIndex + 1}`, stage: 'starting' })
-        await reduce(i, (stage) => setRun((r) => (r ? { ...r, stage } : r)))
-      }
+      await Promise.all(queue.map(([i, d]) => reduce(i, (stage) =>
+        setRun((r) => (r ? { ...r, sheet: d.number || `page ${d.pageIndex + 1}`, stage } : r)),
+      ).then(() => {
+        done++
+        setRun((r) => (r ? { ...r, done } : r))
+      })))
     } finally {
       setRun(null)
-      stopRef.current = false
     }
   }
+
+  const stopAll = () => poolRef.current?.stop()
 
   const chosen = drafts.filter((d) => d.include)
   const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
@@ -638,7 +650,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                   <div className="run-bar"><span style={{ width: `${(run.done / Math.max(1, run.total)) * 100}%` }} /></div>
                   <div className="run-line">
                     <span className="small">Sheet {run.done + 1} of {run.total} · {run.sheet} · {run.stage}</span>
-                    <button className="link small" onClick={() => { stopRef.current = true }}>stop</button>
+                    <button className="link small" onClick={stopAll}>stop</button>
                   </div>
                 </div>
               )}

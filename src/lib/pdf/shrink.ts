@@ -51,6 +51,35 @@ const breathe = (): Promise<void> => new Promise((resolve) => {
   else setTimeout(resolve, 0)
 })
 
+/**
+ * A canvas, wherever this is running. In a worker there is no document to make one from, so the
+ * same code reaches for OffscreenCanvas instead — which is also what lets this work move off the
+ * thread the page is drawn on.
+ */
+type AnyCanvas = HTMLCanvasElement | OffscreenCanvas
+
+export const canOffscreen = typeof OffscreenCanvas !== 'undefined'
+
+function makeCanvas(width: number, height: number): AnyCanvas {
+  if (typeof document !== 'undefined') {
+    const c = document.createElement('canvas')
+    c.width = width
+    c.height = height
+    return c
+  }
+  return new OffscreenCanvas(width, height)
+}
+
+async function canvasToJpeg(canvas: AnyCanvas, quality: number): Promise<Uint8Array> {
+  const blob = canvas instanceof OffscreenCanvas
+    ? await canvas.convertToBlob({ type: 'image/jpeg', quality })
+    : await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', quality))
+  if (!blob) throw new Error('The browser could not re-encode the image.')
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  canvas.width = canvas.height = 0   // let the pixels go now rather than at the next collection
+  return bytes
+}
+
 /** An image object on the page, big enough to be worth looking at. */
 interface PageImage {
   name: PDFName
@@ -198,16 +227,11 @@ async function decodable(image: PageImage): Promise<ImageBitmap | null> {
 }
 
 async function toJpeg(bitmap: ImageBitmap, width: number, height: number, quality: number): Promise<Uint8Array> {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')!
+  const canvas = makeCanvas(width, height)
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(bitmap, 0, 0, width, height)
-  const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', quality))
-  canvas.width = canvas.height = 0
-  if (!blob) throw new Error('The browser could not re-encode the image.')
-  return new Uint8Array(await blob.arrayBuffer())
+  return await canvasToJpeg(canvas, quality)
 }
 
 /**
@@ -287,19 +311,19 @@ async function redrawPage(bytes: Uint8Array, dpi: number, nativeDpi: number, onS
     const vp = page.getViewport({ scale: Math.min(dpi, nativeDpi) / 72 })
     onStage(`redrawing at ${dpi} dpi`)
     await breathe()
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(vp.width)
-    canvas.height = Math.round(vp.height)
-    await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp }).promise
+    const canvas = makeCanvas(Math.round(vp.width), Math.round(vp.height))
+    await page.render({
+      canvas: canvas as HTMLCanvasElement,
+      canvasContext: canvas.getContext('2d') as CanvasRenderingContext2D,
+      viewport: vp,
+    }).promise
     await breathe()
-    const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85))
-    canvas.width = canvas.height = 0
-    if (!blob) throw new Error('The browser could not re-encode the page.')
+    const jpegBytes = await canvasToJpeg(canvas, 0.85)
 
     onStage('writing the sheet')
     await breathe()
     const out = await PDFDocument.create()
-    const jpeg = await out.embedJpg(new Uint8Array(await blob.arrayBuffer()))
+    const jpeg = await out.embedJpg(jpegBytes)
     const sheet = out.addPage([base.width, base.height])
     sheet.drawImage(jpeg, { x: 0, y: 0, width: base.width, height: base.height })
     return await out.save()
