@@ -5,6 +5,7 @@ import { useFirm } from '../lib/firm'
 import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
+import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
@@ -409,6 +410,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const [reducing, setReducing] = useState<Set<number>>(new Set())
   const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
   const [run, setRun] = useState<{ done: number; total: number; sheet: string; stage: string } | null>(null)
+  const [dpi, setDpi] = useState(DEFAULT_DPI)
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
@@ -507,6 +509,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
     setReducing((s) => new Set(s).add(i))
     try {
       const r = await pool().shrink(d.page.bytes, d.page.text.words.length > 0, {
+        dpi,
         onStage: (stage) => {
           onStage?.(stage)
           setReduceNote((n) => ({ ...n, [i]: stage }))
@@ -643,6 +646,15 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                 <button onClick={reduceAll} disabled={reducing.size > 0 || !drafts.some((d) => heavy(d) && !d.full)}>
                   {`Reduce all sheets over 5 MB (${drafts.filter((d) => heavy(d) && !d.full).length})`}
                 </button>
+                <label className="inline small">
+                  to{' '}
+                  <select value={dpi} onChange={(e) => setDpi(Number(e.target.value))} aria-label="Resolution to reduce to">
+                    <option value={100}>100 dpi · on screen</option>
+                    <option value={150}>150 dpi · reading in the field</option>
+                    <option value={200}>200 dpi · printing</option>
+                    <option value={300}>300 dpi · barely a reduction on a large sheet</option>
+                  </select>
+                </label>
                 <span className="muted small">Set total {(setTotal / MB).toFixed(0)} MB</span>
               </div>
               {run && (

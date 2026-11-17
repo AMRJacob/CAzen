@@ -80,41 +80,16 @@ async function canvasToJpeg(canvas: AnyCanvas, quality: number): Promise<Uint8Ar
   return bytes
 }
 
-/** An image object on the page, big enough to be worth looking at. */
+/** An image the sheet draws, wherever in the file it was reached from. */
 interface PageImage {
-  name: PDFName
   ref: PDFRef
   dict: PDFDict
   raw: Uint8Array
   width: number
   height: number
   filter: string | null
-}
-
-function imagesOnPage(doc: PDFDocument, pageIndex: number): PageImage[] {
-  const page = doc.getPage(pageIndex)
-  const xobjects = page.node.Resources()?.lookup(PDFName.of('XObject'), PDFDict)
-  if (!xobjects) return []
-  const out: PageImage[] = []
-  for (const [name, ref] of xobjects.entries()) {
-    const stream = doc.context.lookup(ref)
-    if (!(stream instanceof PDFRawStream)) continue
-    const dict = stream.dict
-    if (dict.lookup(PDFName.of('Subtype'))?.toString() !== '/Image') continue
-    const width = Number(dict.lookup(PDFName.of('Width'))?.toString() ?? 0)
-    const height = Number(dict.lookup(PDFName.of('Height'))?.toString() ?? 0)
-    if (!width || !height) continue
-    out.push({
-      name,
-      ref: ref as PDFRef,
-      dict,
-      raw: stream.contents,
-      width,
-      height,
-      filter: dict.lookup(PDFName.of('Filter'))?.toString() ?? null,
-    })
-  }
-  return out
+  /** How wide it is actually drawn, in points. Zero when the content stream didn't say. */
+  drawnWidth: number
 }
 
 type Matrix = [number, number, number, number, number, number]
@@ -125,9 +100,8 @@ const times = (m: Matrix, n: Matrix): Matrix => [
   m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
 ]
 
-/** The page's drawing instructions, with the streams joined as PDF requires. */
-function contentOf(doc: PDFDocument, pageIndex: number): string {
-  const contents = doc.getPage(pageIndex).node.Contents()
+/** Drawing instructions as text, from a stream or the array of streams a page may use. */
+function streamText(doc: PDFDocument, contents: unknown): string {
   if (!contents) return ''
   const streams = contents instanceof PDFArray
     ? contents.asArray().map((ref) => doc.context.lookup(ref))
@@ -153,11 +127,18 @@ function contentOf(doc: PDFDocument, pageIndex: number): string {
  * drawn size falls out of that matrix. Walking the stream for `q`, `Q`, `cm` and `Do` is enough;
  * strings are stepped over so their contents can't be mistaken for operators.
  */
-function drawnSizes(doc: PDFDocument, pageIndex: number): Map<string, { w: number; h: number }> {
-  const src = contentOf(doc, pageIndex)
-  const out = new Map<string, { w: number; h: number }>()
+function walk(
+  doc: PDFDocument,
+  src: string,
+  resources: PDFDict | undefined,
+  start: Matrix,
+  found: Map<string, PageImage>,
+  depth: number,
+) {
+  if (depth > 8) return                       // a form that refers to itself must not spin
+  const xobjects = resources?.lookup(PDFName.of('XObject'), PDFDict)
   const stack: Matrix[] = []
-  let ctm: Matrix = IDENTITY
+  let ctm: Matrix = start
   let operands: (number | string)[] = []
 
   for (let i = 0; i < src.length; i++) {
@@ -198,19 +179,49 @@ function drawnSizes(doc: PDFDocument, pageIndex: number): Map<string, { w: numbe
       }
       case 'Do': {
         const name = operands[operands.length - 1]
-        if (typeof name === 'string' && name) {
-          const w = Math.hypot(ctm[0], ctm[1])
-          const h = Math.hypot(ctm[2], ctm[3])
-          const seen = out.get(name)
-          // An image drawn more than once needs enough pixels for its largest appearance.
-          if (!seen || w > seen.w) out.set(name, { w, h })
+        if (typeof name !== 'string' || !name || !xobjects) break
+        const ref = xobjects.get(PDFName.of(name))
+        const stream = ref ? doc.context.lookup(ref) : undefined
+        if (!(stream instanceof PDFRawStream)) break
+        const dict = stream.dict
+        const subtype = dict.lookup(PDFName.of('Subtype'))?.toString()
+
+        if (subtype === '/Image') {
+          const width = Number(dict.lookup(PDFName.of('Width'))?.toString() ?? 0)
+          const height = Number(dict.lookup(PDFName.of('Height'))?.toString() ?? 0)
+          if (!width || !height) break
+          const drawnWidth = Math.hypot(ctm[0], ctm[1])
+          const key = String(ref)
+          const seen = found.get(key)
+          // The same image drawn more than once needs enough pixels for its largest appearance.
+          if (seen) seen.drawnWidth = Math.max(seen.drawnWidth, drawnWidth)
+          else found.set(key, {
+            ref: ref as PDFRef, dict, raw: stream.contents, width, height,
+            filter: dict.lookup(PDFName.of('Filter'))?.toString() ?? null,
+            drawnWidth,
+          })
+        } else if (subtype === '/Form') {
+          // CAD exporters routinely wrap a sheet's content in a form, with the images in the
+          // form's own resources. Looking only at the page's resources misses them entirely.
+          const matrix = dict.lookup(PDFName.of('Matrix'), PDFArray)
+          const m = matrix
+            ? (matrix.asArray().map((v) => Number(v.toString())) as Matrix)
+            : IDENTITY
+          walk(doc, streamText(doc, stream), dict.lookup(PDFName.of('Resources'), PDFDict), times(m, ctm), found, depth + 1)
         }
         break
       }
     }
     operands = []
   }
-  return out
+}
+
+/** Every image this sheet draws, with how large it is drawn. */
+function imagesOnPage(doc: PDFDocument, pageIndex: number): PageImage[] {
+  const page = doc.getPage(pageIndex)
+  const found = new Map<string, PageImage>()
+  walk(doc, streamText(doc, page.node.Contents()), page.node.Resources(), IDENTITY, found, 0)
+  return [...found.values()]
 }
 
 /** Decode what the browser can open by itself. Scanner encodings (CCITT, JBIG2, JPEG 2000) can't be. */
@@ -238,26 +249,31 @@ async function toJpeg(bitmap: ImageBitmap, width: number, height: number, qualit
  * Replace the oversized images on a sheet that has a text layer, leaving everything else as it is.
  * Returns null when there was nothing worth replacing.
  */
-async function shrinkImages(bytes: Uint8Array, dpi: number, onStage: OnStage): Promise<Uint8Array | null> {
+async function shrinkImages(bytes: Uint8Array, dpi: number, onStage: OnStage): Promise<{ out: Uint8Array | null; why: string }> {
   onStage('reading the sheet')
   await breathe()
   const doc = await PDFDocument.load(bytes.slice() as unknown as ArrayBuffer, { ignoreEncryption: true })
   const page = doc.getPage(0)
-  const drawn = drawnSizes(doc, 0)
-  // Where the drawing instructions don't say how big an image is drawn — an image nested inside a
-  // form, say — fall back to the width of the sheet, which no image on it can exceed.
+  // Where the instructions never said how large an image is drawn, fall back to the width of the
+  // sheet, which no image on it can exceed.
   const pageCeiling = Math.round(inches(page.getWidth()) * dpi)
   let replaced = 0
+  let alreadySmall = 0
+  const unreadable = new Set<string>()
 
   const all = imagesOnPage(doc, 0)
+  if (!all.length) return { out: null, why: 'no images on this sheet' }
+
   for (const [n, image] of all.entries()) {
-    const at = drawn.get(image.name.decodeText())
-    const ceiling = Math.max(64, Math.round(at ? inches(at.w) * dpi : pageCeiling))
-    if (image.width <= ceiling) continue
+    const ceiling = Math.max(64, Math.round(image.drawnWidth ? inches(image.drawnWidth) * dpi : pageCeiling))
+    if (image.width <= ceiling) { alreadySmall++; continue }
     onStage(all.length > 1 ? `image ${n + 1} of ${all.length}` : 'reducing the image')
     await breathe()
     const bitmap = await decodable(image)
-    if (!bitmap) continue
+    if (!bitmap) {
+      unreadable.add((image.filter ?? 'unknown').replace(/^\//, '').replace(/Decode$/, ''))
+      continue
+    }
     const width = ceiling
     const height = Math.max(1, Math.round((image.height / image.width) * width))
     let small: Uint8Array
@@ -267,7 +283,7 @@ async function shrinkImages(bytes: Uint8Array, dpi: number, onStage: OnStage): P
       bitmap.close()
     }
     // Only if it actually helps. A small or already-efficient image can come back bigger.
-    if (small.length >= image.raw.length) continue
+    if (small.length >= image.raw.length) { alreadySmall++; continue }
 
     const dict = doc.context.obj({
       Type: 'XObject', Subtype: 'Image',
@@ -288,10 +304,19 @@ async function shrinkImages(bytes: Uint8Array, dpi: number, onStage: OnStage): P
     replaced++
   }
 
-  if (!replaced) return null
+  if (!replaced) {
+    // Say which of the several quite different reasons this was, so it's clear whether anything
+    // could be done about it.
+    const why = unreadable.size
+      ? `${all.length === 1 ? 'its image is' : 'images are'} ${[...unreadable].join(' and ')}, which this can't open yet`
+      : alreadySmall === all.length
+        ? `${all.length} image${all.length === 1 ? '' : 's'}, none above ${dpi} dpi`
+        : 'nothing to reduce'
+    return { out: null, why }
+  }
   onStage('writing the sheet')
   await breathe()
-  return await doc.save()
+  return { out: await doc.save(), why: '' }
 }
 
 /**
@@ -354,9 +379,9 @@ export async function shrinkSheet(
 
   try {
     if (hasText) {
-      const out = await shrinkImages(bytes, dpi, onStage)
-      if (!out) return keep('nothing to reduce')
-      if (out.length >= before) return keep('nothing to reduce')
+      const { out, why } = await shrinkImages(bytes, dpi, onStage)
+      if (!out) return keep(why)
+      if (out.length >= before) return keep('no smaller when reduced')
       return { bytes: out, before, after: out.length, note: `images reduced to ${dpi} dpi`, changed: true }
     }
     const native = await scanResolution(bytes)
