@@ -697,3 +697,8 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 .notice-actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .size-cell { white-space: nowrap; }
 .size-cell button.link { margin-left: 8px; }
+.run { margin-top: 10px; }
+.run-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.run-bar span { display: block; height: 100%; background: var(--moss); transition: width 0.2s ease-out; }
+.run-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .run-bar span { transition: none; } }

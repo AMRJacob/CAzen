@@ -408,6 +408,8 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const [sizeWarning, setSizeWarning] = useState<string | null>(null)
   const [reducing, setReducing] = useState<Set<number>>(new Set())
   const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
+  const [run, setRun] = useState<{ done: number; total: number; sheet: string; stage: string } | null>(null)
+  const stopRef = useRef(false)
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
@@ -492,16 +494,21 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
    * Make one sheet lighter. Which way that happens is decided per sheet by whether the page has a
    * text layer — see shrinkSheet. The full-size original is kept so it can be put back.
    */
-  async function reduce(i: number) {
+  async function reduce(i: number, onStage?: (stage: string) => void) {
     const d = drafts[i]
     if (d.full) return
     setReducing((s) => new Set(s).add(i))
     try {
-      const r = await shrinkSheet(d.page.bytes, d.page.text.words.length > 0)
+      const r = await shrinkSheet(d.page.bytes, d.page.text.words.length > 0, {
+        onStage: (stage) => {
+          onStage?.(stage)
+          setReduceNote((n) => ({ ...n, [i]: stage }))
+        },
+      })
       setDrafts((ds) => ds.map((x, j) => (j === i && r.changed
         ? { ...x, page: { ...x.page, bytes: r.bytes }, full: { bytes: d.page.bytes, before: r.before, after: r.after, note: r.note } }
         : j === i ? { ...x, full: undefined } : x)))
-      if (!r.changed) setReduceNote((n) => ({ ...n, [i]: r.note }))
+      setReduceNote((n) => ({ ...n, [i]: r.changed ? '' : r.note }))
     } finally {
       setReducing((s) => { const next = new Set(s); next.delete(i); return next })
     }
@@ -511,8 +518,25 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
     ? { ...x, page: { ...x.page, bytes: x.full.bytes }, full: undefined } : x)))
 
   const heavy = (d: Draft) => d.page.bytes.length > 5 * MB
+
+  /**
+   * Reduce every heavy sheet, one after another. Each sheet is a second or so of work that can't
+   * be broken up, so the set is walked with the progress shown and a way to stop part way; what is
+   * already done stays done.
+   */
   async function reduceAll() {
-    for (const [i, d] of drafts.entries()) if (heavy(d) && !d.full) await reduce(i)
+    const queue = drafts.map((d, i) => [i, d] as const).filter(([, d]) => heavy(d) && !d.full)
+    stopRef.current = false
+    try {
+      for (const [n, [i, d]] of queue.entries()) {
+        if (stopRef.current) break
+        setRun({ done: n, total: queue.length, sheet: d.number || `page ${d.pageIndex + 1}`, stage: 'starting' })
+        await reduce(i, (stage) => setRun((r) => (r ? { ...r, stage } : r)))
+      }
+    } finally {
+      setRun(null)
+      stopRef.current = false
+    }
   }
 
   const chosen = drafts.filter((d) => d.include)
@@ -605,10 +629,19 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
               {sizeWarning}
               <div className="notice-actions">
                 <button onClick={reduceAll} disabled={reducing.size > 0 || !drafts.some((d) => heavy(d) && !d.full)}>
-                  {reducing.size ? 'Reducing…' : `Reduce all sheets over 5 MB (${drafts.filter((d) => heavy(d) && !d.full).length})`}
+                  {`Reduce all sheets over 5 MB (${drafts.filter((d) => heavy(d) && !d.full).length})`}
                 </button>
                 <span className="muted small">Set total {(setTotal / MB).toFixed(0)} MB</span>
               </div>
+              {run && (
+                <div className="run" role="status" aria-live="polite">
+                  <div className="run-bar"><span style={{ width: `${(run.done / Math.max(1, run.total)) * 100}%` }} /></div>
+                  <div className="run-line">
+                    <span className="small">Sheet {run.done + 1} of {run.total} · {run.sheet} · {run.stage}</span>
+                    <button className="link small" onClick={() => { stopRef.current = true }}>stop</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="tb-bar">
@@ -647,7 +680,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                           <span title={d.full.note}>{(d.full.before / MB).toFixed(1)} → <strong>{(d.full.after / MB).toFixed(1)} MB</strong></span>
                           <button className="link small" onClick={() => restore(i)}>undo</button>
                         </>
-                      ) : reducing.has(i) ? <span className="muted">reducing…</span> : (
+                      ) : reducing.has(i) ? <span className="muted">{reduceNote[i] || 'reducing'}…</span> : (
                         <>
                           {(d.page.bytes.length / MB).toFixed(1)} MB
                           {heavy(d) && <button className="link small" onClick={() => reduce(i)}>reduce</button>}

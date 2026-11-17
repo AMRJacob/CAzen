@@ -32,8 +32,24 @@ export interface ShrinkResult {
 
 export const DEFAULT_DPI = 150
 
+/** Told what is happening, so the caller can say so while it happens. */
+export type OnStage = (stage: string) => void
+
 /** PDF user-space units are 1/72 inch. */
 const inches = (points: number) => points / 72
+
+/**
+ * Hand the browser a frame.
+ *
+ * Reducing a sheet is a few hundred milliseconds of work that cannot be broken up any further —
+ * decoding an image, re-encoding it, writing the file. Run back to back over a set, that reads as
+ * a hung tab. Stopping between the steps lets the page paint what it is doing and stay answerable,
+ * which is the difference between slow and broken.
+ */
+const breathe = (): Promise<void> => new Promise((resolve) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0))
+  else setTimeout(resolve, 0)
+})
 
 /** An image object on the page, big enough to be worth looking at. */
 interface PageImage {
@@ -198,7 +214,9 @@ async function toJpeg(bitmap: ImageBitmap, width: number, height: number, qualit
  * Replace the oversized images on a sheet that has a text layer, leaving everything else as it is.
  * Returns null when there was nothing worth replacing.
  */
-async function shrinkImages(bytes: Uint8Array, dpi: number): Promise<Uint8Array | null> {
+async function shrinkImages(bytes: Uint8Array, dpi: number, onStage: OnStage): Promise<Uint8Array | null> {
+  onStage('reading the sheet')
+  await breathe()
   const doc = await PDFDocument.load(bytes.slice() as unknown as ArrayBuffer, { ignoreEncryption: true })
   const page = doc.getPage(0)
   const drawn = drawnSizes(doc, 0)
@@ -207,10 +225,13 @@ async function shrinkImages(bytes: Uint8Array, dpi: number): Promise<Uint8Array 
   const pageCeiling = Math.round(inches(page.getWidth()) * dpi)
   let replaced = 0
 
-  for (const image of imagesOnPage(doc, 0)) {
+  const all = imagesOnPage(doc, 0)
+  for (const [n, image] of all.entries()) {
     const at = drawn.get(image.name.decodeText())
     const ceiling = Math.max(64, Math.round(at ? inches(at.w) * dpi : pageCeiling))
     if (image.width <= ceiling) continue
+    onStage(all.length > 1 ? `image ${n + 1} of ${all.length}` : 'reducing the image')
+    await breathe()
     const bitmap = await decodable(image)
     if (!bitmap) continue
     const width = ceiling
@@ -243,7 +264,10 @@ async function shrinkImages(bytes: Uint8Array, dpi: number): Promise<Uint8Array 
     replaced++
   }
 
-  return replaced ? await doc.save() : null
+  if (!replaced) return null
+  onStage('writing the sheet')
+  await breathe()
+  return await doc.save()
 }
 
 /**
@@ -252,21 +276,28 @@ async function shrinkImages(bytes: Uint8Array, dpi: number): Promise<Uint8Array 
  * Never above the resolution the scan already has: rendering a 200 dpi scan at 300 would invent
  * pixels and hand back a bigger file than it was given.
  */
-async function redrawPage(bytes: Uint8Array, dpi: number, nativeDpi: number): Promise<Uint8Array> {
+async function redrawPage(bytes: Uint8Array, dpi: number, nativeDpi: number, onStage: OnStage): Promise<Uint8Array> {
+  onStage('reading the scan')
+  await breathe()
   const pdf = await getDocument({ data: bytes.slice() }).promise
   try {
     const page = await pdf.getPage(1)
     const base = page.getViewport({ scale: 1 })
     // PDF units are 1/72 inch, so rendering at dpi/72 puts exactly that many pixels in an inch.
     const vp = page.getViewport({ scale: Math.min(dpi, nativeDpi) / 72 })
+    onStage(`redrawing at ${dpi} dpi`)
+    await breathe()
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(vp.width)
     canvas.height = Math.round(vp.height)
     await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp }).promise
+    await breathe()
     const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85))
     canvas.width = canvas.height = 0
     if (!blob) throw new Error('The browser could not re-encode the page.')
 
+    onStage('writing the sheet')
+    await breathe()
     const out = await PDFDocument.create()
     const jpeg = await out.embedJpg(new Uint8Array(await blob.arrayBuffer()))
     const sheet = out.addPage([base.width, base.height])
@@ -289,20 +320,24 @@ async function scanResolution(bytes: Uint8Array): Promise<number> {
  * Make one sheet lighter. `hasText` comes from the split step, which already read each page's
  * words: a page with none is a scan.
  */
-export async function shrinkSheet(bytes: Uint8Array, hasText: boolean, dpi = DEFAULT_DPI): Promise<ShrinkResult> {
+export async function shrinkSheet(
+  bytes: Uint8Array,
+  hasText: boolean,
+  { dpi = DEFAULT_DPI, onStage = () => {} }: { dpi?: number; onStage?: OnStage } = {},
+): Promise<ShrinkResult> {
   const before = bytes.length
   const keep = (note: string): ShrinkResult => ({ bytes, before, after: before, note, changed: false })
 
   try {
     if (hasText) {
-      const out = await shrinkImages(bytes, dpi)
+      const out = await shrinkImages(bytes, dpi, onStage)
       if (!out) return keep('nothing to reduce')
       if (out.length >= before) return keep('nothing to reduce')
       return { bytes: out, before, after: out.length, note: `images reduced to ${dpi} dpi`, changed: true }
     }
     const native = await scanResolution(bytes)
     if (native <= dpi) return keep(`already ${Math.round(native)} dpi`)
-    const out = await redrawPage(bytes, dpi, native)
+    const out = await redrawPage(bytes, dpi, native, onStage)
     if (out.length >= before) return keep('nothing to reduce')
     return { bytes: out, before, after: out.length, note: `scan redrawn at ${dpi} dpi`, changed: true }
   } catch (e) {
