@@ -5,6 +5,7 @@ import { useFirm } from '../lib/firm'
 import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
+import { shrinkSheet } from '../lib/pdf/shrink'
 import {
   deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
@@ -369,6 +370,8 @@ function AsOfTable({ rows, date, order, onOpen }: { rows: Awaited<ReturnType<typ
 interface Draft {
   pageIndex: number
   page: SplitSheet
+  /** Set once this sheet has been reduced, so it can be put back. */
+  full?: { bytes: Uint8Array; before: number; after: number; note: string }
   include: boolean
   number: string
   title: string
@@ -403,6 +406,8 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const [progress, setProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sizeWarning, setSizeWarning] = useState<string | null>(null)
+  const [reducing, setReducing] = useState<Set<number>>(new Set())
+  const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
@@ -483,7 +488,35 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   })
   const sameLetters = (i: number) => { const code = letters(drafts[i]); return code ? drafts.filter((d, j) => j !== i && letters(d) === code && d.pinned !== drafts[i].pinned).length : 0 }
 
+  /**
+   * Make one sheet lighter. Which way that happens is decided per sheet by whether the page has a
+   * text layer — see shrinkSheet. The full-size original is kept so it can be put back.
+   */
+  async function reduce(i: number) {
+    const d = drafts[i]
+    if (d.full) return
+    setReducing((s) => new Set(s).add(i))
+    try {
+      const r = await shrinkSheet(d.page.bytes, d.page.text.words.length > 0)
+      setDrafts((ds) => ds.map((x, j) => (j === i && r.changed
+        ? { ...x, page: { ...x.page, bytes: r.bytes }, full: { bytes: d.page.bytes, before: r.before, after: r.after, note: r.note } }
+        : j === i ? { ...x, full: undefined } : x)))
+      if (!r.changed) setReduceNote((n) => ({ ...n, [i]: r.note }))
+    } finally {
+      setReducing((s) => { const next = new Set(s); next.delete(i); return next })
+    }
+  }
+
+  const restore = (i: number) => setDrafts((ds) => ds.map((x, j) => (j === i && x.full
+    ? { ...x, page: { ...x.page, bytes: x.full.bytes }, full: undefined } : x)))
+
+  const heavy = (d: Draft) => d.page.bytes.length > 5 * MB
+  async function reduceAll() {
+    for (const [i, d] of drafts.entries()) if (heavy(d) && !d.full) await reduce(i)
+  }
+
   const chosen = drafts.filter((d) => d.include)
+  const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
   const numbers = chosen.map((d) => d.number.trim().toUpperCase())
   const duplicates = new Set(numbers.filter((n, i) => n && numbers.indexOf(n) !== i))
   const missing = chosen.filter((d) => !d.number.trim()).length
@@ -567,7 +600,17 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
 
       {(step === 'review' || step === 'saving') && (
         <>
-          {sizeWarning && <div className="notice warn">{sizeWarning}</div>}
+          {sizeWarning && (
+            <div className="notice warn">
+              {sizeWarning}
+              <div className="notice-actions">
+                <button onClick={reduceAll} disabled={reducing.size > 0 || !drafts.some((d) => heavy(d) && !d.full)}>
+                  {reducing.size ? 'Reducing…' : `Reduce all sheets over 5 MB (${drafts.filter((d) => heavy(d) && !d.full).length})`}
+                </button>
+                <span className="muted small">Set total {(setTotal / MB).toFixed(0)} MB</span>
+              </div>
+            </div>
+          )}
           <div className="tb-bar">
             <div>
               <strong>Title blocks</strong>{' '}
@@ -588,7 +631,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
           </div>
 
           <table>
-            <thead><tr><th /><th>Page</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Read by</th><th>Result</th></tr></thead>
+            <thead><tr><th /><th>Page</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -598,7 +641,20 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                     <td>{d.pageIndex + 1}</td>
                     <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
                     <td><input className="cell" value={d.title} onChange={(e) => type(i, 'title', e.target.value)} /></td>
-                    <td><input className="cell short" value={d.revision} onChange={(e) => type(i, 'revision', e.target.value)} placeholder={setRev || '—'} /></td>
+                    <td className="small nowrap size-cell">
+                      {d.full ? (
+                        <>
+                          <span title={d.full.note}>{(d.full.before / MB).toFixed(1)} → <strong>{(d.full.after / MB).toFixed(1)} MB</strong></span>
+                          <button className="link small" onClick={() => restore(i)}>undo</button>
+                        </>
+                      ) : reducing.has(i) ? <span className="muted">reducing…</span> : (
+                        <>
+                          {(d.page.bytes.length / MB).toFixed(1)} MB
+                          {heavy(d) && <button className="link small" onClick={() => reduce(i)}>reduce</button>}
+                          {reduceNote[i] && <span className="muted"> {reduceNote[i]}</span>}
+                        </>
+                      )}
+                    </td>
                     <td className="small read-by">
                       {d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : templates.length === 0 ? (
                         d.number === COVER && !d.touched.number
@@ -659,11 +715,13 @@ function sizeCheck(fileBytes: number, pages: SplitSheet[]): string | null {
   const parts: string[] = []
   if (perSheet > 5 * MB) parts.push(`This PDF is ${(fileBytes / MB).toFixed(0)} MB, about ${(perSheet / MB).toFixed(1)} MB a sheet.`)
   if (heaviest && heaviest.bytes.length > 20 * MB) parts.push(`Page ${heaviest.pageIndex + 1} alone is ${(heaviest.bytes.length / MB).toFixed(0)} MB.`)
-  const tooBig = pages.filter((p) => p.bytes.length > 50 * MB).length
-  if (tooBig) parts.push(`${tooBig} ${tooBig === 1 ? 'sheet is' : 'sheets are'} over 50 MB, the largest file Supabase’s free plan accepts, so ${tooBig === 1 ? 'it' : 'they'} will fail to save there.`)
+  const tooBig = pages.filter((p) => p.bytes.length > 100 * MB).length
+  if (tooBig) parts.push(`${tooBig} ${tooBig === 1 ? 'sheet is' : 'sheets are'} over the 100 MB a file that CAzen accepts by default, so ${tooBig === 1 ? 'it' : 'they'} will fail to save. An admin can change that limit in Settings.`)
   if (!parts.length) return null
   if (scans) parts.push(`${scans} of ${pages.length} pages have no text, so they are probably scans.`)
-  parts.push('Large sheets are usually scans or images at a very high resolution. Re-exporting or re-scanning at 200–300 dpi would make them much smaller. You can still save them as they are.')
+  // Not a dpi figure: "300 dpi" is advice for letter paper, and a 36 x 24 sheet at 300 dpi is 78
+  // megapixels — no reduction at all. What a sheet needs is pixels across its own width.
+  parts.push('Heavy sheets are usually scans, or images placed at a far higher resolution than a sheet can show. Reduce works that out from each sheet’s size, and keeps the linework and the text that sheet search reads.')
   return parts.join(' ')
 }
 

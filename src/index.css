@@ -692,3 +692,8 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
   .sv-bar button { min-height: 36px; }
   .sv-hint { padding: 4px 10px; font-size: 12px; }
 }
+
+/* Reducing a heavy sheet, in the upload review table. */
+.notice-actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.size-cell { white-space: nowrap; }
+.size-cell button.link { margin-left: 8px; }
