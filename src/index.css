@@ -702,3 +702,11 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 .run-bar span { display: block; height: 100%; background: var(--moss); transition: width 0.2s ease-out; }
 .run-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .run-bar span { transition: none; } }
+
+/* A sheet is there to be grabbed and moved; a register row is there to be opened. */
+.sv-scroll { cursor: grab; }
+.sv-scroll.dragging { cursor: grabbing; user-select: none; }
+.sv-page.linking { cursor: crosshair; }
+tr.opens { cursor: pointer; }
+tr.opens:hover td { background: var(--panel); }
+tr.opens:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }

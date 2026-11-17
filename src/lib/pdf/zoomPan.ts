@@ -21,8 +21,10 @@ export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)
 export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, aspect: number) {
   const [fitWidth, setFitWidth] = useState(1000)
   const [zoom, setZoom] = useState(1)
-  /** The middle of the view, as a fraction of the whole page. */
+  /** A point on the page, as a fraction of it, to be held still through the next change of size. */
   const centre = useRef({ x: 0.5, y: 0.5 })
+  /** Where in the view that point should sit. The middle, unless a gesture says otherwise. */
+  const anchor = useRef({ x: 0.5, y: 0.5 })
   /** The zoom as the gesture handlers below see it; they outlive any one render. */
   const zoomRef = useRef(zoom)
   useEffect(() => { zoomRef.current = zoom }, [zoom])
@@ -52,8 +54,8 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
   const recentre = useCallback(() => {
     const el = scroller.current
     if (!el || !el.scrollWidth) return
-    el.scrollLeft = centre.current.x * el.scrollWidth - el.clientWidth / 2
-    el.scrollTop = centre.current.y * el.scrollHeight - el.clientHeight / 2
+    el.scrollLeft = centre.current.x * el.scrollWidth - anchor.current.x * el.clientWidth
+    el.scrollTop = centre.current.y * el.scrollHeight - anchor.current.y * el.clientHeight
   }, [scroller])
 
   useEffect(recentre, [width, height, recentre])
@@ -62,9 +64,74 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
   const onScroll = useCallback(() => {
     const el = scroller.current
     if (!el || !el.scrollWidth || !el.scrollHeight) return
+    anchor.current = { x: 0.5, y: 0.5 }
     centre.current = {
       x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
       y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight,
+    }
+  }, [scroller])
+
+  /**
+   * The wheel zooms, the way it does in every drawing program, and it zooms about the pointer so
+   * the detail under it stays under it rather than sliding off the screen.
+   */
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.deltaY) return
+      e.preventDefault()
+      const r = el.getBoundingClientRect()
+      // Where the pointer is on the page, and where it sits in the view: hold both.
+      centre.current = {
+        x: (el.scrollLeft + (e.clientX - r.left)) / Math.max(1, el.scrollWidth),
+        y: (el.scrollTop + (e.clientY - r.top)) / Math.max(1, el.scrollHeight),
+      }
+      anchor.current = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
+      // A line of wheel is a line; a trackpad sends pixels. Both end up a gentle step.
+      const step = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      setZoom((z) => clampZoom(z * Math.exp(-step / 400)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [scroller])
+
+  /**
+   * Drag to pan. Once the wheel zooms, a trackpad has no way left to move around the sheet — and
+   * dragging the drawing is what the hand expects anyway. Not while a link is being drawn, where
+   * the drag is drawing the box.
+   */
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    let from: { x: number; y: number; left: number; top: number } | null = null
+
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 && e.button !== 1) return
+      if ((e.target as HTMLElement).closest('.sv-page.linking, .sv-link, .sv-pop')) return
+      from = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+    }
+    const move = (e: PointerEvent) => {
+      if (!from) return
+      const dx = e.clientX - from.x
+      const dy = e.clientY - from.y
+      if (!el.classList.contains('dragging') && Math.hypot(dx, dy) < 4) return   // let a click be a click
+      el.classList.add('dragging')
+      el.setPointerCapture?.(e.pointerId)
+      el.scrollLeft = from.left - dx
+      el.scrollTop = from.top - dy
+    }
+    const up = () => { from = null; el.classList.remove('dragging') }
+
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
     }
   }, [scroller])
 
@@ -98,6 +165,7 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
       const now = Date.now()
       if (now - lastTap < 300) {
         lastTap = 0
+        anchor.current = { x: 0.5, y: 0.5 }
         centre.current = pointAt(t.clientX, t.clientY)
         setZoom((z) => (z > 1.2 ? MIN_ZOOM : clampZoom(2.5)))
         e.preventDefault()
@@ -108,10 +176,11 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
     const onMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || !startGap) return
       e.preventDefault()
-      centre.current = pointAt(
-        (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      )
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2
+      const r = el.getBoundingClientRect()
+      anchor.current = { x: (mx - r.left) / r.width, y: (my - r.top) / r.height }
+      centre.current = pointAt(mx, my)
       setZoom(clampZoom(startZoom * (gap(e.touches) / startGap)))
     }
     const onEnd = (e: TouchEvent) => { if (e.touches.length < 2) startGap = 0 }
@@ -136,9 +205,9 @@ export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, as
     centre,
     onScroll,
     recentre,
-    fit: useCallback(() => setZoom(MIN_ZOOM), []),
-    zoomIn: useCallback(() => setZoom((z) => clampZoom(z * 1.5)), []),
-    zoomOut: useCallback(() => setZoom((z) => clampZoom(z / 1.5)), []),
+    fit: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom(MIN_ZOOM) }, []),
+    zoomIn: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom((z) => clampZoom(z * 1.5)) }, []),
+    zoomOut: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom((z) => clampZoom(z / 1.5)) }, []),
   }
 }
 

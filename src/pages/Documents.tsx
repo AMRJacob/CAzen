@@ -237,9 +237,18 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
     setOpen(!open)
   }
 
+  const openRevision = (r: SheetRevision) => onOpen({
+    number: sheet.number, title: r.title_at_rev ?? sheet.title, revisionId: r.id, revisionLabel: r.revision_label,
+    filePath: r.file_path, superseded: r.revision_index !== sheet.revision_index,
+  })
+
   return (
     <>
-      <tr>
+      {/* The row is the way in. Anything else on it — the revisions toggle — stops the click
+          getting this far, so only the row's own space opens the sheet. */}
+      <tr className="opens" tabIndex={0} role="button" aria-label={`Open ${sheet.number}`}
+        onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) onOpen(toView(sheet)) }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(toView(sheet)) } }}>
         <td className="mono">{sheet.number}</td>
         <td className="col-title">{sheet.title ?? ''}</td>
         <td>{sheet.revision_label || sheet.revision_index}</td>
@@ -250,11 +259,14 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
             ? <button className="link" onClick={toggle}>{open ? 'Hide' : sheet.revision_count > 1 ? `${sheet.revision_count} revisions` : 'original'}</button>
             : <span className="muted">original</span>}
         </td>
-        <td className="right"><button onClick={() => onOpen(toView(sheet))}>View</button></td>
+        <td className="right" />
       </tr>
       {open && history?.map((r) => (
         <Fragment key={r.id}>
-          <tr className="history">
+          <tr className="history opens" tabIndex={0} role="button"
+            aria-label={`Open ${sheet.number} revision ${r.revision_label || r.revision_index}`}
+            onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) openRevision(r) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRevision(r) } }}>
             <td />
             <td className="col-title">{r.title_at_rev ?? ''}</td>
             <td>{r.revision_label || r.revision_index}</td>
@@ -262,11 +274,7 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
             <td className="col-date">{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
             <td className="col-history">{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
             <td className="right nowrap">
-              {isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete</button>}{' '}
-              <button onClick={() => onOpen({
-                number: sheet.number, title: r.title_at_rev ?? sheet.title, revisionId: r.id, revisionLabel: r.revision_label,
-                filePath: r.file_path, superseded: r.revision_index !== sheet.revision_index,
-              })}>View</button>
+              {isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete</button>}
             </td>
           </tr>
           {deleting === r.id && (
