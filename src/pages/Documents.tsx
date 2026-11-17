@@ -581,7 +581,6 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => onFiles([...(e.target.files ?? [])])
   useEffect(() => { if (initialFiles?.length) onFiles(initialFiles) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const update = (i: number, patch: Partial<Draft>) => setDrafts(drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)))
   const type = (i: number, k: 'number' | 'title' | 'revision', v: string) =>
     setDrafts(drafts.map((d, j) => (j === i ? { ...d, [k]: v, touched: { ...d.touched, [k]: true } } : d)))
 
@@ -643,6 +642,43 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
 
   const restore = (i: number) => setDrafts((ds) => ds.map((x, j) => (j === i && x.full
     ? { ...x, page: { ...x.page, bytes: x.full.bytes }, full: undefined } : x)))
+
+  /**
+   * Ticking with shift held carries the change across everything between this row and the last one
+   * touched — the difference between unticking fourteen spec pages and unticking them one by one.
+   */
+  const lastTicked = useRef<number | null>(null)
+  function tick(i: number, include: boolean, shift: boolean) {
+    // Read the anchor before moving it: the updater below runs later, by which time
+    // lastTicked would already be this row and the range would be a single row.
+    const anchor = lastTicked.current
+    lastTicked.current = i
+    setDrafts((ds) => {
+      if (!shift || anchor === null) return ds.map((d, j) => (j === i ? { ...d, include } : d))
+      const from = Math.min(anchor, i)
+      const to = Math.max(anchor, i)
+      return ds.map((d, j) => (j >= from && j <= to ? { ...d, include } : d))
+    })
+  }
+
+  /**
+   * An addendum usually carries project manual pages behind its drawings, and they arrive here
+   * looking like sheets. They give themselves away by size: letter pages among D-size sheets. The
+   * median is the measure, so a set that is genuinely all letter-size flags nothing.
+   */
+  const pageSizes = drafts.map((d) => d.page.text.width * d.page.text.height).sort((a, b) => a - b)
+  const median = pageSizes.length ? pageSizes[Math.floor(pageSizes.length / 2)] : 0
+  const smallPages = median > 1_000_000
+    ? drafts.map((d, i) => [i, d] as const).filter(([, d]) => d.page.text.width * d.page.text.height < median * 0.5)
+    : []
+  const smallStillIn = smallPages.filter(([, d]) => d.include)
+  const inches1 = (pts: number) => Number((pts / 72).toFixed(1))
+  const sizeOf = (d: Draft) => {
+    const w = inches1(Math.min(d.page.text.width, d.page.text.height))
+    const h = inches1(Math.max(d.page.text.width, d.page.text.height))
+    return `${w} × ${h} in`
+  }
+  const dropSmall = () => setDrafts((ds) => ds.map((d, j) => (smallPages.some(([i]) => i === j) ? { ...d, include: false } : d)))
 
   const heavy = (d: Draft) => d.page.bytes.length > 5 * MB
 
@@ -785,6 +821,20 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
               )}
             </div>
           )}
+          {smallPages.length > 0 && (
+            <div className="notice">
+              {smallPages.length} of {drafts.length} pages are {sizeOf(smallPages[0][1])}, much smaller than the{' '}
+              {sizeOf(drafts.find((d) => d.page.text.width * d.page.text.height >= median)!)} sheets in this upload — project
+              manual pages, most likely, rather than drawings.
+              <div className="notice-actions">
+                <button onClick={dropSmall} disabled={!smallStillIn.length}>
+                  {smallStillIn.length ? `Leave them out (${smallStillIn.length})` : 'Left out'}
+                </button>
+                <span className="muted small">Pages: {smallPages.map(([i]) => i + 1).join(', ')}</span>
+              </div>
+            </div>
+          )}
+
           <div className="tb-bar">
             <div>
               <strong>Title blocks</strong>{' '}
@@ -805,13 +855,26 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
           </div>
 
           <table>
-            <thead><tr><th /><th>Page</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+            <thead><tr>
+              <th>
+                <input type="checkbox" aria-label="Include every page"
+                  checked={drafts.length > 0 && drafts.every((d) => d.include)}
+                  ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
+                  onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
+              </th>
+              <th>Page</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
                 return (
                   <tr key={d.pageIndex} className={d.include ? '' : 'skipped'}>
-                    <td><input type="checkbox" checked={d.include} onChange={(e) => update(i, { include: e.target.checked })} aria-label={`Include page ${d.pageIndex + 1}`} /></td>
+                    <td>
+                      {/* onClick rather than onChange: it carries the shift key, and by the time it
+                          runs the box already holds its new value. */}
+                      <input type="checkbox" checked={d.include} readOnly
+                        onClick={(e) => tick(i, (e.target as HTMLInputElement).checked, e.shiftKey)}
+                        aria-label={`Include page ${d.pageIndex + 1}`} />
+                    </td>
                     <td>{d.pageIndex + 1}</td>
                     <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
                     <td><input className="cell" value={d.title} onChange={(e) => type(i, 'title', e.target.value)} /></td>
