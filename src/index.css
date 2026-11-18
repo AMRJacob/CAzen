@@ -797,7 +797,12 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-hit { position: absolute; pointer-events: auto; background: rgba(192, 57, 43, 0.12); border: 1px dashed var(--danger); padding: 0; }
 .mk-hit.theirs { background: rgba(43, 45, 44, 0.06); border-style: dotted; cursor: not-allowed; }
 
+/* The markup tools. A strip across the top where the screen is narrow, and a rail down the left
+   beside the drawing where there is room — which is where a hand reaches for them, and keeps them
+   still while the sheet moves. */
+.sv-body { flex-wrap: wrap; }
 .mk-bar {
+  flex: 0 0 100%; order: -1;
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
   padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
 }
@@ -807,6 +812,19 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-colours .swatch.on { border-color: var(--ink); }
 .mk-scale-ask { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .mk-scale-ask input { width: 120px; }
+
+@media (min-width: 900px) {
+  .mk-bar {
+    flex: 0 0 104px; width: 104px; align-self: stretch;
+    flex-direction: column; align-items: stretch; gap: 14px;
+    padding: 10px 8px; overflow-y: auto;
+    border-bottom: none; border-right: 1px solid var(--line);
+  }
+  .mk-tools { flex-direction: column; align-items: stretch; gap: 4px; }
+  .mk-tools button { justify-content: flex-start; text-align: left; }
+  .mk-colours { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .mk-right { flex-direction: column; align-items: stretch; gap: 6px; margin-left: 0; margin-top: auto; }
+}
 @media (max-width: 619px) {
   .mk-bar { padding: 6px 8px; gap: 8px; }
   .mk-right { margin-left: 0; }
