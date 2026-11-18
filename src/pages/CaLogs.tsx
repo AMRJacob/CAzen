@@ -18,11 +18,11 @@ import type { FormKind } from '../lib/templates/types'
  * signed — so the register joins them up rather than leaving a number typed in a field as the
  * only thread between them.
  *
- * Field reports and meeting notes are records rather than changes, so they aren't in the register
- * by default, but they're written from the same place.
+ * Field reports and meeting notes used to be written from here, for want of anywhere better.
+ * They record the job rather than change it, so they have their own place now — Field notes.
  */
 
-const ALL_KINDS: FormKind[] = [...CHANGE_KINDS, 'field_report', 'meeting_notes']
+const ALL_KINDS: FormKind[] = [...CHANGE_KINDS]
 
 type SortBy = 'date' | 'type' | 'number'
 
@@ -32,7 +32,7 @@ export default function CaLogs() {
   const [rows, setRows] = useState<RegisterRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sort, setSort] = useState<SortBy>('date')
-  const [only, setOnly] = useState<'changes' | 'all' | FormKind>('changes')
+  const [only, setOnly] = useState<'changes' | FormKind>('changes')
   const [attaching, setAttaching] = useState<string | null>(null)
   // Uploads that were issued as change documents before CAzen filed them here.
   const [missing, setMissing] = useState<MissingChangeDocument[]>([])
@@ -43,7 +43,7 @@ export default function CaLogs() {
   const projectId = current?.id
   const load = useCallback(() => {
     if (!projectId) return
-    const want = only === 'changes' ? CHANGE_KINDS : only === 'all' ? ALL_KINDS : [only as FormKind]
+    const want = only === 'changes' ? CHANGE_KINDS : [only as FormKind]
     listRegister(projectId, want).then(setRows).catch((e) => setError(message(e)))
   }, [projectId, only])
   useEffect(() => { load() }, [load])
@@ -124,7 +124,6 @@ export default function CaLogs() {
         <label className="inline-field">Show
           <select value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
             <option value="changes">Changes and clarifications</option>
-            <option value="all">Everything issued</option>
             {ALL_KINDS.map((k) => <option key={k} value={k}>{FORM_LABELS[k]} only</option>)}
           </select>
         </label>

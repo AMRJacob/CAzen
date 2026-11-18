@@ -182,6 +182,16 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* The form templates are a firm-wide setting like the rest of this page, so they live
+          here rather than in the sidebar beside the project's own work. */}
+      <div className="card settings-link-card">
+        <div>
+          <h2>Form templates</h2>
+          <p className="muted small">The letterhead and layout every ASI, RFI response, field report and set of meeting notes is written on.</p>
+        </div>
+        <Link className="primary-lite" to="/templates">Open form templates</Link>
+      </div>
+
       <div className="settings-grid drawings-settings">
         <div className="card">
           <h2>Sheet order</h2>

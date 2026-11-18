@@ -38,6 +38,7 @@ a { color: var(--moss); }
 .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
 .sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; padding-left: env(safe-area-inset-left); }
 .sidebar-logo { padding: 0 24px 28px; }
+.home-link { display: inline-block; text-decoration: none; border-radius: 6px; }
 .context { padding: 0 12px 18px; position: relative; }
 /* It's the control that changes everything below it, so it reads as a control at rest rather
    than only once the pointer finds it. */
@@ -58,6 +59,18 @@ a { color: var(--moss); }
 .ps-menu .ps-name { font-size: 13px; }
 .ps-menu .ps-all { font-size: 13px; color: var(--moss); border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 9px; }
 .sidebar nav { display: flex; flex-direction: column; flex: 1; padding: 0 12px; gap: 2px; }
+/* The groups are told apart by a little air and a quiet label, not by a rule — the sidebar
+   already has one of those at the foot and two would make it a form. */
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group + .nav-group { margin-top: 18px; }
+.nav-group-label {
+  font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--faint); padding: 0 12px 5px;
+}
+.settings-link-card { display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 24px; }
+.settings-link-card h2 { margin-top: 0; }
+.settings-link-card p { margin-bottom: 0; }
+.settings-link-card a { text-decoration: none; white-space: nowrap; }
 .sidebar nav a, .settings-link { white-space: nowrap; color: var(--muted); text-decoration: none; padding: 9px 12px; border-radius: 8px; font-size: 14px; transition: background 0.2s, color 0.2s; }
 .sidebar nav a:hover, .settings-link:hover { background: var(--wash); color: var(--ink); }
 .sidebar nav a.active, .settings-link.active { color: var(--ink); background: var(--wash); font-weight: 500; }

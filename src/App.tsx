@@ -16,17 +16,37 @@ import CaLogs from './pages/CaLogs'
 import Contracts from './pages/Contracts'
 import Settings from './pages/Settings'
 import Templates from './pages/Templates'
+import FieldNotes from './pages/FieldNotes'
 import { useFullscreen } from './lib/fullscreen'
 
-// The project switcher at the top of the sidebar is how you change project, so the list of all of
-// them belongs with the other things you go to now and then, not at the head of the work.
-const nav = [
-  { to: '/documents', label: 'Drawings' },
-  { to: '/manual', label: 'Project manual' },
-  { to: '/submittals', label: 'Submittals' },
-  { to: '/ca-logs', label: 'Change documents' },
-  { to: '/pay', label: 'Pay applications' },
-  { to: '/contracts', label: 'Contracts' },
+/**
+ * The sidebar in three parts.
+ *
+ * The project switcher at the top is how you change project, and the wordmark and the switcher's
+ * own last line both lead to the list of all of them — so there is no need for a link to it here.
+ * Below that, the paperwork of the contract; below that, what was seen and said on site, which is
+ * a different kind of record and reads better apart from the first; and at the foot, settings.
+ */
+const nav: { label: string; items: { to: string; label: string }[] }[] = [
+  {
+    label: 'Documents',
+    items: [
+      { to: '/documents', label: 'Drawings' },
+      { to: '/manual', label: 'Project manual' },
+      { to: '/submittals', label: 'Submittals' },
+      { to: '/ca-logs', label: 'Change documents' },
+      { to: '/pay', label: 'Pay applications' },
+      { to: '/contracts', label: 'Contracts' },
+    ],
+  },
+  {
+    label: 'Field notes',
+    items: [
+      { to: '/field-notes/reports', label: 'Field reports' },
+      { to: '/field-notes/meetings', label: 'Meeting notes' },
+      { to: '/field-notes/observations', label: 'Observations' },
+    ],
+  },
 ]
 
 export default function App() {
@@ -64,17 +84,24 @@ function Shell({ offline = false }: { offline?: boolean }) {
           over: a corner mark that opens a bar of destinations. */}
       {!offline && <PhoneNav />}
       <aside className="sidebar">
-        <div className="sidebar-logo"><Logo size={23} /></div>
+        {/* The wordmark is the way home, as it is on every site. */}
+        <div className="sidebar-logo">
+          {offline ? <Logo size={23} />
+            : <NavLink to="/" end className="home-link" title="All projects"><Logo size={23} /></NavLink>}
+        </div>
         {!offline && <ProjectSwitcher />}
         <nav>
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to}>{n.label}</NavLink>
+          {nav.map((group) => (
+            <div key={group.label} className="nav-group">
+              <span className="nav-group-label">{group.label}</span>
+              {group.items.map((n) => (
+                <NavLink key={n.to} to={n.to}>{n.label}</NavLink>
+              ))}
+            </div>
           ))}
         </nav>
         {!offline && (
           <div className="sidebar-foot">
-            <NavLink to="/" end className="settings-link">All projects</NavLink>
-            <NavLink to="/templates" className="settings-link">Form templates</NavLink>
             <NavLink to="/settings" className="settings-link">Settings</NavLink>
             <FeedbackButton />
             <button className="link fs-enter" onClick={screen.toggle}>Full screen</button>
@@ -95,6 +122,8 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <Route path="/manual" element={offline ? <p className="muted">The project manual needs the backend.</p> : <Manual />} />
           <Route path="/submittals" element={<Submittals />} />
           <Route path="/ca-logs" element={<CaLogs />} />
+          <Route path="/field-notes" element={<FieldNotes />} />
+          <Route path="/field-notes/:area" element={<FieldNotes />} />
           <Route path="/pay" element={offline ? <p className="muted">Pay applications need the backend.</p> : <PayApps />} />
           <Route path="/contracts" element={<Contracts />} />
           {!offline && <Route path="/settings" element={<Settings />} />}
