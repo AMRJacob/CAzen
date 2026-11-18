@@ -931,28 +931,36 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       }))
       const saved = await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
 
-      // The cover came in with the drawings, so it is filed with them rather than left to be
-      // written again by hand: one PDF, kept with the set, and for the categories that are
-      // change documents, an entry in the tracker pointing back at this upload.
-      if (covers.length && saved?.id) {
-        try {
-          setProgress('Filing the cover')
-          const bytes = await joinPages(covers.map((d) => d.page.bytes))
-          const setName = number || ISSUANCE_LABELS[kind]
-          const name = `${issuedOn} ${setName} cover.pdf`
-          const path = await putFile(project, bytes, `${project.id}/covers/${saved.id}.pdf`, {
-            dirs: [SECTIONS.drawings, saved.setFolder], name,
-          })
-          await setIssuanceCover(saved.id, path)
+      // Uploading sheets as an ASI or a PR is issuing that ASI or PR, so the entry in the change
+      // register is made here rather than typed again afterwards — with the cover that came up
+      // with the drawings attached to it when there was one, and without when there wasn't. A
+      // sketch issued with no narrative is still an ASI.
+      if (saved?.id) {
+        let coverPath: string | null = null
+        if (covers.length) {
+          try {
+            setProgress('Filing the cover')
+            const bytes = await joinPages(covers.map((d) => d.page.bytes))
+            const setName = number || ISSUANCE_LABELS[kind]
+            const name = `${issuedOn} ${setName} cover.pdf`
+            coverPath = await putFile(project, bytes, `${project.id}/covers/${saved.id}.pdf`, {
+              dirs: [SECTIONS.drawings, saved.setFolder], name,
+            })
+            await setIssuanceCover(saved.id, coverPath)
+          } catch (e) {
+            // Drawings are already in; losing the cover is worth saying, not worth undoing them.
+            setError(`The sheets went in, but the cover didn’t: ${message(e)}`)
+          }
+        }
+        if (DOCUMENT_FOR[kind]) {
           // The document is numbered by the set's name, because they are one thing: a package
           // called "ASI 003" is ASI-003.
           await documentForIssuance({
             projectId: project.id, issuanceId: saved.id, kind,
-            name: setName, issuedOn, filePath: path,
-          }).catch(() => { /* the cover is filed either way */ })
-        } catch (e) {
-          // Drawings are already in; losing the cover is worth saying, not worth undoing them.
-          setError(`The sheets went in, but the cover didn’t: ${message(e)}`)
+            name: number || ISSUANCE_LABELS[kind], issuedOn, filePath: coverPath,
+          }).catch((e: unknown) => {
+            setError(`The sheets went in, but the change register entry didn’t: ${message(e)}`)
+          })
         }
       }
       // Templates drawn before CAzen recorded sheet sizes learn theirs from the sheets they read.
@@ -1001,12 +1009,15 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             onChange={(e) => { setNamedByHand(true); setNumber(e.target.value) }} />
         </label>
         <label>Issue date<input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} /></label>
-        {covers.length > 0 && (
+        {/* What this upload will do beyond putting sheets in, said before it does it. */}
+        {(DOCUMENT_FOR[kind] || covers.length > 0) && (
           <p className="muted small upload-cover-note">
-            {covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the cover.{' '}
-            {DOCUMENT_FOR[kind]
-              ? <>They’ll be filed as <strong>{number || ISSUANCE_LABELS[kind]}</strong> in Change documents, with these sheets attached to it.</>
-              : <>They’ll be kept with this set rather than filed as drawings.</>}
+            {DOCUMENT_FOR[kind] && (
+              <>This goes in Change documents as <strong>{number || ISSUANCE_LABELS[kind]}</strong>, with these sheets attached to it.{' '}</>
+            )}
+            {covers.length > 0
+              ? <>{covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the cover, so {covers.length === 1 ? 'it is' : 'they are'} kept with the set rather than filed as {covers.length === 1 ? 'a drawing' : 'drawings'}{DOCUMENT_FOR[kind] ? ' and attached to that entry' : ''}.</>
+              : DOCUMENT_FOR[kind] ? <>No page is marked as the cover, which is fine — one can be added to it later.</> : null}
           </p>
         )}
         <label>Revision mark<input value={setRev} onChange={(e) => setSetRev(e.target.value)} placeholder={number || '1, A, Δ2…'} />

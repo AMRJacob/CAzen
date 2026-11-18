@@ -141,6 +141,11 @@ export const DOCUMENT_FOR: Partial<Record<IssuanceKind, FormKind>> = {
 /**
  * File the change document an upload came with.
  *
+ * Uploading sheets as an ASI or a PR *is* issuing that ASI or PR, so the entry in the change
+ * register is made by the upload rather than typed again afterwards. A cover sheet is welcome
+ * and not required: a sketch issued with no narrative is still an ASI, and an entry with no
+ * file attached is still the record that it went out — the cover can be added later.
+ *
  * The number is the set's own name, because they are the same thing said twice: a package called
  * "ASI 003" is ASI-003. The two rows point at each other, so the register can say how many
  * sheets came with the document and the drawings can say which document brought them.
@@ -151,7 +156,7 @@ export async function documentForIssuance(args: {
   kind: IssuanceKind
   name: string
   issuedOn: string
-  filePath: string
+  filePath?: string | null
 }): Promise<void> {
   const formKind = DOCUMENT_FOR[args.kind]
   if (!formKind) return
@@ -163,7 +168,7 @@ export async function documentForIssuance(args: {
     number: args.name || null,
     title: null,
     values: {},
-    file_path: args.filePath,
+    file_path: args.filePath ?? null,
     issued_by: u.user?.id ?? null,
     issued_at: new Date(`${args.issuedOn}T12:00:00`).toISOString(),
   })
