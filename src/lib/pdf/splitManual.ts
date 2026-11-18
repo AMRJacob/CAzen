@@ -41,6 +41,8 @@ export interface ManualPage {
   at: number | null
   /** How many pages the section runs to, where the footer says so: "Page 3 of 7" is 7. */
   of: number | null
+  /** This page carries END OF SECTION, so whatever section it belongs to stops here. */
+  ends: boolean
 }
 
 export interface ManualSection {
@@ -59,8 +61,9 @@ export type SectionTrouble =
   | { kind: 'repeated'; pages: number[] }       // the same footer page number twice
   | { kind: 'short'; have: number; says: number } // the footer says "of N" and there aren't N
   | { kind: 'late-start'; at: number }          // the section begins at page 3, not page 1
-  | { kind: 'split' }                           // this section number appears more than once in the book
+  | { kind: 'split'; alsoAt: string }           // this section number heads another run of pages too
   | { kind: 'no-heading' }                      // no "SECTION NN NN NN" anywhere in the run
+  | { kind: 'no-end' }                          // the rest of the book ends its sections; this one doesn't
 
 /** "099100" → "09 91 00", the way it is written everywhere else. */
 const tidy = (a: string, b: string, c: string) => `${a} ${b} ${c}`
@@ -101,6 +104,19 @@ export function readFooter(line: string): { number: string | null; at: number | 
   const before = /(\d{1,3})\s*[-–—:.]?\s*$/.exec(head)
   return { number: found.value, at: before ? Number(before[1]) : null, of: null, title }
 }
+
+/**
+ * END OF SECTION, which is how a spec section says it is over.
+ *
+ * CSI's page format puts it at the foot of the last page of every section, and most offices
+ * follow it. It is the strongest boundary in the whole document — far better than inferring one
+ * from a number changing — so where it is present it decides, and where it has been left off
+ * (which happens most with front-end documents) nothing is lost by its absence.
+ */
+const END_OF_SECTION = /\bEND\s+OF\s+(?:THIS\s+)?SECTION\b/i
+
+export const endsSection = (text: PageText): boolean =>
+  END_OF_SECTION.test(textInRegion(text, { x: 0, y: 0.45, w: 1, h: 0.55 }))
 
 const TOP: Region = { x: 0, y: 0, w: 1, h: 0.14 }
 const BOTTOM: Region = { x: 0, y: 0.86, w: 1, h: 0.14 }
@@ -235,7 +251,7 @@ export async function readManual(
   const pages: ManualPage[] = []
   for (let i = 0; i < reader.numPages; i++) {
     const text = await readPageText(await reader.getPage(i + 1))
-    pages.push({ index: i, text, found: null, declares: false, at: null, of: null })
+    pages.push({ index: i, text, found: null, declares: false, at: null, of: null, ends: false })
     onProgress?.(i + 1, reader.numPages)
   }
   await reader.loadingTask.destroy()
@@ -259,7 +275,7 @@ export function detectSections(pages: ManualPage[], box?: Region | null): { page
       ? footer.number ?? sectionInRegion(p.text, box)
       // A heading declares a section outright; otherwise the running footer, then the weighing.
       : heading.declares ? heading.found : footer.number ?? heading.found
-    return { ...p, found, declares: !box && heading.declares, at: footer.at, of: footer.of }
+    return { ...p, found, declares: !box && heading.declares, at: footer.at, of: footer.of, ends: endsSection(p.text) }
   })
   const sections = sectionsFrom(read)
   return { pages: read, sections: check(sections, read) }
@@ -275,8 +291,12 @@ export function detectSections(pages: ManualPage[], box?: Region | null): { page
  * rather than left for somebody to notice on site.
  */
 function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] {
-  const runs = new Map<string, number>()
-  for (const s of sections) runs.set(s.number, (runs.get(s.number) ?? 0) + 1)
+  // Whether this book bothers with END OF SECTION at all. Where most sections have one, the
+  // handful that don't are worth pointing at — that is usually a front-end document where it was
+  // left off. Where hardly any do, saying so on every section would be noise.
+  const real = sections.filter((x) => x.number !== FRONT)
+  const ending = real.filter((x) => x.pages.some((i) => pages[i]?.ends)).length
+  const bookEndsSections = real.length >= 3 && ending >= real.length * 0.6
 
   return sections.map((s) => {
     const trouble: SectionTrouble[] = []
@@ -303,11 +323,22 @@ function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] 
       if (says && says > s.pages.length) trouble.push({ kind: 'short', have: s.pages.length, says })
     }
 
-    if ((runs.get(s.number) ?? 0) > 1) trouble.push({ kind: 'split' })
+    // Only worth saying when the other run is a real one: a single stray page carrying this
+    // number is a cross-reference, and calling that a split cried wolf on sections that were fine.
+    const others = sections.filter((x) => x !== s && x.number === s.number
+      && (x.pages.length > 1 || x.pages.some((i) => pages[i]?.declares)))
+    if (others.length && (s.pages.length > 1 || s.pages.some((i) => pages[i]?.declares))) {
+      trouble.push({ kind: 'split', alsoAt: others.map((x) => span(x.pages)).join(', ') })
+    }
     if (!s.pages.some((i) => pages[i]?.declares)) trouble.push({ kind: 'no-heading' })
+    if (bookEndsSections && !s.pages.some((i) => pages[i]?.ends)) trouble.push({ kind: 'no-end' })
     return { ...s, trouble }
   })
 }
+
+/** "13–21", or "13" for one page. */
+const span = (pages: number[]) =>
+  pages.length === 1 ? `page ${pages[0] + 1}` : `pages ${pages[0] + 1}–${pages[pages.length - 1] + 1}`
 
 /** What a run of pages reads like when something is wrong with it, in a line. */
 export function troubleText(t: SectionTrouble): string {
@@ -321,9 +352,11 @@ export function troubleText(t: SectionTrouble): string {
     case 'late-start':
       return `starts at page ${t.at}`
     case 'split':
-      return 'appears more than once in the book'
+      return `also at ${t.alsoAt}`
     case 'no-heading':
       return 'no section heading'
+    case 'no-end':
+      return 'no END OF SECTION'
   }
 }
 
@@ -345,10 +378,30 @@ export function inSectionOrder<T extends { number: string }>(sections: T[]): T[]
 export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
   const out: ManualSection[] = []
   let current: ManualSection | null = null
+  let closed = false   // the page before this one said END OF SECTION
 
-  for (const p of pages) {
-    const starts = p.found && (!current || p.found !== current.number)
-    if (starts) {
+  /**
+   * Whether this page begins a section, in order of how much the page is actually claiming.
+   *
+   * A heading says so outright. A page after an END OF SECTION is the first page of whatever
+   * comes next. Otherwise a number that differs from the current section only starts one if it
+   * is still there on the next page — a single page carrying a different number in the middle of
+   * a run is a cross-reference the footer reader picked up, not the start of anything, and
+   * treating it as a section is what made the same section appear twice in the book.
+   */
+  const begins = (i: number): boolean => {
+    const p = pages[i]
+    if (!current) return !!p.found
+    if (p.declares) return true
+    if (closed) return !!p.found
+    if (!p.found || p.found === current.number) return false
+    const next = pages[i + 1]
+    return !next || next.found === p.found || next.declares
+  }
+
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i]
+    if (begins(i)) {
       current = {
         number: p.found!,
         // The heading page names it; failing that, the name printed beside the number in the footer.
@@ -356,6 +409,7 @@ export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
         pages: [p.index], guessed: false, trouble: [],
       }
       out.push(current)
+      closed = p.ends
       continue
     }
     if (!current) {
@@ -363,11 +417,14 @@ export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
       const front = out.find((s) => s.number === FRONT)
       if (front) front.pages.push(p.index)
       else out.unshift({ number: FRONT, title: 'Front matter', pages: [p.index], guessed: true, trouble: [] })
+      closed = p.ends
       continue
     }
     current.pages.push(p.index)
-    // A page that said nothing is a page we are assuming about, and the review says so.
-    if (!p.found) current.guessed = true
+    // A page that said nothing is a page we are assuming about, and the review says so — unless
+    // the section ended on the page before, in which case nobody is assuming anything.
+    if (!p.found && !closed) current.guessed = true
+    closed = p.ends
   }
   return out
 }

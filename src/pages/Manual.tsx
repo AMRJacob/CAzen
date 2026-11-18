@@ -428,6 +428,12 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
   const outOfOrder = useMemo(() => inSectionOrder(drafts), [drafts])
   const putInOrder = () => setDrafts((ds) => inSectionOrder(ds) ?? ds)
 
+  /** Sections that say END OF SECTION, which is the strongest confirmation the cut is right. */
+  const ended = useMemo(
+    () => drafts.filter((d) => d.number !== FRONT && d.pages.some((i) => pages[i]?.ends)).length,
+    [drafts, pages],
+  )
+
   /** How many sections the footers say are incomplete, which is the headline of the review. */
   const troubled = useMemo(() => drafts.filter((d) => d.include && d.trouble.length), [drafts])
 
@@ -525,6 +531,9 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
               {troubled.length > 0
                 ? <span className="bad-text">{troubled.length} {troubled.length === 1 ? 'section doesn’t' : 'sections don’t'} read straight through — see the Pages column.</span>
                 : <span className="muted small">Every section’s footers run 1 to the end with nothing skipped.</span>}
+              {ended > 0 && (
+                <span className="muted small"> {ended} of {drafts.filter((d) => d.number !== FRONT).length} end with END OF SECTION.</span>
+              )}
             </div>
             <div className="tb-bar-actions">
               {outOfOrder && (
