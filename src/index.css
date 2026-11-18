@@ -1691,3 +1691,10 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   background: none; color: var(--muted); cursor: pointer;
 }
 .outline-tools button:hover { background: var(--wash); color: var(--ink); border-color: var(--line); }
+
+/* ---------- Contracts ---------- */
+.contract-list { display: flex; flex-direction: column; }
+.contract-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.contract-title { font-size: 15px; text-align: left; flex: 1 1 14em; }
+.contract-row.locked .contract-title { color: var(--ink); }
+.contract-row .inline-field { gap: 6px; }
