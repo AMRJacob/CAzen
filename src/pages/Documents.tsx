@@ -10,7 +10,7 @@ import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
-  deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, suggestSetName,
+  deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
@@ -21,6 +21,9 @@ import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, ty
 import { openFile } from '../lib/files'
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import { useClickAway } from '../lib/clickAway'
+import { joinPages } from '../lib/pdf/bundle'
+import { putFile, SECTIONS } from '../lib/files'
+import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
 import { useColumnWidths } from '../components/ResizableColumns'
 
 /** The drawings register's columns, in order, for the widths a person can set by hand. */
@@ -624,6 +627,8 @@ interface Draft {
   /** Set once this sheet has been reduced, so it can be put back. */
   full?: { bytes: Uint8Array; before: number; after: number; note: string }
   include: boolean
+  /** This page is the cover or narrative of the change document, not a drawing. */
+  cover?: boolean
   number: string
   title: string
   revision: string
@@ -848,7 +853,10 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
 
   const stopAll = () => poolRef.current?.stop()
 
-  const chosen = drafts.filter((d) => d.include)
+  // Cover pages are included in the upload but are not drawings, so every count about sheets
+  // leaves them out: no sheet number to miss, no duplicate to clash with, no template to read.
+  const covers = drafts.filter((d) => d.include && d.cover)
+  const chosen = drafts.filter((d) => d.include && !d.cover)
   const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
   const numbers = chosen.map((d) => d.number.trim().toUpperCase())
   const duplicates = new Set(numbers.filter((n, i) => n && numbers.indexOf(n) !== i))
@@ -868,7 +876,32 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
         number: d.number, title: d.title, revisionLabel: d.revision || setRev || number,
         bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
-      await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
+      const saved = await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
+
+      // The cover came in with the drawings, so it is filed with them rather than left to be
+      // written again by hand: one PDF, kept with the set, and for the categories that are
+      // change documents, an entry in the tracker pointing back at this upload.
+      if (covers.length && saved?.id) {
+        try {
+          setProgress('Filing the cover')
+          const bytes = await joinPages(covers.map((d) => d.page.bytes))
+          const setName = number || ISSUANCE_LABELS[kind]
+          const name = `${issuedOn} ${setName} cover.pdf`
+          const path = await putFile(project, bytes, `${project.id}/covers/${saved.id}.pdf`, {
+            dirs: [SECTIONS.drawings, saved.setFolder], name,
+          })
+          await setIssuanceCover(saved.id, path)
+          // The document is numbered by the set's name, because they are one thing: a package
+          // called "ASI 003" is ASI-003.
+          await documentForIssuance({
+            projectId: project.id, issuanceId: saved.id, kind,
+            name: setName, issuedOn, filePath: path,
+          }).catch(() => { /* the cover is filed either way */ })
+        } catch (e) {
+          // Drawings are already in; losing the cover is worth saying, not worth undoing them.
+          setError(`The sheets went in, but the cover didn’t: ${message(e)}`)
+        }
+      }
       // Templates drawn before CAzen recorded sheet sizes learn theirs from the sheets they read.
       for (const t of templates.filter((t) => !t.page_size)) {
         const d = chosen.find((x) => x.templateId === t.id && x.pinned === t.id) ?? chosen.find((x) => x.templateId === t.id && !x.unsure)
@@ -915,6 +948,14 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
             onChange={(e) => { setNamedByHand(true); setNumber(e.target.value) }} />
         </label>
         <label>Issue date<input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} /></label>
+        {covers.length > 0 && (
+          <p className="muted small upload-cover-note">
+            {covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the cover.{' '}
+            {DOCUMENT_FOR[kind]
+              ? <>They’ll be filed as <strong>{number || ISSUANCE_LABELS[kind]}</strong> in Change documents, with these sheets attached to it.</>
+              : <>They’ll be kept with this set rather than filed as drawings.</>}
+          </p>
+        )}
         <label>Revision mark<input value={setRev} onChange={(e) => setSetRev(e.target.value)} placeholder={number || '1, A, Δ2…'} />
           <span className="hint">For every sheet in this upload, unless its title block shows one.</span>
         </label>
@@ -1010,7 +1051,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>Page</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -1024,8 +1065,14 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                         aria-label={`Include page ${d.pageIndex + 1}`} />
                     </td>
                     <td>{d.pageIndex + 1}</td>
-                    <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
-                    <td><input className="cell" value={d.title} onChange={(e) => type(i, 'title', e.target.value)} /></td>
+                    <td className="cover-cell">
+                      <input type="checkbox" checked={!!d.cover}
+                        aria-label={`Page ${d.pageIndex + 1} is the cover, not a drawing`}
+                        onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, cover: e.target.checked } : x)))} />
+                    </td>
+                    <td><input className={`cell mono ${d.include && !d.cover && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
+                      disabled={!!d.cover} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
+                    <td><input className="cell" value={d.title} disabled={!!d.cover} onChange={(e) => type(i, 'title', e.target.value)} /></td>
                     <td className="small nowrap size-cell">
                       {d.full ? (
                         <>

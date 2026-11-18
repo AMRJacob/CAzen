@@ -1133,3 +1133,5 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   /* Editing a project is a desk job; on a phone it opens as plain stacked cards. */
   .projects tr:not(.opens) > td { padding: 0 0 14px; }
 }
+.upload-cover-note { grid-column: 1 / -1; line-height: 1.5; }
+.cover-cell { text-align: center; }

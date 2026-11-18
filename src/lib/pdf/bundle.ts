@@ -69,3 +69,14 @@ export function saveBundle(bytes: Uint8Array, name: string) {
   a.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
+
+/** Several single pages as one PDF, for a cover that ran to more than a page. */
+export async function joinPages(pages: Uint8Array[]): Promise<Uint8Array> {
+  if (pages.length === 1) return pages[0]
+  const out = await PDFDocument.create()
+  for (const bytes of pages) {
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true })
+    for (const p of await out.copyPages(doc, doc.getPageIndices())) out.addPage(p)
+  }
+  return out.save()
+}

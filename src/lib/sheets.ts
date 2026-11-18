@@ -97,13 +97,13 @@ export async function saveIssuance(
   issuance: IssuanceInput,
   sheets: SheetToSave[],
   onProgress?: (done: number, total: number) => void,
-) {
+): Promise<{ id: string; setFolder: string }> {
   const client = db()
   const projectId = project.id
   const { data: userData } = await client.auth.getUser()
   const userId = userData.user?.id
   // In a project folder, each upload round gets its own folder: "2026-02-10 Addendum 1".
-  const kindLabel: Record<IssuanceKind, string> = { bid_set: 'Bid Set', conformed_set: 'Conformed Set', addendum: 'Addendum', asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', other: 'Revision' }
+  const kindLabel: Record<IssuanceKind, string> = { bid_set: 'Bid Set', conformed_set: 'Conformed Set', addendum: 'Addendum', asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', pr: 'PR', other: 'Revision' }
   const setFolder = `${issuance.issuedOn} ${issuance.number || kindLabel[issuance.kind]}`
 
   const { data: iss, error: issErr } = await client
@@ -170,6 +170,8 @@ export async function saveIssuance(
 
     onProgress?.(++done, sheets.length)
   }
+
+  return { id: iss.id as string, setFolder }
 }
 
 export interface SearchHit {
@@ -340,7 +342,7 @@ export async function archiveProject(project: ProjectStore & { number?: string }
 
 const KIND_WORD: Record<IssuanceKind, string> = {
   bid_set: 'Bid set', conformed_set: 'Conformed set', addendum: 'Addendum',
-  asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', other: 'Revision',
+  asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', pr: 'PR', other: 'Revision',
 }
 
 /**
@@ -371,4 +373,10 @@ export async function existingSets(projectId: string): Promise<{ kind: IssuanceK
   const { data, error } = await db().from('issuances').select('kind, number').eq('project_id', projectId)
   if (error) throw error
   return (data ?? []) as { kind: IssuanceKind; number: string | null }[]
+}
+
+/** Keep the cover that came up with a set, so it isn't filed as a drawing. */
+export async function setIssuanceCover(issuanceId: string, path: string): Promise<void> {
+  const { error } = await db().from('issuances').update({ cover_path: path }).eq('id', issuanceId)
+  if (error) throw error
 }

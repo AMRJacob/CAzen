@@ -1,6 +1,7 @@
 import { db } from './supabase'
 import { openFile, putFile, SECTIONS, type ProjectStore } from './files'
 import type { FormKind } from './templates/types'
+import type { IssuanceKind } from './types'
 
 export interface IssuedForm {
   id: string
@@ -117,5 +118,54 @@ export async function coverWith(projectId: string, changeOrderId: string, prIds:
 export async function uncover(childIds: string[]): Promise<void> {
   if (!childIds.length) return
   const { error } = await db().from('issued_form_links').delete().in('child_id', childIds)
+  if (error) throw error
+}
+
+// ---------- A change document that arrived with its drawings ----------
+
+/**
+ * Which upload categories are also change documents.
+ *
+ * Only the four an architect actually issues as a cover sheet plus revised sheets. A bid set or
+ * a conformed set is drawings and nothing else; an addendum has a cover, but it belongs to
+ * bidding rather than to the record of changes during construction, so its cover is kept with
+ * the set instead of becoming an entry in the tracker.
+ */
+export const DOCUMENT_FOR: Partial<Record<IssuanceKind, FormKind>> = {
+  asi: 'asi',
+  pr: 'pr',
+  ccd: 'ccd',
+  change_order: 'change_order',
+}
+
+/**
+ * File the change document an upload came with.
+ *
+ * The number is the set's own name, because they are the same thing said twice: a package called
+ * "ASI 003" is ASI-003. The two rows point at each other, so the register can say how many
+ * sheets came with the document and the drawings can say which document brought them.
+ */
+export async function documentForIssuance(args: {
+  projectId: string
+  issuanceId: string
+  kind: IssuanceKind
+  name: string
+  issuedOn: string
+  filePath: string
+}): Promise<void> {
+  const formKind = DOCUMENT_FOR[args.kind]
+  if (!formKind) return
+  const { data: u } = await db().auth.getUser()
+  const { error } = await db().from('issued_forms').insert({
+    project_id: args.projectId,
+    issuance_id: args.issuanceId,
+    kind: formKind,
+    number: args.name || null,
+    title: null,
+    values: {},
+    file_path: args.filePath,
+    issued_by: u.user?.id ?? null,
+    issued_at: new Date(`${args.issuedOn}T12:00:00`).toISOString(),
+  })
   if (error) throw error
 }

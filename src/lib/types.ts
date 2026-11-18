@@ -21,7 +21,7 @@ export interface Project {
 }
 
 export type IssuanceKind =
-  | 'bid_set' | 'conformed_set' | 'addendum' | 'asi' | 'bulletin' | 'ccd' | 'change_order' | 'other'
+  | 'bid_set' | 'conformed_set' | 'addendum' | 'asi' | 'bulletin' | 'ccd' | 'change_order' | 'pr' | 'other'
 
 export const ISSUANCE_LABELS: Record<IssuanceKind, string> = {
   bid_set: 'Bid set',
@@ -30,6 +30,7 @@ export const ISSUANCE_LABELS: Record<IssuanceKind, string> = {
   asi: 'ASI',
   bulletin: 'Bulletin',
   ccd: 'CCD',
+  pr: 'Proposal request',
   change_order: 'Change order',
   other: 'Other',
 }
