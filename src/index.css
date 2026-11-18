@@ -394,6 +394,51 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .field-sync { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .field-sync button { flex: none; }
 
+/* ---------- The project manual ---------- */
+.manual-find { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }
+.manual-find input[type="text"], .manual-find > input {
+  flex: 1 1 320px; min-width: 0; box-sizing: border-box; padding: 9px 11px;
+  font: inherit; font-size: 16px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink);
+}
+.manual-find > input:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
+.manual-allrevs { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+.manual-division + .manual-division { border-top: 1px solid var(--line); }
+.manual-division-head {
+  display: flex; gap: 8px; align-items: center; width: 100%; padding: 9px 4px;
+  background: none; border: none; font: inherit; font-size: 12.5px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted); cursor: pointer; text-align: left;
+}
+.manual-division-head:hover { color: var(--ink); }
+.manual-division-name { flex: 0 1 auto; }
+.manual-division-head .sv-band-count { flex: 0 0 auto; margin-left: 2px; }
+.manual-table { width: 100%; border-collapse: collapse; }
+.manual-table td { padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: baseline; }
+.manual-table tr.opens { cursor: pointer; }
+.manual-table tr.opens:hover td { background: var(--wash); }
+.manual-table tr.history td { background: var(--wash); font-size: 13px; }
+.manual-number { width: 1%; white-space: nowrap; }
+.manual-title { width: 60%; }
+.manual-pages, .manual-from { white-space: nowrap; }
+
+.manual-hits { display: flex; flex-direction: column; gap: 2px; }
+.manual-hit {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 8px;
+  background: none; border: none; border-top: 1px solid var(--line); font: inherit;
+  text-align: left; cursor: pointer; color: var(--ink);
+}
+.manual-hit:hover { background: var(--wash); }
+.manual-hit-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.manual-hit-snippet { font-size: 13px; color: var(--muted); }
+.manual-hit-snippet mark { background: #f3e7a6; color: inherit; }
+
+.manual-review { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.manual-review th { text-align: left; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; }
+.manual-review td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+.manual-review tr.skipped td { opacity: 0.5; }
+
+
 
 .sv-scroll { flex: 1; overflow: auto; padding: 16px; position: relative; }
 .sv-msg { position: absolute; top: 20px; left: 20px; }

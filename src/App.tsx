@@ -9,6 +9,7 @@ import { PhoneNav } from './components/PhoneNav'
 import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import Documents from './pages/Documents'
+import Manual from './pages/Manual'
 import Submittals from './pages/Submittals'
 import CaLogs from './pages/CaLogs'
 import Contracts from './pages/Contracts'
@@ -20,6 +21,7 @@ import { useFullscreen } from './lib/fullscreen'
 // them belongs with the other things you go to now and then, not at the head of the work.
 const nav = [
   { to: '/documents', label: 'Drawings' },
+  { to: '/manual', label: 'Project manual' },
   { to: '/submittals', label: 'Submittals' },
   { to: '/ca-logs', label: 'Change documents' },
   { to: '/contracts', label: 'Contracts' },
@@ -88,6 +90,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
         <Routes>
           <Route path="/" element={offline ? <p className="muted">Sign-in and projects need the backend.</p> : <Home />} />
           <Route path="/documents" element={offline ? <p className="muted">Drawings need the backend.</p> : <Documents />} />
+          <Route path="/manual" element={offline ? <p className="muted">The project manual needs the backend.</p> : <Manual />} />
           <Route path="/submittals" element={<Submittals />} />
           <Route path="/ca-logs" element={<CaLogs />} />
           <Route path="/contracts" element={<Contracts />} />

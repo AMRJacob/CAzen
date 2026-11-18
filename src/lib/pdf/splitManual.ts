@@ -65,12 +65,17 @@ function numbersOn(text: PageText): { value: string; edge: boolean; declared: bo
     let m: RegExpExecArray | null
     while ((m = SECTION.exec(w.str))) {
       if (!DIVISIONS.has(m[1])) continue
-      const y = (w.y + w.h / 2) / Math.max(text.height, 1)
+      // Word boxes are already fractions of the page, as everywhere else in CAzen.
+      const y = w.y + w.h / 2
+      const before = w.str.slice(0, m.index)
       out.push({
         value: tidy(m[1], m[2], m[3]),
         // The top eighth and bottom eighth of the page: where a running header or footer lives.
         edge: y < 0.125 || y > 0.875,
-        declared: /SECTION\s*$/i.test(w.str.slice(0, m.index)) || /\bSECTION\b/i.test(w.str),
+        // "SECTION 09 91 00" at the head of its own line is a section declaring itself. The same
+        // words inside a sentence — "comply with Section 07 92 00" — are a cross-reference to
+        // another section, and say nothing about which section this page belongs to.
+        declared: /^\s*SECTION[\s:.-]*$/i.test(before) && y < 0.4,
         size: w.vertical ? w.w : w.h,
       })
     }
@@ -107,18 +112,20 @@ export function sectionOnPage(text: PageText): { found: string | null; declares:
  * its number alone rather than being given a wrong one.
  */
 export function titleOnPage(text: PageText, number: string): string {
-  const loose = number.replace(/\s/g, '')
-  const flat = (s: string) => s.replace(/\s/g, '')
+  // The number as printed: the digits with whatever sits between them.
+  const digits = number.replace(/\D/g, '')
+  if (digits.length < 6) return ''
+  const loose = new RegExp(
+    digits.slice(0, 2) + '[\\s.]?' + digits.slice(2, 4) + '[\\s.]?' + digits.slice(4),
+  )
   const words = [...text.words].sort((a, b) => a.y - b.y || a.x - b.x)
   for (let i = 0; i < words.length; i++) {
-    const w = words[i]
-    const at = flat(w.str).indexOf(loose)
-    if (at < 0) continue
+    const m = loose.exec(words[i].str)
+    if (!m) continue
     // Same line, after the number: "SECTION 09 91 00 - PAINTING".
-    const tail = w.str.slice(w.str.length - (flat(w.str).length - at - loose.length))
-    const here = clean(tail)
+    const here = clean(words[i].str.slice(m.index + m[0].length))
     if (here) return here
-    // Next line down, which is how most offices set it.
+    // Next line down, which is how a good many offices set it.
     for (let j = i + 1; j < Math.min(i + 4, words.length); j++) {
       const next = clean(words[j].str)
       if (next) return next
