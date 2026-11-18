@@ -1,4 +1,6 @@
 import { db } from './supabase'
+import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
+import { queue } from './offline/outbox'
 
 /**
  * Markups: what someone drew on a sheet.
@@ -36,14 +38,47 @@ export interface Markup {
 
 export const MARKUP_COLOURS = ['#c0392b', '#1f6f3f', '#1f4e79', '#b06a00', '#5b2d8e'] as const
 
+const COLUMNS = 'id, sheet_id, project_id, revision_id, kind, geometry, style, body, created_by, created_at'
+
+const byTime = (a: Markup, b: Markup) => (a.created_at ?? '').localeCompare(b.created_at ?? '')
+
+/** Markups held on this device for a sheet. */
+const localFor = async (sheetId: string) =>
+  (await localAll<Markup>('markups')).filter((m) => m.sheet_id === sheetId).sort(byTime)
+
+/**
+ * What is on this sheet.
+ *
+ * The local copy answers first and the server refreshes it, so a sheet opens at the same speed
+ * with no signal as with a good one, and anything drawn in the field is there before the network
+ * has been asked. When the server does answer, what it says replaces the copy — except for
+ * markups still waiting in the outbox, which it hasn't been told about yet.
+ */
 export async function listMarkups(sheetId: string): Promise<Markup[]> {
-  const { data, error } = await db()
-    .from('sheet_markups')
-    .select('id, sheet_id, project_id, revision_id, kind, geometry, style, body, created_by, created_at')
-    .eq('sheet_id', sheetId)
-    .order('created_at')
-  if (error) throw error
-  return (data ?? []) as Markup[]
+  // A sheet is "held" when this device has taken its project to the field — which is exactly
+  // when the local copy is worth answering from. The sheets store says so without being told.
+  const held = !!(await localGet('sheets', sheetId).catch(() => undefined))
+  const here = await localFor(sheetId).catch(() => [] as Markup[])
+  if (held && !navigator.onLine) return here
+
+  try {
+    const { data, error } = await db()
+      .from('sheet_markups').select(COLUMNS).eq('sheet_id', sheetId).order('created_at')
+    if (error) throw error
+    const theirs = (data ?? []) as Markup[]
+    if (held) {
+      const known = new Set(theirs.map((m) => m.id))
+      await localPut('markups', theirs)
+      for (const m of here) if (!known.has(m.id)) await localRemove('markups', m.id)
+      // Anything this device made and hasn't managed to send yet is still true here.
+      const unsent = (await localFor(sheetId)).filter((m) => !known.has(m.id))
+      return [...theirs, ...unsent].sort(byTime)
+    }
+    return theirs
+  } catch (e) {
+    if (here.length || !navigator.onLine) return here
+    throw e
+  }
 }
 
 export async function addMarkup(m: {
@@ -55,31 +90,31 @@ export async function addMarkup(m: {
   style: { colour?: string; width?: number }
   body?: string | null
 }): Promise<Markup> {
-  const { data: u } = await db().auth.getUser()
-  const { data, error } = await db()
-    .from('sheet_markups')
-    .insert({
-      sheet_id: m.sheetId, project_id: m.projectId, revision_id: m.revisionId,
-      kind: m.kind, geometry: m.geometry, style: m.style, body: m.body ?? null,
-      created_by: u.user?.id,
-    })
-    .select('id, sheet_id, project_id, revision_id, kind, geometry, style, body, created_by, created_at')
-    .single()
-  if (error) throw error
-  return data as Markup
+  const { data: u } = await db().auth.getUser().catch(() => ({ data: { user: null } }))
+  // The id is made here, not by the server. That is what lets a markup be drawn with no signal
+  // and lets the queue be replayed without drawing it twice.
+  const row = {
+    id: crypto.randomUUID(),
+    sheet_id: m.sheetId, project_id: m.projectId, revision_id: m.revisionId,
+    kind: m.kind, geometry: m.geometry, style: m.style, body: m.body ?? null,
+    created_by: u.user?.id ?? null,
+    created_at: new Date().toISOString(),
+  }
+  await localPut('markups', row).catch(() => { /* a device that won't keep it can still send it */ })
+  await queue(m.projectId, { kind: 'markup.add', row })
+  return row as Markup
 }
 
 export async function editMarkup(id: string, patch: { body?: string | null; geometry?: Geometry; style?: Markup['style'] }) {
-  const { error } = await db()
-    .from('sheet_markups')
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
+  const had = await localGet<Markup>('markups', id).catch(() => undefined)
+  if (had) await localPut('markups', { ...had, ...patch })
+  await queue(had?.project_id ?? '', { kind: 'markup.edit', id, patch: { ...patch, updated_at: new Date().toISOString() } })
 }
 
 export async function removeMarkup(id: string) {
-  const { error } = await db().from('sheet_markups').delete().eq('id', id)
-  if (error) throw error
+  const had = await localGet<Markup>('markups', id).catch(() => undefined)
+  await localRemove('markups', id).catch(() => { /* it may never have been held */ })
+  await queue(had?.project_id ?? '', { kind: 'markup.remove', id })
 }
 
 /**
@@ -88,6 +123,14 @@ export async function removeMarkup(id: string) {
  * nobody has looked at since the sheet changed and one somebody has.
  */
 export async function bringForward(sheetId: string, revisionId: string): Promise<number> {
+  const stale = (await localFor(sheetId).catch(() => [] as Markup[])).filter((m) => m.revision_id !== revisionId)
+  if (stale.length && !navigator.onLine) {
+    for (const m of stale) {
+      await localPut('markups', { ...m, revision_id: revisionId })
+      await queue(m.project_id, { kind: 'markup.edit', id: m.id, patch: { revision_id: revisionId, updated_at: new Date().toISOString() } })
+    }
+    return stale.length
+  }
   const { data, error } = await db()
     .from('sheet_markups')
     .update({ revision_id: revisionId, updated_at: new Date().toISOString() })
@@ -95,6 +138,7 @@ export async function bringForward(sheetId: string, revisionId: string): Promise
     .neq('revision_id', revisionId)
     .select('id')
   if (error) throw error
+  for (const m of stale) await localPut('markups', { ...m, revision_id: revisionId }).catch(() => {})
   return (data ?? []).length
 }
 

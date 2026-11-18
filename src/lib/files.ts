@@ -1,4 +1,5 @@
 import { db } from './supabase'
+import { fileFromCache } from './offline/store'
 
 /**
  * Where a project's files live.
@@ -271,6 +272,12 @@ async function readFromFolder(base: FileSystemDirectoryHandle, parts: string[]):
 
 /** Read a stored file, wherever it lives. R2 files come from the office copy when it's there (faster). */
 export async function readFile(project: ProjectStore, path: string): Promise<Uint8Array> {
+  // A project taken to the field is read from the device first — not as a fallback for when the
+  // network fails, but as the normal way in. It is the only thing that works the same with four
+  // bars and with none, and it saves pulling a 3 MB sheet down twice.
+  const here = await fileFromCache(path).catch(() => null)
+  if (here) return new Uint8Array(await here.arrayBuffer())
+
   if (isR2Path(path)) {
     const key = path.slice(R2.length)
     const base = await folderIfReady(project.id).catch(() => null)

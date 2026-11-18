@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import './index.css'
+import { drainWhenOnline } from './lib/offline/outbox'
 import App from './App'
 
 // HashRouter so the app also works from GitHub Pages without server rewrites.
@@ -12,3 +13,6 @@ createRoot(document.getElementById('root')!).render(
     </HashRouter>
   </StrictMode>,
 )
+
+// Anything written with no signal goes back the moment there is one.
+drainWhenOnline()

@@ -6,6 +6,7 @@ import { useFirm } from '../lib/firm'
 import type { Project } from '../lib/types'
 import { ProjectAdmin } from '../components/ProjectAdmin'
 import { ProjectFolder } from '../components/ProjectFolder'
+import { FieldCopy } from '../components/FieldCopy'
 import { LocationPicker, type Location } from '../components/LocationPicker'
 
 export default function Home() {
@@ -53,7 +54,7 @@ export default function Home() {
                 <td className="right nowrap p-edit"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button></td>
               </tr>,
               editing === p.id && (
-                <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectFolder project={p} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
+                <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectFolder project={p} /><FieldCopy project={p} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
               ),
             ])}
           </tbody>
