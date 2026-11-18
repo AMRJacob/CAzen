@@ -140,8 +140,8 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'mn.participants', auto: 'carry', label: 'Participants (Name | Company | Email per line)', multiline: true,
       sample: 'Pat Owner | Owner | pat@owner.org\nSam Super | Sample Builders | sam@builders.com\nJ. Smith | Your Firm | jsmith@yourfirm.com' },
     { key: 'mn.notes', auto: 'outline', label: 'Meeting notes', multiline: true,
-      hint: 'Two spaces indent a level; **bold** marks a heading.',
-      starter: '**1. Job Progress (Scheduled Progress / Revisions)**\n  a. \n**2. Status of Submittals**\n  a. \n**3. Payment Requests**\n  a. \n**4. Additional Notes**\n  a. ',
+      hint: '',
+      starter: '1. Job Progress (Scheduled Progress / Revisions)\n  a. \n2. Status of Submittals\n  a. \n3. Payment Requests\n  a. \n4. Additional Notes\n  a. ',
       sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
     { key: 'mn.recorded_by', auto: 'user', label: 'Recorded by', sample: 'J. Smith, AIA' },
   ],
@@ -152,11 +152,11 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'fr.location', auto: 'carry', label: 'Location', sample: 'Job site\nLittle Rock, AR', multiline: true },
     { key: 'fr.weather', label: 'Weather', sample: 'Sunny, upper 80s°F' },
     { key: 'fr.participants', auto: 'carry', label: 'Participants (Name | Company | Email per line)', sample: 'Pat Owner | Owner | pat@owner.org\nSam Super | Sample Builders | sam@builders.com\nJ. Smith | Your Firm | jsmith@yourfirm.com', multiline: true },
-    { key: 'fr.observations', auto: 'outline', label: 'Field observations', multiline: true, hint: 'What was seen on site, with any comments on what was seen. Two spaces indent a level; **bold** marks a heading.',
-      starter: '**1. Site / Parking**\n  a. \n**2. Structure**\n  a. \n**3. Envelope**\n  a. \n**4. Interior**\n  a. ',
+    { key: 'fr.observations', auto: 'outline', label: 'Field observations', multiline: true, hint: 'What was seen on site, with any comments on what was seen.',
+      starter: '1. Site / Parking\n  a. \n2. Structure\n  a. \n3. Envelope\n  a. \n4. Interior\n  a. ',
       sample: '1. Site / Parking\n  1. Footings excavated and Sonotubes in place for light pole bases.\n2. Framing\n  1. Interior metal stud wall framing nearly complete.\n  2. Blocking installation underway.' },
     { key: 'fr.notes', auto: 'outline', label: 'Meeting notes', multiline: true, hint: 'OAC meeting notes, on-site discussions, and schedule or material comments and concerns.',
-      starter: '**1. Job Progress (Scheduled Progress / Revisions)**\n  a. \n**2. Status of Submittals**\n  a. \n**3. Payment Requests**\n  a. \n**4. Additional Notes**\n  a. ',
+      starter: '1. Job Progress (Scheduled Progress / Revisions)\n  a. \n2. Status of Submittals\n  a. \n3. Payment Requests\n  a. \n4. Additional Notes\n  a. ',
       sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n  2. Brick installation to begin in approximately two weeks.\n    1. Brick and block are on site.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
     { key: 'fr.observed_by', auto: 'user', label: 'Observed by', sample: 'J. Smith, AIA' },
   ],
@@ -226,7 +226,7 @@ export function outlineOf(text: string): string {
   for (const raw of text.split('\n')) {
     const body = raw.trim()
     if (!body) continue
-    if (!(/^\*\*.*\*\*$/.test(body) || body.startsWith('# ') || body.endsWith(':'))) continue
+    if (!isHeadingLine(raw)) continue
     heads.push({ line: raw.trimEnd(), indent: raw.match(/^ */)![0].length })
   }
   const out: string[] = []
@@ -255,16 +255,27 @@ export const SITE_TRADES = [
 ]
 
 /** The heading lines already in an outline, without their markers or bold marks. */
+/**
+ * A heading in an outline: a top-level line, a line someone marked bold, or one ending in a
+ * colon. Position carries the meaning, so nothing has to be typed around the words.
+ */
+export function isHeadingLine(raw: string): boolean {
+  const body = raw.trim()
+  if (!body) return false
+  if (/^\*\*.*\*\*$/.test(body) || body.startsWith('# ') || body.endsWith(':')) return true
+  return !/^\s/.test(raw)
+}
+
+/** The words of each heading, without its marker or any marks around it. */
 export function headingsIn(text: string): string[] {
   const out: string[] = []
   for (const raw of text.split('\n')) {
+    if (!isHeadingLine(raw)) continue
     let body = raw.trim()
-    if (!body) continue
     const bold = /^\*\*(.*)\*\*$/.exec(body)
     if (bold) body = bold[1]
     else if (body.startsWith('# ')) body = body.slice(2)
-    else if (!body.endsWith(':')) continue
-    out.push(body.replace(/^(\d+[.)]|[a-z][.)]|[-*•])\s*/i, '').replace(/:$/, '').trim())
+    out.push(body.replace(/^((?:\d+|[ivxlcIVXLC]{1,6}|[a-zA-Z])[.)]|[-*•])\s*/, '').replace(/:$/, '').trim())
   }
   return out.filter(Boolean)
 }
@@ -289,5 +300,5 @@ export function withHeading(current: string, trade: string): string {
   const last = tops[tops.length - 1]?.match(/^\*{0,2}(\d+)[.)]/)
   if (last) next = Number(last[1]) + 1
   const body = current.replace(/\s*$/, '')
-  return `${body ? body + '\n' : ''}**${next}. ${trade}**\n  a. `
+  return `${body ? body + '\n' : ''}${next}. ${trade}\n  a. `
 }

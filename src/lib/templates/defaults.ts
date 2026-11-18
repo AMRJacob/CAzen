@@ -106,6 +106,7 @@ const FIELD_REPORT = (): Layout => ({
     hline(36, 294, 540),
     field(54, 306, 514, 438, 'fr.observations', {
       size: 9.5, rich: true, flow: true,
+      headings: 'bold',
       combine: [{ field: 'fr.observations', heading: 'Field Observations' }, { field: 'fr.notes', heading: 'Meeting Notes' }],
     }),
   ],
@@ -131,7 +132,7 @@ const MEETING_NOTES = (): Layout => ({
       'This confirms and records our interpretation of the discussions which occurred and our understanding reached during this meeting. Unless notified in writing within seven days of receipt, we will assume that the following interpretation or description is complete and accurate.',
       { size: 7.5, color: 'muted' }),
     hline(36, 294, 540),
-    field(54, 306, 514, 438, 'mn.notes', { size: 9.5, rich: true, flow: true }),
+    field(54, 306, 514, 438, 'mn.notes', { size: 9.5, rich: true, flow: true, headings: 'bold' }),
   ],
 })
 
@@ -196,7 +197,7 @@ const PR = (): Layout => ({
     hline(36, 312, 540),
 
     heading(36, 324, 'Changes to Drawings:'),
-    field(36, 342, 540, 384, 'pr.description', { size: 9, rich: true, flow: true, spaced: true }),
+    field(36, 342, 540, 384, 'pr.description', { size: 9, rich: true, flow: true, spaced: true, headings: 'plain' }),
   ],
 })
 

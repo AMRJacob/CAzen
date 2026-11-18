@@ -54,6 +54,9 @@ export interface FieldEl extends Base {
   rich?: boolean
   /** In a rich outline, leave a blank line wherever it steps back out, so groups read apart. */
   spaced?: boolean
+  /** Top-level lines are headings for this field: printed bold or plain, and left out of the
+   *  document when nothing was typed under them. */
+  headings?: 'bold' | 'plain'
   /** Print several fields one after another, each under its own heading (empty ones are skipped). */
   combine?: { field: string; heading: string }[]
 }

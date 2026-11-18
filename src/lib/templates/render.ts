@@ -76,7 +76,7 @@ export interface RichLine { text: string; bold: boolean; indent: number; marker?
    "ii." and "iv." are read whole rather than leaving a stray letter to be drawn as text. */
 const MARKER = /^((?:\d+|[ivxlcIVXLC]{1,6}|[a-zA-Z])[.)]|[-•*])\s+/
 
-export function richLines(text: string, fonts: Fonts, size: number, width: number, serif?: boolean, spaced?: boolean): RichLine[] {
+export function richLines(text: string, fonts: Fonts, size: number, width: number, serif?: boolean, spaced?: boolean, headings?: 'bold' | 'plain'): RichLine[] {
   const regular = fontFor(fonts, serif, false)
   const bold = fontFor(fonts, serif, true)
   const step = size * 1.9
@@ -94,6 +94,9 @@ export function richLines(text: string, fonts: Fonts, size: number, width: numbe
     lastLevel = level
     let body = raw.trim()
     let isBold = false
+    if (headings === 'bold' && level === 0 && body && !/^\*\*.*\*\*$/.test(body) && !body.startsWith('# ')) {
+      isBold = true
+    }
     if (body.startsWith('# ')) {
       body = body.slice(2)
       isBold = true
@@ -180,7 +183,7 @@ function drawField(c: Ctx, el: FieldEl, flowSlice?: RichLine[]) {
   const value = fieldText(el, c.value)
   if (!value) return
   if (el.rich) {
-    const lines = richLines(value, c.fonts, el.size, vw, el.serif, el.spaced)
+    const lines = richLines(pruneOutline(value, el.headings ? 'heading' : 'line'), c.fonts, el.size, vw, el.serif, el.spaced, el.headings)
     const max = Math.floor((vh + el.size * 0.3) / (el.size * LINE_HEIGHT))
     return drawRich(c, lines.slice(0, max), vx, vy, el)
   }
@@ -318,7 +321,7 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
     const { vw, vh } = fieldParts(flow)
     const text = fieldText(flow, (k) => values[k] ?? '')
     const all = flow.rich
-      ? richLines(text, fonts, flow.size, vw, flow.serif, flow.spaced)
+      ? richLines(pruneOutline(text, flow.headings ? 'heading' : 'line'), fonts, flow.size, vw, flow.serif, flow.spaced, flow.headings)
       : wrap(text, fontFor(fonts, flow.serif, flow.bold), flow.size, vw).map((t) => ({ text: t, bold: false, indent: 0 }))
     const lh = flow.size * LINE_HEIGHT
     const cap1 = Math.max(1, Math.floor((vh + flow.size * 0.3) / lh))
@@ -355,4 +358,66 @@ export async function prependTo(cover: Uint8Array, attachment: ArrayBuffer): Pro
   const pages = await out.copyPages(src, src.getPageIndices())
   pages.forEach((p) => out.addPage(p))
   return out.save()
+}
+
+// ---------- Pruning an outline that was started from a template ----------
+
+/* The marker test used for pruning is looser than MARKER: a line left as just "a." with nothing
+   after it has no trailing space, and that is exactly the line we are here to find. */
+const LONE_MARKER = /^((?:\d+|[ivxlcIVXLC]{1,6}|[a-zA-Z])[.)]|[-•*])\s*/
+
+interface OutlineLine { raw: string; level: number; blank: boolean; structural: boolean; words: string }
+
+/**
+ * An outline as it should print, with the scaffolding taken out.
+ *
+ * A form that starts from a heading outline is half placeholder until it is filled in: headings
+ * nobody wrote under, and the empty "a." left ready to type into. None of that belongs in a
+ * document that goes to a contractor, and deleting it by hand before issuing is exactly the kind
+ * of tidying the outline was meant to save. So a line with a marker and no words goes, and a
+ * heading with nothing left beneath it goes after it — innermost first, so a heading whose only
+ * child was a placeholder goes too.
+ *
+ * `tops` says whether a top-level line is a heading for this field (a PR's disciplines) or just
+ * a line (a paragraph in an ASI). Blank lines someone typed between paragraphs are kept, but
+ * never count as something written under a heading.
+ */
+export function pruneOutline(text: string, tops: 'heading' | 'line' = 'line'): string {
+  const lines: OutlineLine[] = text.split('\n').map((raw) => {
+    const level = Math.min(5, Math.floor((raw.match(/^ */)![0].length) / 2))
+    const body = raw.trim()
+    const naked = body.replace(/^\*\*(.*)\*\*$/, '$1').replace(/^# /, '').trim()
+    const words = naked.replace(LONE_MARKER, '').trim()
+    const structural =
+      /^\*\*.*\*\*$/.test(body) || body.startsWith('# ') || words.endsWith(':') ||
+      (tops === 'heading' && level === 0 && !!words)
+    return { raw, level, blank: !body, structural, words }
+  })
+
+  // A line earns its place by having words of its own.
+  const keep = lines.map((l) => l.blank || l.words.length > 0)
+
+  // Deepest first, so a heading is judged once its children have been.
+  for (let level = 5; level >= 0; level--) {
+    lines.forEach((l, i) => {
+      if (!keep[i] || l.blank || !l.structural || l.level !== level) return
+      let hasChild = false
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].blank) continue          // a gap is not content
+        if (lines[j].level <= l.level) break  // out of this heading's reach
+        if (keep[j]) { hasChild = true; break }
+      }
+      if (!hasChild) keep[i] = false
+    })
+  }
+
+  // Tidy the gaps the pruning opened: no leading, trailing or doubled blank lines.
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (!keep[i]) continue
+    if (lines[i].blank && (!out.length || !out[out.length - 1].trim())) continue
+    out.push(lines[i].raw)
+  }
+  while (out.length && !out[out.length - 1].trim()) out.pop()
+  return out.join('\n')
 }
