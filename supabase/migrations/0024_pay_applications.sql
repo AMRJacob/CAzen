@@ -1,0 +1,10 @@
+-- Applications for payment, laid out the way the AIA forms lay them out.
+-- (Applied via the Supabase migration history; see pay_contracts, retainage_steps, sov_lines,
+-- pay_apps and pay_app_lines there.)
+--
+-- A pay app is a schedule of values billed against month after month. The schedule belongs to
+-- the contract; each application holds only what was billed that period. Everything else on the
+-- form is arithmetic over those two, so none of it is a figure somebody typed and nobody checked.
+--
+-- The form is named on the contract rather than assumed, because the same job under a
+-- construction manager uses G732/G733 instead of G702/G703.
