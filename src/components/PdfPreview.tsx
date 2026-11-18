@@ -12,11 +12,15 @@ import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
  * worth paging through on the way out the door. Drawn with the same hand as the sheet viewer, so a
  * document zooms and pans exactly like a drawing does.
  */
-export function PdfPreview({ bytes, title, onClose, onDownload }: {
+export function PdfPreview({ bytes, title, onClose, onDownload, step, extra }: {
   bytes: Uint8Array
   title: string
   onClose: () => void
   onDownload?: () => void
+  /** Move to the next or previous document in a list — a page of an upload being named. */
+  step?: { label: string; onPrev?: () => void; onNext?: () => void }
+  /** A strip under the bar: fields that belong with the document being looked at. */
+  extra?: React.ReactNode
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -60,13 +64,21 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight' && pdf && number < pdf.numPages) setNumber(number + 1)
-      if (e.key === 'ArrowLeft' && number > 1) setNumber(number - 1)
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+      // Typing in the strip under the bar owns its own arrow keys.
+      const on = e.target as HTMLElement | null
+      if (on && on.closest('input, textarea, select')) return
+      const pages = pdf?.numPages ?? 1
+      if (e.key === 'ArrowRight') {
+        if (number < pages) setNumber(number + 1)
+        else step?.onNext?.()
+      } else if (number > 1) setNumber(number - 1)
+      else step?.onPrev?.()
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [pdf, number, onClose])
+  }, [pdf, number, onClose, step])
 
   const pages = pdf?.numPages ?? 1
 
@@ -81,6 +93,13 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
             <button className="icon" disabled={number >= pages} onClick={() => setNumber(number + 1)} aria-label="Next page">›</button>
           </div>
         )}
+        {step && (
+          <div className="sv-bar-group">
+            <button className="icon" disabled={!step.onPrev} onClick={step.onPrev} aria-label="Previous sheet">‹</button>
+            <span className="muted small nowrap">{step.label}</span>
+            <button className="icon" disabled={!step.onNext} onClick={step.onNext} aria-label="Next sheet">›</button>
+          </div>
+        )}
         <div className="sv-bar-group sv-inline-tools">
           <span className="sv-sep" />
           <button className="icon" onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
@@ -92,6 +111,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
           <button onClick={onClose} aria-label="Close the preview">Close</button>
         </div>
       </div>
+      {extra && <div className="pv-strip">{extra}</div>}
       <div className="sv-body">
         <div className="sv-scroll" ref={scroller}>
           {busy && <p className="muted sv-msg">Drawing the page…</p>}

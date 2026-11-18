@@ -8,6 +8,8 @@ import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
 import { pageBody } from '../lib/pdf/pageText'
 import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
+import { PageThumb } from '../components/PageThumb'
+import { PdfPreview } from '../components/PdfPreview'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
   deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
@@ -680,7 +682,7 @@ interface Draft {
   touched: { number?: boolean; title?: boolean; revision?: boolean }
 }
 
-function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
+export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
   project: Project
   initialFiles?: File[]
   firmId: string
@@ -713,6 +715,8 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
   const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
   const [run, setRun] = useState<{ done: number; total: number; sheet: string; stage: string } | null>(null)
   const [dpi, setDpi] = useState(DEFAULT_DPI)
+  // The page being looked at full size while the set is named.
+  const [peek, setPeek] = useState<number | null>(null)
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
@@ -1090,7 +1094,7 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>Page</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th>View</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -1104,6 +1108,9 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                         aria-label={`Include page ${d.pageIndex + 1}`} />
                     </td>
                     <td>{d.pageIndex + 1}</td>
+                    <td className="thumb-cell">
+                      <PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} />
+                    </td>
                     <td className="cover-cell">
                       <input type="checkbox" checked={!!d.cover}
                         aria-label={`Page ${d.pageIndex + 1} is the cover, not a drawing`}
@@ -1112,6 +1119,8 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
                     <td><input className={`cell mono ${d.include && !d.cover && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
                       disabled={!!d.cover} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
                     <td><input className="cell" value={d.title} disabled={!!d.cover} onChange={(e) => type(i, 'title', e.target.value)} /></td>
+                    <td><input className="cell mono rev-cell" value={d.revision} disabled={!!d.cover}
+                      onChange={(e) => type(i, 'revision', e.target.value)} aria-label={`Revision mark on page ${d.pageIndex + 1}`} /></td>
                     <td className="small nowrap size-cell">
                       {d.full ? (
                         <>
@@ -1166,10 +1175,58 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
           </div>
         </>
       )}
+
+      {/* Looking at a sheet while naming it. The fields come with it, because the reason to open
+          the page is to read the title block and type what it says. */}
+      {peek !== null && drafts[peek] && (
+        <PdfPreview
+          bytes={drafts[peek].page.bytes}
+          title={`Page ${drafts[peek].pageIndex + 1}${drafts[peek].number ? ` · ${drafts[peek].number}` : ''}`}
+          onClose={() => setPeek(null)}
+          step={{
+            label: `${peek + 1} of ${drafts.length}`,
+            onPrev: peek > 0 ? () => setPeek(peek - 1) : undefined,
+            onNext: peek < drafts.length - 1 ? () => setPeek(peek + 1) : undefined,
+          }}
+          extra={(() => {
+            const d = drafts[peek]
+            const i = peek
+            return (
+              <>
+                <label className="pv-check">
+                  <input type="checkbox" checked={d.include}
+                    onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} />
+                  Include
+                </label>
+                <label className="pv-check">
+                  <input type="checkbox" checked={!!d.cover}
+                    onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, cover: e.target.checked } : x)))} />
+                  Cover
+                </label>
+                <label className="pv-field pv-number">Sheet no.
+                  <input className="mono" value={d.number} disabled={!!d.cover} placeholder="A-201"
+                    onChange={(e) => type(i, 'number', e.target.value)} />
+                </label>
+                <label className="pv-field pv-title">Title
+                  <input value={d.title} disabled={!!d.cover}
+                    onChange={(e) => type(i, 'title', e.target.value)} />
+                </label>
+                <label className="pv-field pv-rev">Rev. mark
+                  <input value={d.revision} disabled={!!d.cover}
+                    onChange={(e) => type(i, 'revision', e.target.value)} />
+                </label>
+              </>
+            )
+          })()}
+        />
+      )}
       {error && <div className="notice error">{error}</div>}
     </div>
   )
 }
+
+/** What a page is called before it has a sheet number: its place in the upload. */
+const pageLabel = (d: Draft) => `page ${d.pageIndex + 1}${d.number ? ` (${d.number})` : ''}`
 
 const MB = 1024 * 1024
 

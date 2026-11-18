@@ -748,6 +748,56 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 @media (pointer: coarse) { .chip { padding: 8px 14px; font-size: 14px; } }
 
 .sheet-edit .f-filed { flex: 0 1 220px; }
+/* A page of an upload, small enough for a table row and big enough to tell sheets apart. */
+.thumb-cell { width: 1%; }
+.page-thumb {
+  display: block; width: 110px; height: 74px; padding: 0; overflow: hidden; line-height: 0;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--paper); cursor: zoom-in;
+}
+.page-thumb:hover:not(:disabled) { border-color: var(--moss); }
+.page-thumb:focus-visible { outline: 2px solid var(--moss); outline-offset: 1px; }
+.page-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.page-thumb-wait {
+  display: block; width: 100%; height: 100%;
+  font-size: 11px; line-height: 74px; text-align: center; color: var(--muted);
+  background: linear-gradient(100deg, var(--paper) 30%, var(--moss-soft) 50%, var(--paper) 70%);
+  background-size: 300% 100%; animation: thumb-wait 1.5s ease-in-out infinite;
+}
+@keyframes thumb-wait { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .page-thumb-wait { animation: none; } }
+tr.skipped .page-thumb { opacity: 0.45; }
+.rev-cell { max-width: 90px; }
+@media (max-width: 899px) { .page-thumb { width: 72px; height: 50px; } .page-thumb-wait { line-height: 50px; } }
+
+/* The naming fields that come with a page opened full size from the uploader. */
+.pv-strip {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.pv-strip .pv-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.pv-strip input[type="text"], .pv-strip .pv-field input {
+  min-width: 0; box-sizing: border-box; padding: 6px 9px;
+  font: inherit; font-size: 16px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink);
+}
+.pv-strip .pv-field input:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
+.pv-strip .pv-field input:disabled { opacity: 0.5; }
+.pv-strip .pv-number { flex: 0 1 140px; }
+.pv-strip .pv-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.pv-strip .pv-title { flex: 1 1 240px; }
+.pv-strip .pv-rev { flex: 0 1 110px; }
+.pv-check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink); padding-bottom: 7px; white-space: nowrap; }
+/* On a phone the picture is the point, so the fields take two tight rows and no more. */
+@media (max-width: 619px) {
+  .pv-strip { gap: 6px 10px; padding: 6px 10px; }
+  .pv-strip .pv-field { font-size: 11px; }
+  .pv-strip .pv-field input { padding: 5px 8px; }
+  .pv-strip .pv-number { flex: 1 1 104px; }
+  .pv-strip .pv-rev { flex: 1 1 74px; }
+  .pv-strip .pv-title { flex: 1 1 100%; order: 2; }
+  .pv-check { padding-bottom: 5px; font-size: 12.5px; }
+}
+
 /* A sheet filed somewhere its number doesn't say: marked, so the list doesn't read as a bug. */
 .filed-tag {
   margin-left: 6px; padding: 1px 5px; font-size: 10.5px; font-family: inherit; letter-spacing: 0.02em;
