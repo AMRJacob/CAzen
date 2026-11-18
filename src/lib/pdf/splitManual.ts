@@ -94,15 +94,56 @@ export function readFooter(line: string): { number: string | null; at: number | 
   const head = text.slice(0, found.end - found.value.length)
   const title = clean(head.replace(/[\s\-–—:.]+$/, '')) || null
 
-  // The page number comes after the section number, with a dash, a space or the word PAGE
-  // between them. "of 7" or "/7" after it is how long the section runs.
+  /**
+   * The page number, wherever the office put it.
+   *
+   * Every firm lays its footer out differently and most put the section's name between the
+   * number and the page — "09 91 00 PAINTING    Page 1 of 7" — so looking only immediately
+   * after the section number finds the page on some books and nothing on others. The forms
+   * are tried in order of how certain they are: a number touching the section number, then
+   * "N of M" which the "of" makes unambiguous, then "Page N", and only last a bare number
+   * set off at the end of the line.
+   */
   const after = text.slice(found.end)
-  const page = /^[\s\-–—:.]*(?:PAGE\s*)?(\d{1,3})\b(?:\s*(?:OF|\/)\s*(\d{1,3}))?/.exec(after)
-  if (page) return { number: found.value, at: Number(page[1]), of: page[2] ? Number(page[2]) : null, title }
+  const found_at = pageNumberIn(after, true) ?? pageNumberIn(head, false)
+  return { number: found.value, at: found_at?.at ?? null, of: found_at?.of ?? null, title }
+}
 
-  // Some offices put the page number first: "3  09 91 00".
-  const before = /(\d{1,3})\s*[-–—:.]?\s*$/.exec(head)
-  return { number: found.value, at: before ? Number(before[1]) : null, of: null, title }
+/**
+ * Numbers in a footer that are certainly not page numbers.
+ *
+ * A footer is a row of columns — firm, project, project number, date, section, page — and the
+ * text comes out of the PDF with the spacing between them collapsed, so "09 91 00    24-118"
+ * reads as though the project number sat right against the section number. Taking those out
+ * first is what stops a job number being read as page 24 and a date as page 11 of 18.
+ */
+const scrub = (text: string): string => text
+  // Dates: 11/18/2026, 11-18-26, 2026.11.18.
+  .replace(/\b\d{1,4}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}\b/g, ' ')
+  // Compound identifiers: a job number like 24-118, a drawing like A-101.
+  .replace(/\b\d{2,4}\s*-\s*\d{2,4}\b/g, ' ')
+  .replace(/\b[A-Z]{1,2}\s*-\s*\d{2,4}\b/g, ' ')
+
+/** A page number and, where the footer says it, how many pages the section runs to. */
+function pageNumberIn(raw: string, touching: boolean): { at: number; of: number | null } | null {
+  const text = scrub(raw)
+  // Touching the section number: "09 91 00 - 3", "09 91 00 Page 3 of 7".
+  if (touching) {
+    const m = /^[\s\-–—:.]*(?:PAGE\s*)?(\d{1,3})\b(?:\s*(?:OF|\/)\s*(\d{1,3}))?/.exec(text)
+    if (m) return { at: Number(m[1]), of: m[2] ? Number(m[2]) : null }
+  }
+  // "3 of 7", "3/7" — the "of" says what the numbers are, wherever they sit.
+  const of = /(?:PAGE\s*)?\b(\d{1,3})\s*(?:OF|\/)\s*(\d{1,3})\b/.exec(text)
+  if (of) return { at: Number(of[1]), of: Number(of[2]) }
+  // "Page 3", said in as many words.
+  const page = /\bPAGE\s*(\d{1,3})\b/.exec(text)
+  if (page) return { at: Number(page[1]), of: null }
+  // Last resort: a short number set off at the end by a dash or a space. Two digits at most
+  // and never part of a longer run, so a project number like 24-118 or a year is not read as
+  // page 18 or page 26.
+  const bare = /(?:^|[-–—\s])\s*(\d{1,2})\s*$/.exec(text)
+  if (bare) return { at: Number(bare[1]), of: null }
+  return null
 }
 
 /**
@@ -302,7 +343,18 @@ function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] 
     const trouble: SectionTrouble[] = []
     if (s.number === FRONT) return { ...s, trouble }
 
-    const numbered = s.pages.map((i) => pages[i]?.at).filter((n): n is number => typeof n === 'number')
+    /**
+     * Nothing is claimed from evidence that isn't there.
+     *
+     * Not every page carries a readable footer — a full-page schedule, a scanned sheet, a
+     * cover with the number set differently. A gap in the numbers then means either a page is
+     * missing or a footer could not be read, and the two look identical. Saying "page 2 is
+     * missing" when page 2 is sitting right there is worse than saying nothing, so a gap is
+     * only called a gap when every page in the run was read.
+     */
+    const read = s.pages.map((i) => pages[i]?.at ?? null)
+    const numbered = read.filter((n): n is number => typeof n === 'number')
+    const unread = read.length - numbered.length
     if (numbered.length) {
       const seen = new Set<number>()
       const repeated: number[] = []
@@ -315,10 +367,13 @@ function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] 
       const missing: number[] = []
       for (let n = first; n <= last; n++) if (!seen.has(n)) missing.push(n)
 
-      if (missing.length) trouble.push({ kind: 'missing', pages: missing })
+      if (missing.length && !unread) trouble.push({ kind: 'missing', pages: missing })
       if (repeated.length) trouble.push({ kind: 'repeated', pages: [...new Set(repeated)] })
-      if (first > 1) trouble.push({ kind: 'late-start', at: first })
+      // Likewise: the run starts late only if its own first page says so.
+      if (read[0] != null && read[0] > 1) trouble.push({ kind: 'late-start', at: read[0] })
 
+      // This one holds whatever was read, because a footer saying "of 7" over a run of five
+      // pages is two pages short however many other footers were legible.
       const says = s.pages.map((i) => pages[i]?.of).find((n): n is number => typeof n === 'number')
       if (says && says > s.pages.length) trouble.push({ kind: 'short', have: s.pages.length, says })
     }

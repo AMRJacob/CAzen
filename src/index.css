@@ -1265,6 +1265,9 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
     width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
     height: 58px;
   }
+  /* The rest of the destinations are more than fit a phone in one row, so they take two and
+     the bar grows for them. Three across the front row keeps those labels full width. */
+  .phone-nav.open.more { height: 108px; }
   @supports (width: 100dvw) {
     .phone-nav.open {
       width: calc(100dvw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
@@ -1284,7 +1287,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   .phone-nav:not(.open) .pn-mark { width: 100%; height: 100%; }
 
   .pn-bar {
-    display: flex; align-items: stretch; gap: 2px;
+    display: flex; align-items: stretch; flex-wrap: wrap; gap: 2px;
     width: 100%; height: 100%; padding: 3px;
     opacity: 0; transition: opacity 0.12s;
     /* Clipped out of sight while closed, but still laid out — so it must also stop taking the
@@ -1301,6 +1304,8 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
     color: var(--muted); background: none; text-decoration: none; cursor: pointer;
   }
   .pn-spot span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Two rows of four when the bar is showing everything else. */
+  .phone-nav.more .pn-spot { flex: 1 1 calc(25% - 2px); max-width: calc(25% - 2px); }
   /* Where you are, said plainly, which is the thing a hidden menu usually loses. */
   .pn-spot.active, .pn-spot.on { color: var(--moss); background: var(--moss-soft); font-weight: 500; }
 
