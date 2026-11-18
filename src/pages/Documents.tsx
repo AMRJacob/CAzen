@@ -10,7 +10,7 @@ import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
-  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets,
+  deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, suggestSetName,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
@@ -646,6 +646,14 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
 }) {
   const [kind, setKind] = useState<IssuanceKind>(existingNumbers.size ? 'addendum' : 'bid_set')
   const [number, setNumber] = useState('')
+  // The sets already on this project, so the next one can be named without being asked for.
+  const [sets, setSets] = useState<{ kind: IssuanceKind; number: string | null }[]>([])
+  const [namedByHand, setNamedByHand] = useState(false)
+  useEffect(() => { existingSets(project.id).then(setSets).catch(() => setSets([])) }, [project.id])
+  useEffect(() => {
+    if (namedByHand) return
+    setNumber(suggestSetName(kind, sets))
+  }, [kind, sets, namedByHand])
   const [issuedOn, setIssuedOn] = useState(today())
   const [setRev, setSetRev] = useState('')
   const [drafts, setDrafts] = useState<Draft[]>([])
@@ -853,7 +861,11 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
     setError(null)
     try {
       const out: SheetToSave[] = sortSheets(chosen, (d) => d.number, order).map((d) => ({
-        number: d.number, title: d.title, revisionLabel: d.revision || setRev, bytes: d.page.bytes, body: pageBody(d.page.text),
+        // What the Rev. column says for this sheet: whatever the title block itself carried, then
+        // a mark typed for the whole set, and failing both the set's own name — which is what an
+        // architect would write there anyway ("Addendum 2"), and beats a row number nobody chose.
+        number: d.number, title: d.title, revisionLabel: d.revision || setRev || number,
+        bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
       await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
       // Templates drawn before CAzen recorded sheet sizes learn theirs from the sheets they read.
@@ -897,9 +909,12 @@ function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles,
             {(Object.entries(ISSUANCE_LABELS) as [IssuanceKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
-        <label>Set name or number<input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Addendum 2, ASI-003, Rev 1…" /></label>
+        <label>Set name
+          <input value={number} placeholder="Addendum 2, ASI-003, Rev 1…"
+            onChange={(e) => { setNamedByHand(true); setNumber(e.target.value) }} />
+        </label>
         <label>Issue date<input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} /></label>
-        <label>Revision mark<input value={setRev} onChange={(e) => setSetRev(e.target.value)} placeholder="1, A, Δ2…" />
+        <label>Revision mark<input value={setRev} onChange={(e) => setSetRev(e.target.value)} placeholder={number || '1, A, Δ2…'} />
           <span className="hint">For every sheet in this upload, unless its title block shows one.</span>
         </label>
       </div>

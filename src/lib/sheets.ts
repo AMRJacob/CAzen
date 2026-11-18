@@ -208,16 +208,30 @@ export async function renameIssuance(
   next: { kind: IssuanceKind; number: string; title: string; issuedOn: string },
 ): Promise<void> {
   if (!next.issuedOn) throw new Error('A set needs an issue date.')
-  const { error } = await db()
+  const client = db()
+
+  // What it was called, so sheets that took their revision label from the old name follow the
+  // new one. A sheet whose mark came off its own title block is left alone — that is a record of
+  // what the drawing says, not of what the set was called.
+  const { data: before } = await client.from('issuances').select('number').eq('id', issuanceId).maybeSingle()
+  const wasCalled = (before as { number: string | null } | null)?.number ?? null
+  const nowCalled = next.number.trim() || null
+
+  const { error } = await client
     .from('issuances')
-    .update({
-      kind: next.kind,
-      number: next.number.trim() || null,
-      title: next.title.trim() || null,
-      issued_on: next.issuedOn,
-    })
+    .update({ kind: next.kind, number: nowCalled, title: next.title.trim() || null, issued_on: next.issuedOn })
     .eq('id', issuanceId)
   if (error) throw error
+
+  if (wasCalled !== nowCalled) {
+    const { error: labelError } = await client
+      .from('sheet_revisions')
+      .update({ revision_label: nowCalled })
+      .eq('issuance_id', issuanceId)
+      .or(wasCalled ? `revision_label.eq.${wasCalled},revision_label.is.null` : 'revision_label.is.null')
+    // The set is renamed either way; the labels following it are a convenience.
+    if (labelError) console.warn('Sheet revision labels kept their old value:', labelError.message)
+  }
 }
 
 /** Every set or revision round uploaded, newest first, with the sheets it brought in. */
@@ -320,4 +334,41 @@ export async function archiveProject(project: ProjectStore & { number?: string }
   step('Removing the files from the cloud…')
   const d = await deleteProjectCloudFiles(project.id)
   return { copied: r.copied, alreadyThere: r.already, removedFromCloud: d.deleted, failedToRemove: d.failed }
+}
+
+// ---------- Naming a set ----------
+
+const KIND_WORD: Record<IssuanceKind, string> = {
+  bid_set: 'Bid set', conformed_set: 'Conformed set', addendum: 'Addendum',
+  asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', other: 'Revision',
+}
+
+/**
+ * What to call a set, before anyone types anything.
+ *
+ * A set left unnamed shows up as its category and nothing else — two addenda a year apart both
+ * reading "Addendum", with no way to tell from the register which is which. So the name is
+ * suggested rather than asked for: the category plus how many of that category the project has
+ * had. The second addendum is "Addendum 2", and it is editable before it is saved and after.
+ *
+ * Categories that only happen once on a job don't get a number; a bid set is the bid set.
+ */
+export function suggestSetName(kind: IssuanceKind, existing: { kind: IssuanceKind; number: string | null }[]): string {
+  const word = KIND_WORD[kind]
+  if (kind === 'bid_set' || kind === 'conformed_set') return word
+  const used = existing.filter((i) => i.kind === kind)
+  // Follow on from the highest number already in use, so deleting the second of three doesn't
+  // hand the next upload a name somebody is already holding.
+  const highest = used.reduce((n, i) => {
+    const found = /(\d+)\s*$/.exec(i.number ?? '')
+    return found ? Math.max(n, Number(found[1])) : n
+  }, 0)
+  return `${word} ${Math.max(highest, used.length) + 1}`
+}
+
+/** The sets already on a project, for working out what to call the next one. */
+export async function existingSets(projectId: string): Promise<{ kind: IssuanceKind; number: string | null }[]> {
+  const { data, error } = await db().from('issuances').select('kind, number').eq('project_id', projectId)
+  if (error) throw error
+  return (data ?? []) as { kind: IssuanceKind; number: string | null }[]
 }
