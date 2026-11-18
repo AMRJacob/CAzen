@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   areaOf, buildMarkup, cloudPath, editMarkup, measure, removeMarkup, saveMarkup, squareFeet,
-  type Geometry, type InkPoint, type Markup, type MarkupKind, type Point,
+  type Geometry, type Markup, type MarkupKind, type Point,
 } from '../lib/markups'
+import { inkRuns, samplesFrom, type InkPoint } from '../lib/ink'
 import { message } from '../lib/errors'
 import type { Snap, Snapper } from '../lib/pdf/geometry'
 
@@ -148,32 +149,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
    * around it — so a sample is taken when its id matches or when it has none to speak of,
    * rather than trusting the id to route anything.
    */
-  function samples(e: React.PointerEvent): InkPoint[] {
-    const native = e.nativeEvent as PointerEvent
-    let raw: PointerEvent[] = []
-    try {
-      raw = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : []
-    } catch { raw = [] }
-    const mine = raw.filter((s) => !s.pointerId || s.pointerId === native.pointerId)
-    const list = mine.length ? mine : [native]
-    return list.map((s) => {
-      const p = at(s)
-      return force(s) == null ? [p.x, p.y] as InkPoint : [p.x, p.y, force(s)!] as InkPoint
-    })
-  }
-
-  /**
-   * How hard a stylus was pressed, or nothing for anything that can't say.
-   *
-   * A mouse reports a flat 0.5 while a button is down and a finger usually reports 0 or 0.5, so
-   * a width taken from those would be noise dressed as expression. Only a pen is believed, and
-   * only when what it reports actually moves.
-   */
-  function force(e: PointerEvent): number | null {
-    if (e.pointerType !== 'pen') return null
-    const p = e.pressure
-    return typeof p === 'number' && p > 0 && p < 1 ? p : p === 1 ? 1 : null
-  }
+  const samples = (e: React.PointerEvent): InkPoint[] => samplesFrom(e.nativeEvent as PointerEvent, at)
 
   /**
    * The pen's own hand, and keeping the hand it rests on out of the way.
@@ -626,31 +602,3 @@ function moveHandle(g: Geometry, handle: Handle, to: Point, _from: Point): Geome
  * which is about what a felt tip does on paper. A stroke whose samples carry no pressure comes
  * back as one run, which is the caller's signal to draw it the plain way.
  */
-function inkRuns(points: InkPoint[], base: number): { width: number; d: string }[] {
-  if (points.length < 2) return []
-  const widthAt = (p: InkPoint) => {
-    const f = p.length > 2 ? (p[2] as number) : null
-    if (f == null) return base
-    return Math.round(base * (0.4 + 1.3 * f) * 4) / 4
-  }
-  const runs: { width: number; d: string }[] = []
-  let width = widthAt(points[0])
-  let run: InkPoint[] = [points[0]]
-  for (let i = 1; i < points.length; i++) {
-    const w = widthAt(points[i])
-    if (w !== width) {
-      run.push(points[i])
-      runs.push({ width, d: pathOf(run) })
-      // The next run begins at the point the last one ended on, so the pieces meet.
-      run = [points[i]]
-      width = w
-    } else {
-      run.push(points[i])
-    }
-  }
-  if (run.length > 1) runs.push({ width, d: pathOf(run) })
-  return runs
-}
-
-const pathOf = (points: InkPoint[]) =>
-  points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')

@@ -18,12 +18,9 @@ export type MarkupKind = 'ink' | 'line' | 'arrow' | 'rect' | 'cloud' | 'text' | 
 
 export interface Point { x: number; y: number }
 
-/**
- * A point in a freehand stroke: x, y, and — from a stylus that reports it — how hard it was
- * pressed, 0 to 1. Strokes drawn with a finger or a mouse have two numbers and are drawn at one
- * width, which is also what every stroke drawn before pressure was captured has.
- */
-export type InkPoint = [number, number] | [number, number, number]
+// Ink itself — sampling, pressure, drawing — lives in ./ink, shared with the notes pad.
+export type { InkPoint } from './ink'
+import type { InkPoint } from './ink'
 
 export type Geometry =
   | { points: InkPoint[] }                  // ink, area

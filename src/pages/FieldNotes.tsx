@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
+import { NotePad } from '../components/NotePad'
 import IssueForm from './IssueForm'
-import { FORM_LABELS, usDate } from '../lib/templates/fields'
+import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
+import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
+import { listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind } from '../lib/pads'
 import { openFile } from '../lib/files'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
@@ -103,6 +106,11 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
       </div>
 
       {error && <div className="notice error">{error}</div>}
+
+      <Pads kind={kind === 'meeting_notes' ? 'meeting_notes' : 'field_report'}
+        projectId={projectId} onTrouble={setError} />
+
+      <h2 className="field-notes-written">Written up</h2>
       {!rows ? <p className="muted">Loading…</p>
         : !listed.length ? <div className="card muted">Nothing written yet.</div> : (
           <table className="register">
@@ -118,7 +126,7 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
                   }}>
                   <td className="mono">{r.number ?? '—'}</td>
                   <td className="col-title">{r.title ?? r.values?.[`${r.kind.split('_')[0]}.title`] ?? ''}</td>
-                  <td className="col-date">{usDate(new Date(r.issued_at))}</td>
+                  <td className="col-date">{usDateOf(new Date(r.issued_at))}</td>
                 </tr>
               ))}
             </tbody>
@@ -127,6 +135,102 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
     </section>
   )
 }
+
+// ---------- Pads ----------
+
+/**
+ * The pads for this kind of note.
+ *
+ * Opening one gives it the whole page, because handwriting wants room. Closing it comes back
+ * here. A pad is not a draft of the document — it goes on existing after the document is
+ * written, and the two are linked rather than merged.
+ */
+function Pads({ kind, projectId, onTrouble }: {
+  kind: PadKind
+  projectId: string | undefined
+  onTrouble: (m: string) => void
+}) {
+  const [pads, setPads] = useState<Pad[] | null>(null)
+  const [open, setOpen] = useState<Pad | null>(null)
+
+  const load = useCallback(() => {
+    if (!projectId) return
+    listPads(projectId, kind).then(setPads).catch((e) => onTrouble(message(e)))
+  }, [projectId, kind, onTrouble])
+  useEffect(() => { load() }, [load])
+
+  async function start() {
+    if (!projectId) return
+    try {
+      const made = await newPad(projectId, kind, {})
+      setPads((all) => [made, ...(all ?? [])])
+      setOpen(made)
+    } catch (e) { onTrouble(message(e)) }
+  }
+
+  async function discard(pad: Pad) {
+    try {
+      await removePad(pad.id)
+      setPads((all) => (all ?? []).filter((p) => p.id !== pad.id))
+    } catch (e) { onTrouble(message(e)) }
+  }
+
+  if (open) {
+    return (
+      <div className="card pad-card">
+        <div className="pad-head">
+          <input className="pad-title" value={open.title ?? ''} placeholder={untitled(kind)}
+            aria-label="What these notes are about"
+            onChange={(e) => setOpen({ ...open, title: e.target.value })}
+            onBlur={(e) => {
+              setPads((all) => (all ?? []).map((p) => (p.id === open.id ? { ...p, title: e.target.value } : p)))
+              setPad(open.id, { title: e.target.value || null }).catch((err) => onTrouble(message(err)))
+            }} />
+          <input type="date" value={open.noted_on} aria-label="The day these notes are about"
+            onChange={(e) => {
+              const noted_on = e.target.value
+              setOpen({ ...open, noted_on })
+              setPads((all) => (all ?? []).map((p) => (p.id === open.id ? { ...p, noted_on } : p)))
+              setPad(open.id, { noted_on }).catch((err) => onTrouble(message(err)))
+            }} />
+          <button onClick={() => { setOpen(null); load() }}>Done</button>
+        </div>
+        <NotePad pad={open} onChanged={(p) => {
+          setOpen(p)
+          setPads((all) => (all ?? []).map((x) => (x.id === p.id ? p : x)))
+        }} onTrouble={onTrouble} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="pad-head">
+        <h3>Handwritten</h3>
+        <button className="primary-lite" onClick={() => void start()} disabled={!projectId}>New pad</button>
+      </div>
+      <p className="muted small">
+        Write by hand in the room, and type it up afterwards from what you wrote. More than one
+        person can write on the same pad at once.
+      </p>
+      {!pads ? <p className="muted small">Loading…</p>
+        : !pads.length ? <p className="muted small">No pads yet.</p> : (
+          <div className="pad-list">
+            {pads.map((p) => (
+              <div key={p.id} className="pad-row">
+                <button className="link" onClick={() => setOpen(p)}>{p.title || untitled(kind)}</button>
+                <span className="muted small nowrap">{usDate(p.noted_on)}</span>
+                <span className="muted small nowrap">{p.pages} {p.pages === 1 ? 'page' : 'pages'}</span>
+                <button className="link danger-link" onClick={() => void discard(p)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  )
+}
+
+const untitled = (kind: PadKind) => (kind === 'meeting_notes' ? 'Meeting notes' : 'Site visit')
 
 // ---------- Observations ----------
 

@@ -1502,3 +1502,48 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   .pay-trades td.pay-trade-name { display: block; text-align: left; font-weight: 500; padding-bottom: 4px; }
   .pay-progress { justify-content: flex-end; }
 }
+
+/* ---------- Notes pads ---------- */
+/* A pad is a page you write on. It is given the whole width it can have, because handwriting
+   at thumbnail size is not handwriting. */
+.pad { display: flex; flex-direction: column; gap: 10px; }
+.pad-tools { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.pad-tool-group { display: flex; gap: 6px; align-items: center; }
+.pad-tools-end { margin-left: auto; gap: 14px; }
+.pad-tool-group > button { font: inherit; font-size: 13px; padding: 5px 11px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 7px; cursor: pointer; }
+.pad-tool-group > button.on { background: var(--wash); color: var(--ink); border-color: var(--faint); font-weight: 500; }
+.pad-swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; }
+.pad-swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink); }
+.pad-nib { width: 26px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.pad-nib.on { border-color: var(--faint); background: var(--wash); }
+.pad-nib span { display: block; width: 16px; border-radius: 2px; }
+.pad-zoom { display: inline-flex; align-items: center; gap: 4px; }
+
+.pad-sheet { overflow: auto; background: var(--wash); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; max-height: 76vh; }
+.pad-surface { position: relative; margin: 0 auto; background: #fffdf8; box-shadow: 0 1px 4px rgba(43, 45, 44, 0.1); border-radius: 3px; }
+.pad-ink { display: block; width: 100%; height: auto; touch-action: inherit; }
+.pad-rules line { stroke: #dfe7ee; stroke-width: 0.0008; }
+.pad-rules .pad-margin { stroke: #f0d3cd; }
+.pad-hl path { opacity: 0.45; }
+.pad-wet path { pointer-events: none; }
+
+.pad-text {
+  position: absolute; font: inherit; font-size: 15px; line-height: 1.35;
+  background: transparent; border: 1px dashed transparent; border-radius: 4px;
+  padding: 2px 4px; resize: vertical; min-height: 1.8em; overflow: hidden;
+}
+.pad-text:hover { border-color: var(--line); }
+.pad-text:focus { border-color: var(--faint); border-style: solid; background: rgba(255, 255, 255, 0.85); outline: none; }
+
+.pad-foot { display: flex; gap: 10px; align-items: center; }
+
+.pad-list { display: flex; flex-direction: column; }
+.pad-row { display: flex; gap: 14px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); }
+.pad-row button.link { font-size: 15px; }
+.pad-row .muted { margin-left: auto; }
+.pad-card { display: flex; flex-direction: column; gap: 14px; }
+.pad-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pad-head h3 { margin: 0; }
+.pad-head > button:last-child { margin-left: auto; }
+.pad-title { flex: 1 1 16em; font-size: 15px; font-weight: 500; }
+.field-notes-written { font-size: 15px; font-weight: 500; margin: 30px 0 6px; }
