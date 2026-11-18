@@ -19,13 +19,17 @@ import type { FormKind, Layout } from '../lib/templates/types'
 import type { Project } from '../lib/types'
 
 /** Fill in a form and download it on the firm's template. Most fields fill themselves in. */
-export default function IssueForm({ kind }: { kind: FormKind }) {
+export default function IssueForm({ kind, prefill }: {
+  kind: FormKind
+  /** Fields filled in before anybody types — a report written from the day's observations. */
+  prefill?: Record<string, string>
+}) {
   return isConfigured
-    ? <SignedIn kind={kind} />
+    ? <SignedIn kind={kind} prefill={prefill} />
     : <Form kind={kind} brand={PLACEHOLDER_BRAND} layouts={{ general: defaultLayout('general'), [kind]: defaultLayout(kind) }} project={null} signer="" />
 }
 
-function SignedIn({ kind }: { kind: FormKind }) {
+function SignedIn({ kind, prefill }: { kind: FormKind; prefill?: Record<string, string> }) {
   const { firm } = useFirm()
   const { current } = useProject()
   const { session } = useAuth()
@@ -43,13 +47,15 @@ function SignedIn({ kind }: { kind: FormKind }) {
   return (
     <>
       {current && <ProjectFolder project={current} compact />}
-      <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts} project={current} signer={signer} />
+      <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts}
+        project={current} signer={signer} prefill={prefill} />
     </>
   )
 }
 
-function Form({ kind, brand, layouts, project, signer }: {
-  kind: FormKind; brand: Brand; layouts: Record<string, Layout>; project: Project | null; signer: string
+function Form({ kind, brand, layouts, project, signer, prefill }: {
+  kind: FormKind; brand: Brand; layouts: Record<string, Layout>; project: Project | null
+  signer: string; prefill?: Record<string, string>
 }) {
   const layout = layouts[kind]
   const fields = useMemo(() => inputFieldsFor(kind, layout), [kind, layout])
@@ -59,7 +65,7 @@ function Form({ kind, brand, layouts, project, signer }: {
 
   const [log, setLog] = useState<IssuedForm[]>([])
   const [specs, setSpecs] = useState<{ number: string; title: string | null }[]>([])
-  const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const [overrides, setOverrides] = useState<Record<string, string>>(prefill ?? {})
   const [attachment, setAttachment] = useState<ArrayBuffer | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)

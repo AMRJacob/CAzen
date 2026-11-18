@@ -8,7 +8,8 @@ import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
 import { listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind } from '../lib/pads'
 import {
-  editObservation, listObservations, listTypes, nameOf, onDay, punchList, STATUS_LABELS, watchObservations,
+  asReport, editObservation, listObservations, listTypes, nameOf, onDay, photosOf, punchList,
+  STATUS_LABELS, watchObservations,
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
@@ -251,6 +252,8 @@ function Observations() {
   const [editing, setEditing] = useState<Observation | null>(null)
   const [view, setView] = useState<'all' | 'day' | 'punch'>('all')
   const [day, setDay] = useState(today())
+  /** The day whose observations are being written up, while that is happening. */
+  const [reporting, setReporting] = useState<string | null>(null)
 
   const projectId = current?.id
   const load = useCallback(() => {
@@ -282,6 +285,39 @@ function Observations() {
   const days = useMemo(
     () => [...new Set((all ?? []).map((o) => o.observed_on))].sort().reverse(),
     [all])
+
+  if (reporting) {
+    const items = onDay(all ?? [], reporting)
+    return (
+      <section>
+        <div className="page-head">
+          <div>
+            <PageTitle>Field report</PageTitle>
+            <p className="lead">
+              Written from the {items.length} {items.length === 1 ? 'observation' : 'observations'} of{' '}
+              {usDate(reporting)}. Edit it as you like — the observations themselves are untouched.
+            </p>
+          </div>
+          <button onClick={() => setReporting(null)}>Back to the observations</button>
+        </div>
+        <IssueForm key={reporting} kind="field_report" prefill={{
+          'fr.date': usDateOf(new Date(`${reporting}T12:00:00`)),
+          'fr.observations': asReport(items, types),
+        }} />
+        {photosOf(items).length > 0 && current && (
+          <div className="card">
+            <h3>The photographs from that day</h3>
+            <p className="muted small">
+              {photosOf(items).length} taken with the observations above. They are in the project's
+              files under Field Reports.
+            </p>
+            <Photos project={current} paths={photosOf(items)} about="Field report"
+              editable={false} onChange={() => {}} onTrouble={setError} />
+          </div>
+        )}
+      </section>
+    )
+  }
 
   if (current && (writing || editing)) {
     return (
@@ -336,6 +372,11 @@ function Observations() {
           <span className="muted small">
             {shown.length} {shown.length === 1 ? 'observation' : 'observations'} — what a field report of that day is made of.
           </span>
+          {shown.length > 0 && (
+            <button className="primary-lite" onClick={() => setReporting(day)}>
+              Write the field report
+            </button>
+          )}
         </div>
       )}
       {view === 'punch' && (

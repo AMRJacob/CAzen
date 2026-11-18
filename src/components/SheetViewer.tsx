@@ -21,6 +21,7 @@ import type { SheetRevision } from '../lib/types'
 const revLabel = (r: SheetRevision) =>
   r.revision_label || r.issuances?.number || (r.revision_index === 0 ? 'Original' : `Rev ${r.revision_index}`)
 import { MarkupLayer, type StylusReading } from './MarkupLayer'
+import { ObservationPins } from './ObservationPins'
 
 /** A sheet the viewer can show: the current revision of a sheet, or a specific older one. */
 export interface ViewSheet {
@@ -97,6 +98,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [me, setMe] = useState<string | null>(null)
   /** Why markups aren't available here, when they aren't. */
   const [markupsOff, setMarkupsOff] = useState<string | null>(null)
+  /** True while the next tap on the sheet places an observation where it was seen. */
+  const [pinning, setPinning] = useState(false)
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
@@ -465,6 +468,11 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
             disabled={!sheet.sheetId} title={sheet.sheetId ? 'Draw, note and measure on this sheet' : 'Open this sheet from the register to mark it up'}>
             {tool !== null ? 'Done' : 'Mark up'}
           </button>
+          <button className={pinning ? 'on' : ''} onClick={() => { setPinning(!pinning); setTool(null) }}
+            disabled={!sheet.sheetId}
+            title="Put an observation where it was seen on this sheet">
+            {pinning ? 'Tap the spot' : 'Observe'}
+          </button>
           <span className="sv-sep" />
           <button className="icon" disabled={index <= 0} onClick={() => stepTo(index - 1)} aria-label="Previous sheet">‹</button>
           <button className="icon" disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)} aria-label="Next sheet">›</button>
@@ -714,6 +722,11 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 <span className="sv-tag">{l.target_number}</span>
               </span>
             ))}
+            {sheet.sheetId && (
+              <ObservationPins
+                project={project} sheetId={sheet.sheetId} revisionId={sheet.revisionId}
+                pinning={pinning} onDonePinning={() => setPinning(false)} onTrouble={setError} />
+            )}
             {sheet.sheetId && (
               <MarkupLayer
                 markups={markups} tool={settingScale ? 'dimension' : tool} colour={colour}

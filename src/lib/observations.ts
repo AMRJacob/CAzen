@@ -222,3 +222,40 @@ export function watchObservations(projectId: string, on: {
     .subscribe()
   return () => { void db().removeChannel(channel) }
 }
+
+/**
+ * A day's observations, written the way a field report writes them.
+ *
+ * Grouped under the type they were raised as, numbered the way the template's outline is
+ * numbered, so what comes out reads as a field report rather than as a database export.
+ * Nothing is invented: it is what was written on site, in the order it was written.
+ */
+export function asReport(items: Observation[], types: ObservationType[]): string {
+  if (!items.length) return ''
+  const order = new Map(types.map((t, i) => [t.id, i]))
+  const groups = new Map<string, Observation[]>()
+  for (const o of items) {
+    const key = o.type_id ?? ''
+    groups.set(key, [...(groups.get(key) ?? []), o])
+  }
+  const keys = [...groups.keys()].sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99))
+
+  const lines: string[] = []
+  keys.forEach((key, i) => {
+    const type = types.find((t) => t.id === key)
+    lines.push(`${i + 1}. ${type?.name ?? 'Observations'}`)
+    groups.get(key)!.forEach((o, j) => {
+      const where = [o.area, o.trade].filter(Boolean).join(', ')
+      lines.push(`  ${String.fromCharCode(97 + Math.min(j, 25))}. ${o.title}${where ? ` (${where})` : ''}`)
+      if (o.detail) {
+        for (const line of o.detail.split('\n').filter((x) => x.trim())) {
+          lines.push(`    1. ${line.trim()}`)
+        }
+      }
+    })
+  })
+  return lines.join('\n')
+}
+
+/** Every photograph taken on a day, in the order the observations were raised. */
+export const photosOf = (items: Observation[]): string[] => items.flatMap((o) => o.photos)

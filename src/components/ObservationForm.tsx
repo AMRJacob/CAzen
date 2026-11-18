@@ -6,7 +6,7 @@ import {
   buildObservation, editObservation, saveObservation, STATUS_LABELS,
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
-import type { Project } from '../lib/types'
+import type { ProjectStore } from '../lib/files'
 
 /**
  * Writing an observation down.
@@ -16,7 +16,7 @@ import type { Project } from '../lib/types'
  * matters and out of the way when it doesn't.
  */
 export function ObservationForm({ project, types, existing, pin, onSaved, onCancel, onTrouble }: {
-  project: Project
+  project: ProjectStore
   types: ObservationType[]
   existing?: Observation
   /** Where on a sheet it was raised, when it was raised from one. */
