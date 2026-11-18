@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
 import { getDocument } from './pdfjs'
-import { pageBody, readPageText, wordsInRegion, type PageText, type Region } from './pageText'
+import { pageBody, readPageText, textInRegion, wordsInRegion, type PageText, type Region } from './pageText'
 
 /**
  * Cutting a project manual into its sections.
@@ -37,6 +37,10 @@ export interface ManualPage {
   found: string | null
   /** True when the page says "SECTION <number>" outright, which starts a section for certain. */
   declares: boolean
+  /** Which page of its own section this is, as printed in the footer: "09 91 00 - 3" is 3. */
+  at: number | null
+  /** How many pages the section runs to, where the footer says so: "Page 3 of 7" is 7. */
+  of: number | null
 }
 
 export interface ManualSection {
@@ -46,10 +50,67 @@ export interface ManualSection {
   pages: number[]
   /** Nothing on these pages said which section they are; they followed the one before. */
   guessed: boolean
+  /** What the footers say is wrong with this run of pages. Empty when it reads straight through. */
+  trouble: SectionTrouble[]
 }
+
+export type SectionTrouble =
+  | { kind: 'missing'; pages: number[] }        // page numbers the footers skip
+  | { kind: 'repeated'; pages: number[] }       // the same footer page number twice
+  | { kind: 'short'; have: number; says: number } // the footer says "of N" and there aren't N
+  | { kind: 'late-start'; at: number }          // the section begins at page 3, not page 1
+  | { kind: 'split' }                           // this section number appears more than once in the book
+  | { kind: 'no-heading' }                      // no "SECTION NN NN NN" anywhere in the run
 
 /** "099100" → "09 91 00", the way it is written everywhere else. */
 const tidy = (a: string, b: string, c: string) => `${a} ${b} ${c}`
+
+/**
+ * What a running footer says: which section, which page of it, and how many there are.
+ *
+ * A spec footer carries the section number and the page within that section — "09 91 00 - 3",
+ * "PAINTING 09 91 00 Page 3 of 7". The page number is the part worth having: it is the only
+ * thing in the file that says whether a section arrived whole, because a page dropped out of the
+ * middle leaves no other trace.
+ */
+export function readFooter(line: string): { number: string | null; at: number | null; of: number | null; title: string | null } {
+  const text = line.toUpperCase().replace(/\s+/g, ' ').trim()
+  SECTION.lastIndex = 0
+  let m: RegExpExecArray | null
+  let found: { value: string; end: number } | null = null
+  while ((m = SECTION.exec(text))) {
+    if (!DIVISIONS.has(m[1])) continue
+    found = { value: tidy(m[1], m[2], m[3]), end: m.index + m[0].length }
+    break
+  }
+  if (!found) return { number: null, at: null, of: null, title: null }
+
+  // Most offices print the section's name beside its number in the footer. It is worth having
+  // twice: as a title when the heading page gives none, and as a check that a run of pages
+  // really is one section rather than two that happen to be numbered alike.
+  const head = text.slice(0, found.end - found.value.length)
+  const title = clean(head.replace(/[\s\-–—:.]+$/, '')) || null
+
+  // The page number comes after the section number, with a dash, a space or the word PAGE
+  // between them. "of 7" or "/7" after it is how long the section runs.
+  const after = text.slice(found.end)
+  const page = /^[\s\-–—:.]*(?:PAGE\s*)?(\d{1,3})\b(?:\s*(?:OF|\/)\s*(\d{1,3}))?/.exec(after)
+  if (page) return { number: found.value, at: Number(page[1]), of: page[2] ? Number(page[2]) : null, title }
+
+  // Some offices put the page number first: "3  09 91 00".
+  const before = /(\d{1,3})\s*[-–—:.]?\s*$/.exec(head)
+  return { number: found.value, at: before ? Number(before[1]) : null, of: null, title }
+}
+
+const TOP: Region = { x: 0, y: 0, w: 1, h: 0.14 }
+const BOTTOM: Region = { x: 0, y: 0.86, w: 1, h: 0.14 }
+
+/** The running footer of a page, or its header where the office puts it there instead. */
+function footerOn(text: PageText): { number: string | null; at: number | null; of: number | null } {
+  const bottom = readFooter(textInRegion(text, BOTTOM))
+  if (bottom.number) return bottom
+  return readFooter(textInRegion(text, TOP))
+}
 
 /**
  * Every section number printed on a page, with where it sat and how big it was.
@@ -174,7 +235,7 @@ export async function readManual(
   const pages: ManualPage[] = []
   for (let i = 0; i < reader.numPages; i++) {
     const text = await readPageText(await reader.getPage(i + 1))
-    pages.push({ index: i, text, found: null, declares: false })
+    pages.push({ index: i, text, found: null, declares: false, at: null, of: null })
     onProgress?.(i + 1, reader.numPages)
   }
   await reader.loadingTask.destroy()
@@ -189,15 +250,95 @@ export async function readManual(
  * rather than a re-upload.
  */
 export function detectSections(pages: ManualPage[], box?: Region | null): { pages: ManualPage[]; sections: ManualSection[] } {
-  const read = pages.map((p) => {
-    if (box) {
-      const found = sectionInRegion(p.text, box)
-      return { ...p, found, declares: false }
-    }
-    const { found, declares } = sectionOnPage(p.text)
-    return { ...p, found, declares }
+  const read: ManualPage[] = pages.map((p) => {
+    // The footer is read either way: it carries the page number, which is the only thing in the
+    // file that says whether a section arrived whole.
+    const footer = box ? readFooter(textInRegion(p.text, box)) : footerOn(p.text)
+    const heading = sectionOnPage(p.text)
+    const found = box
+      ? footer.number ?? sectionInRegion(p.text, box)
+      // A heading declares a section outright; otherwise the running footer, then the weighing.
+      : heading.declares ? heading.found : footer.number ?? heading.found
+    return { ...p, found, declares: !box && heading.declares, at: footer.at, of: footer.of }
   })
-  return { pages: read, sections: sectionsFrom(read) }
+  const sections = sectionsFrom(read)
+  return { pages: read, sections: check(sections, read) }
+}
+
+/**
+ * What the footers say about each run of pages.
+ *
+ * A manual is printed section by section and then bound, which is where pages go missing and
+ * sections end up out of order. The footers are the record of what should be there: numbered
+ * from 1 within each section, often with "of N" on the end, usually beside the section's own
+ * name. Reading them back is the only way to know a section arrived whole, so it is done here
+ * rather than left for somebody to notice on site.
+ */
+function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] {
+  const runs = new Map<string, number>()
+  for (const s of sections) runs.set(s.number, (runs.get(s.number) ?? 0) + 1)
+
+  return sections.map((s) => {
+    const trouble: SectionTrouble[] = []
+    if (s.number === FRONT) return { ...s, trouble }
+
+    const numbered = s.pages.map((i) => pages[i]?.at).filter((n): n is number => typeof n === 'number')
+    if (numbered.length) {
+      const seen = new Set<number>()
+      const repeated: number[] = []
+      for (const n of numbered) {
+        if (seen.has(n)) repeated.push(n)
+        seen.add(n)
+      }
+      const first = Math.min(...numbered)
+      const last = Math.max(...numbered)
+      const missing: number[] = []
+      for (let n = first; n <= last; n++) if (!seen.has(n)) missing.push(n)
+
+      if (missing.length) trouble.push({ kind: 'missing', pages: missing })
+      if (repeated.length) trouble.push({ kind: 'repeated', pages: [...new Set(repeated)] })
+      if (first > 1) trouble.push({ kind: 'late-start', at: first })
+
+      const says = s.pages.map((i) => pages[i]?.of).find((n): n is number => typeof n === 'number')
+      if (says && says > s.pages.length) trouble.push({ kind: 'short', have: s.pages.length, says })
+    }
+
+    if ((runs.get(s.number) ?? 0) > 1) trouble.push({ kind: 'split' })
+    if (!s.pages.some((i) => pages[i]?.declares)) trouble.push({ kind: 'no-heading' })
+    return { ...s, trouble }
+  })
+}
+
+/** What a run of pages reads like when something is wrong with it, in a line. */
+export function troubleText(t: SectionTrouble): string {
+  switch (t.kind) {
+    case 'missing':
+      return `${t.pages.length === 1 ? 'page' : 'pages'} ${t.pages.join(', ')} missing`
+    case 'repeated':
+      return `${t.pages.length === 1 ? 'page' : 'pages'} ${t.pages.join(', ')} twice`
+    case 'short':
+      return `footer says ${t.says} pages, ${t.have} here`
+    case 'late-start':
+      return `starts at page ${t.at}`
+    case 'split':
+      return 'appears more than once in the book'
+    case 'no-heading':
+      return 'no section heading'
+  }
+}
+
+/**
+ * The sections in the order their numbers put them, where that isn't the order they arrived in.
+ *
+ * A manual is assembled from sections printed separately, so one landing out of order is normal
+ * and is nobody's fault. Returns null when the book is already in order, so the offer only
+ * appears when there is something to accept.
+ */
+export function inSectionOrder<T extends { number: string }>(sections: T[]): T[] | null {
+  const key = (s: T) => sortKeyOf(s.number)
+  const sorted = [...sections].sort((a, b) => key(a).localeCompare(key(b), undefined, { numeric: true }))
+  const same = sorted.every((s, i) => s === sections[i])
+  return same ? null : sorted
 }
 
 /** Group pages into sections: a run of pages carrying one number, plus whatever follows it. */
@@ -208,7 +349,12 @@ export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
   for (const p of pages) {
     const starts = p.found && (!current || p.found !== current.number)
     if (starts) {
-      current = { number: p.found!, title: titleOnPage(p.text, p.found!), pages: [p.index], guessed: false }
+      current = {
+        number: p.found!,
+        // The heading page names it; failing that, the name printed beside the number in the footer.
+        title: titleOnPage(p.text, p.found!) || readFooter(textInRegion(p.text, BOTTOM)).title || '',
+        pages: [p.index], guessed: false, trouble: [],
+      }
       out.push(current)
       continue
     }
@@ -216,7 +362,7 @@ export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
       // Pages before the first section number: the cover, the table of contents, the bid forms.
       const front = out.find((s) => s.number === FRONT)
       if (front) front.pages.push(p.index)
-      else out.unshift({ number: FRONT, title: 'Front matter', pages: [p.index], guessed: true })
+      else out.unshift({ number: FRONT, title: 'Front matter', pages: [p.index], guessed: true, trouble: [] })
       continue
     }
     current.pages.push(p.index)

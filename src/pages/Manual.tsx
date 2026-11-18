@@ -13,7 +13,7 @@ import {
   byDivision, listManual, listSectionRevisions, renameSection, saveManual, searchManual,
   type CurrentSpec, type SectionToSave, type SpecHit, type SpecRevision,
 } from '../lib/manual'
-import { cutSection, bodyOf, detectSections, readManual, sectionInRegion, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
+import { cutSection, bodyOf, detectSections, inSectionOrder, readManual, sectionInRegion, troubleText, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
 import { RegionPicker } from '../components/RegionPicker'
 import { PREFS, usePref } from '../lib/prefs'
 import type { Region } from '../lib/pdf/pageText'
@@ -417,12 +417,19 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     const page = pages[at]
     const after: Draft = {
       number: page?.found ?? '', title: '', pages: d.pages.slice(cut), guessed: !page?.found,
-      include: d.include, touched: true,
+      trouble: [], include: d.include, touched: true,
     }
     const out = ds.slice()
     out.splice(i, 1, before, after)
     return out
   })
+
+  /** The sections sorted by number, when the book didn't arrive that way. */
+  const outOfOrder = useMemo(() => inSectionOrder(drafts), [drafts])
+  const putInOrder = () => setDrafts((ds) => inSectionOrder(ds) ?? ds)
+
+  /** How many sections the footers say are incomplete, which is the headline of the review. */
+  const troubled = useMemo(() => drafts.filter((d) => d.include && d.trouble.length), [drafts])
 
   // How much of the manual the box actually reads, which is the thing worth knowing about it.
   const numbered = useMemo(
@@ -515,12 +522,17 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                 ? <>read from the box you drew — <strong>{numbered}</strong> of {pages.length} pages carry a number there.</>
                 : <>read from wherever the number appears.</>}
               {' '}
-              {drafts.some((d) => d.guessed) && (
-                <span className="muted small">Sections marked “check” ran on past a page that didn’t say which section it was.</span>
-              )}
+              {troubled.length > 0
+                ? <span className="bad-text">{troubled.length} {troubled.length === 1 ? 'section doesn’t' : 'sections don’t'} read straight through — see the Pages column.</span>
+                : <span className="muted small">Every section’s footers run 1 to the end with nothing skipped.</span>}
             </div>
             <div className="tb-bar-actions">
-              <button className={box ? '' : 'primary'} onClick={() => setPicking(pages.length > 1 ? 1 : 0)}>
+              {outOfOrder && (
+                <button className="primary" onClick={putInOrder} title="The sections are not in section-number order in this PDF">
+                  Put in section order
+                </button>
+              )}
+              <button className={box || outOfOrder ? '' : 'primary'} onClick={() => setPicking(pages.length > 1 ? 1 : 0)}>
                 {box ? 'Move the number box' : 'Show where the number is'}
               </button>
               {box && <button onClick={() => recut(null)}>Read it automatically</button>}
@@ -547,10 +559,15 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                       <input type="checkbox" checked={d.include} aria-label={`Include ${n || 'this section'}`}
                         onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} />
                     </td>
-                    <td className="small nowrap">
-                      {d.pages[0] + 1}–{d.pages[d.pages.length - 1] + 1}
-                      <span className="muted"> ({d.pages.length})</span>
-                      {d.guessed && <span className="unsure-note">check</span>}
+                    <td className="small">
+                      <span className="nowrap">
+                        {d.pages[0] + 1}–{d.pages[d.pages.length - 1] + 1}
+                        <span className="muted"> ({d.pages.length})</span>
+                        {d.guessed && <span className="unsure-note">check</span>}
+                      </span>
+                      {d.trouble.map((t, k) => (
+                        <span key={k} className="bad-text manual-trouble">{troubleText(t)}</span>
+                      ))}
                     </td>
                     <td className="thumb-cell">
                       {first
