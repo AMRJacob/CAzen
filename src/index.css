@@ -1304,3 +1304,48 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .upload-cover-note { grid-column: 1 / -1; line-height: 1.5; }
 .cover-cell { text-align: center; }
 @media (max-width: 899px) { .desk-only { display: none; } }
+
+
+/* ---------- Applications for payment ---------- */
+.pay-contracts { display: flex; gap: 8px; margin-bottom: 10px; }
+.pay-tabs { flex-wrap: wrap; }
+.pay-tabs .tag { margin-left: 5px; }
+
+.pay-summary { display: flex; flex-direction: column; gap: 12px; }
+.pay-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+.pay-figure { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pay-figure-label { font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.pay-figure-value { font-size: 22px; font-variant-numeric: tabular-nums; }
+
+.pay-bar { display: block; height: 8px; border-radius: 4px; background: var(--wash); overflow: hidden; }
+.pay-bar > span { display: block; height: 100%; background: var(--moss); }
+.pay-bar.small { width: 64px; height: 6px; display: inline-block; vertical-align: middle; }
+
+.pay-trades { width: 100%; border-collapse: collapse; }
+.pay-trades th, .pay-trades td { padding: 6px 8px; border-top: 1px solid var(--line); }
+.pay-trades th { text-align: left; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.pay-trades .right, .pay-703 .right, .pay-702-lines .right { text-align: right; }
+.pay-item { color: var(--muted); margin-right: 8px; font-size: 12px; }
+.pay-progress { white-space: nowrap; }
+.pay-progress .muted { margin-left: 6px; }
+.pay-schedule-slot { font-size: 13px; line-height: 1.5; }
+
+.pay-702 { max-width: 760px; }
+.pay-702-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.pay-702-head h3 { margin: 0; }
+.pay-702-head button { margin-left: auto; }
+.pay-702-lines { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.pay-702-lines td { padding: 5px 8px; border-top: 1px solid var(--line); }
+.pay-702-n { width: 1%; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pay-702-due td { background: var(--moss-soft); }
+
+.pay-703-wrap { overflow-x: auto; }
+.pay-703 { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay-703 th, .pay-703 td { padding: 4px 7px; border: 1px solid var(--line); }
+.pay-703 thead th { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); background: var(--panel); }
+.pay-703-sub th { font-weight: 400; }
+.pay-703-heading td { background: var(--wash); font-weight: 500; }
+.pay-703-co td { background: #fbf6ea; }
+.pay-703-total td { background: var(--panel); border-top: 2px solid var(--ink); }
+.pay-703 input.cell { width: 96px; padding: 3px 6px; font-size: 14px; }
+.pay-703 input.cell.right { text-align: right; }

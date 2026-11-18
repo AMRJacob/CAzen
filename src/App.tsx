@@ -10,6 +10,7 @@ import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import Documents from './pages/Documents'
 import Manual from './pages/Manual'
+import PayApps from './pages/PayApps'
 import Submittals from './pages/Submittals'
 import CaLogs from './pages/CaLogs'
 import Contracts from './pages/Contracts'
@@ -24,6 +25,7 @@ const nav = [
   { to: '/manual', label: 'Project manual' },
   { to: '/submittals', label: 'Submittals' },
   { to: '/ca-logs', label: 'Change documents' },
+  { to: '/pay', label: 'Pay applications' },
   { to: '/contracts', label: 'Contracts' },
 ]
 
@@ -93,6 +95,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <Route path="/manual" element={offline ? <p className="muted">The project manual needs the backend.</p> : <Manual />} />
           <Route path="/submittals" element={<Submittals />} />
           <Route path="/ca-logs" element={<CaLogs />} />
+          <Route path="/pay" element={offline ? <p className="muted">Pay applications need the backend.</p> : <PayApps />} />
           <Route path="/contracts" element={<Contracts />} />
           {!offline && <Route path="/settings" element={<Settings />} />}
           {!offline && <Route path="/templates" element={<Templates />} />}
