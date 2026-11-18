@@ -9,7 +9,7 @@ import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
-  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameSheet, saveIssuance, searchSheets,
+  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
@@ -460,6 +460,9 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
   const [rows, setRows] = useState<IssuanceRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ id: string; kind: IssuanceKind; number: string; title: string; issuedOn: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const reload = useCallback(() => { listIssuances(project.id).then(setRows).catch((e) => setError(message(e))) }, [project.id])
   useEffect(() => { reload() }, [reload])
@@ -474,7 +477,11 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
         <tbody>
           {rows.map((r) => (
             <Fragment key={r.id}>
-              <tr>
+              <tr className={editing?.id === r.id ? 'editing' : undefined}
+                onContextMenu={(e) => {
+                  e.preventDefault(); setProblem(null)
+                  setEditing({ id: r.id, kind: r.kind, number: r.number ?? '', title: r.title ?? '', issuedOn: r.issued_on.slice(0, 10) })
+                }}>
                 <td className="nowrap">{usDate(r.issued_on)}</td>
                 <td className="nowrap">{issuanceText(r.kind, r.number)}{r.title ? ` · ${r.title}` : ''}</td>
                 <td className="small"><IssuanceSheets sheets={r.sheets} order={order} /></td>
@@ -487,8 +494,49 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                     gather={() => listIssuanceSheets(r.id)}
                   />
                 </td>
-                <td className="right">{isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button>}</td>
+                <td className="right nowrap">
+                  {editing?.id !== r.id && (
+                    <button className="link" onClick={() => {
+                      setProblem(null)
+                      setEditing({ id: r.id, kind: r.kind, number: r.number ?? '', title: r.title ?? '', issuedOn: r.issued_on.slice(0, 10) })
+                    }}>Rename</button>
+                  )}
+                  {isAdmin && <> <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button></>}
+                </td>
               </tr>
+              {editing?.id === r.id && (
+                <tr className="confirm-row"><td colSpan={5}>
+                  <div className="sheet-edit">
+                    <label className="f-kind">Issued as
+                      <select value={editing.kind} onChange={(e) => setEditing({ ...editing, kind: e.target.value as IssuanceKind })}>
+                        {(Object.keys(ISSUANCE_LABELS) as IssuanceKind[]).map((k) => <option key={k} value={k}>{ISSUANCE_LABELS[k]}</option>)}
+                      </select>
+                    </label>
+                    <label className="f-number">Number
+                      <input value={editing.number} placeholder="1" aria-label="Set number"
+                        onChange={(e) => setEditing({ ...editing, number: e.target.value })} />
+                    </label>
+                    <label className="f-title">Title (optional)
+                      <input value={editing.title} aria-label="Set title"
+                        onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
+                    </label>
+                    <label className="f-date">Issued
+                      <input type="date" value={editing.issuedOn} aria-label="Issued on"
+                        onChange={(e) => setEditing({ ...editing, issuedOn: e.target.value })} />
+                    </label>
+                    <div className="sheet-edit-go">
+                      <button className="primary-lite" disabled={saving} onClick={async () => {
+                        setSaving(true); setProblem(null)
+                        try { await renameIssuance(editing.id, editing); setEditing(null); reload(); onChanged() }
+                        catch (e) { setProblem(message(e)) }
+                        finally { setSaving(false) }
+                      }}>{saving ? 'Saving…' : 'Save'}</button>
+                      <button disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
+                    </div>
+                  </div>
+                  {problem && <p className="muted small"><span className="bad-text">{problem}</span></p>}
+                </td></tr>
+              )}
               {deleting === r.id && (
                 <tr className="confirm-row"><td colSpan={5}>
                   <ConfirmDelete

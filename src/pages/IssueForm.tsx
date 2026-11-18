@@ -11,7 +11,8 @@ import { listIssued, nextNumber, openIssued, saveIssued, type IssuedForm } from 
 import { DIVISION_OPTIONS, divisionFor, nextInSection, normaliseSection, sectionOf } from '../lib/csi'
 import { db } from '../lib/supabase'
 import { defaultLayout } from '../lib/templates/defaults'
-import { FORM_LABELS, firmValues, inputFieldsFor, usDate, type FieldDef } from '../lib/templates/fields'
+import { FORM_LABELS, firmValues, inputFieldsFor, outlineOf, usDate, type FieldDef } from '../lib/templates/fields'
+import { momentOf, weatherAt } from '../lib/weather'
 import { prependTo, renderForm } from '../lib/templates/render'
 import { loadLayouts } from '../lib/templates/store'
 import type { FormKind, Layout } from '../lib/templates/types'
@@ -64,6 +65,7 @@ function Form({ kind, brand, layouts, project, signer }: {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ bytes: Uint8Array; name: string } | null>(null)
+  const [weather, setWeather] = useState<string | null>(null)
 
   const loadLog = useCallback(async () => {
     if (project) setLog(await listIssued(project.id, kind).catch(() => []))
@@ -95,6 +97,12 @@ function Form({ kind, brand, layouts, project, signer }: {
         a[f.key] = section ? nextInSection(section, log.map((l) => l.number ?? '')) : f.csi === 'section' ? '' : nextNumber(kind, prev)
       }
       else if (f.auto === 'carry' && last[f.key]) a[f.key] = last[f.key]
+      else if (f.auto === 'outline') {
+        // Last form's own headings, emptied out; the firm's starter when there isn't one yet.
+        const carried = last[f.key] ? outlineOf(last[f.key]) : ''
+        if (carried) a[f.key] = carried
+        else if (f.starter) a[f.key] = f.starter
+      }
       else if (f.auto === 'contractor') a[f.key] = project?.contractor_name ?? ''
       if (f.choices && !a[f.key]) {
         const el = layout.elements.find((e) => e.type === 'choices' && e.field === f.key)
@@ -104,12 +112,27 @@ function Form({ kind, brand, layouts, project, signer }: {
     return a
   }, [project, signer, log, fields, kind, layout])
 
+  // What it was like at the site, once there's a date and time to ask about. Nothing waits on
+  // this: it fills in behind you, and a blank just means it's yours to type.
+  const frDate = overrides['fr.date'] ?? auto['fr.date'] ?? ''
+  const frTime = overrides['fr.time'] ?? auto['fr.time'] ?? ''
+  const lat = project?.latitude, lon = project?.longitude
+  useEffect(() => {
+    if (kind !== 'field_report' || lat == null || lon == null) { setWeather(null); return }
+    const when = momentOf(frDate, frTime)
+    if (!when) { setWeather(null); return }
+    const stop = new AbortController()
+    weatherAt(lat, lon, when, stop.signal).then(setWeather).catch(() => setWeather(null))
+    return () => stop.abort()
+  }, [kind, lat, lon, frDate, frTime])
+
   // The CSI division follows the submittal/section number as it's typed.
   const sectionField = fields.find((f) => f.csi === 'section')
   const liveAuto: Record<string, string> = { ...auto }
   for (const f of fields) {
     if (f.auto === 'division' && sectionField) liveAuto[f.key] = divisionFor(overrides[sectionField.key] ?? auto[sectionField.key] ?? '')
   }
+  if (weather) liveAuto['fr.weather'] = weather
   const value = (k: string) => overrides[k] ?? liveAuto[k] ?? ''
 
   /** As-you-type suggestions for CSI fields. */

@@ -199,6 +199,27 @@ export interface IssuanceRow {
   sheets: { number: string; revision_label: string | null }[]
 }
 
+/**
+ * Correct how a set or revision round is labelled — the kind, its number, a title, the date it
+ * went out. The sheets it brought in are untouched; only what the register calls it changes.
+ */
+export async function renameIssuance(
+  issuanceId: string,
+  next: { kind: IssuanceKind; number: string; title: string; issuedOn: string },
+): Promise<void> {
+  if (!next.issuedOn) throw new Error('A set needs an issue date.')
+  const { error } = await db()
+    .from('issuances')
+    .update({
+      kind: next.kind,
+      number: next.number.trim() || null,
+      title: next.title.trim() || null,
+      issued_on: next.issuedOn,
+    })
+    .eq('id', issuanceId)
+  if (error) throw error
+}
+
 /** Every set or revision round uploaded, newest first, with the sheets it brought in. */
 export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
   const { data, error } = await db()

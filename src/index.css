@@ -733,6 +733,14 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 .sheet-edit .f-number { flex: 0 1 150px; }
 .sheet-edit .f-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
 .sheet-edit .f-title { flex: 1 1 260px; }
+.sheet-edit .f-kind { flex: 0 1 170px; }
+.sheet-edit .f-date { flex: 0 1 170px; }
+.sheet-edit select {
+  min-width: 0; box-sizing: border-box; padding: 8px 10px;
+  font: inherit; font-size: 16px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--paper);
+}
+.sheet-edit select:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
 .sheet-edit-go { display: flex; gap: 8px; flex: 0 0 auto; }
 .sheet-edit-go button { padding: 8px 14px; }
 .set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: 0 0 10px; }

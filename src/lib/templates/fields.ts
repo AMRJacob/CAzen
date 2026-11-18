@@ -8,10 +8,14 @@ export interface FieldDef {
   multiline?: boolean
   /** Short guidance shown under the input when filling in the form. */
   hint?: string
+  /** What a blank field starts as on a new form: a heading outline to fill in rather than an
+   *  empty box. With auto: 'outline' the last form's own headings are used instead, when there
+   *  is one to take them from. Always editable. */
+  starter?: string
   /** How CAzen fills it in automatically (the person can always type over it):
    *  today = today's date · user = the signed-in person's name · next = next number in sequence
    *  carry = same as the last form of this type on the project · contractor = the project's contractor */
-  auto?: 'today' | 'user' | 'next' | 'carry' | 'contractor' | 'division'
+  auto?: 'today' | 'user' | 'next' | 'carry' | 'contractor' | 'division' | 'outline'
   /** Offer CSI MasterFormat suggestions while typing. */
   csi?: 'division' | 'section'
   /** Choice fields: the value is one of these keys. Labels are editable per template. */
@@ -97,9 +101,15 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'rfi.answered_by', auto: 'user', label: 'Answered by', sample: 'J. Smith, AIA' },
   ],
   pr: [
-    { key: 'pr.number', auto: 'next', label: 'PR no.', sample: 'PR-002' },
+    { key: 'pr.number', auto: 'next', label: 'Proposal number', sample: '001' },
+    { key: 'pr.to', auto: 'carry', label: 'To (name, company, address)', multiline: true, sample: 'Pat Builder\nSample Builders, Inc.\n100 Industrial Drive\nLittle Rock, AR 72202' },
+    { key: 'pr.from', auto: 'user', label: 'From', sample: 'J. Smith' },
+    { key: 'pr.contract_for', auto: 'carry', label: 'Contract for', sample: 'New Construction' },
     { key: 'pr.title', label: 'Subject', sample: 'Add card reader at Vestibule 101' },
-    { key: 'pr.description', label: 'Description of proposed change', sample: 'Provide card reader and electrified hardware at Door 101A as indicated on attached sketches.', multiline: true },
+    { key: 'pr.description', auto: 'outline', label: 'Changes to drawings', multiline: true,
+      hint: 'Grouped by discipline, then by sheet. Two spaces indent a level.',
+      sample: 'CIVIL\n  C-101 - SITE PLAN\n    - See Revision #1 Dated 03/23/26 on attached sheet for information\nARCHITECTURE\n  A-501 - SITE DETAILS\n    - See Revision #4 Dated 04/22/26 on attached sheet for information',
+      starter: 'CIVIL\n  \nLANDSCAPE\n  \nARCHITECTURE\n  \nSTRUCTURAL\n  \nMECHANICAL / ELECTRICAL / PLUMBING\n  ' },
     { key: 'pr.due', label: 'Proposal due', sample: '11/10/2026' },
     { key: 'pr.attachments', label: 'Attachments', sample: 'SK-7, SK-8', multiline: true },
     { key: 'pr.issued_by', auto: 'user', label: 'Issued by', sample: 'J. Smith, AIA' },
@@ -125,8 +135,12 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'fr.location', auto: 'carry', label: 'Location', sample: 'Job site\nLittle Rock, AR', multiline: true },
     { key: 'fr.weather', label: 'Weather', sample: 'Sunny, upper 80s°F' },
     { key: 'fr.participants', auto: 'carry', label: 'Participants (Name | Company | Email per line)', sample: 'Pat Owner | Owner | pat@owner.org\nSam Super | Sample Builders | sam@builders.com\nJ. Smith | Your Firm | jsmith@yourfirm.com', multiline: true },
-    { key: 'fr.observations', label: 'Field observations', multiline: true, hint: 'What was seen on site, with any comments on what was seen.', sample: '1. Site / Parking\n  1. Footings excavated and Sonotubes in place for light pole bases.\n2. Framing\n  1. Interior metal stud wall framing nearly complete.\n  2. Blocking installation underway.' },
-    { key: 'fr.notes', label: 'Meeting notes', multiline: true, hint: 'OAC meeting notes, on-site discussions, and schedule or material comments and concerns.', sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n  2. Brick installation to begin in approximately two weeks.\n    1. Brick and block are on site.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
+    { key: 'fr.observations', auto: 'outline', label: 'Field observations', multiline: true, hint: 'What was seen on site, with any comments on what was seen. Two spaces indent a level; **bold** marks a heading.',
+      starter: '**1. Site / Parking**\n  a. \n**2. Structure**\n  a. \n**3. Envelope**\n  a. \n**4. Interior**\n  a. ',
+      sample: '1. Site / Parking\n  1. Footings excavated and Sonotubes in place for light pole bases.\n2. Framing\n  1. Interior metal stud wall framing nearly complete.\n  2. Blocking installation underway.' },
+    { key: 'fr.notes', auto: 'outline', label: 'Meeting notes', multiline: true, hint: 'OAC meeting notes, on-site discussions, and schedule or material comments and concerns.',
+      starter: '**1. Job Progress (Scheduled Progress / Revisions)**\n  a. \n**2. Status of Submittals**\n  a. \n**3. Payment Requests**\n  a. \n**4. Additional Notes**\n  a. ',
+      sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n  2. Brick installation to begin in approximately two weeks.\n    1. Brick and block are on site.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
     { key: 'fr.observed_by', auto: 'user', label: 'Observed by', sample: 'J. Smith, AIA' },
   ],
 }
@@ -180,4 +194,31 @@ export function sampleValues(kind: TemplateKind, brand: Brand, layout?: Layout):
   const out: Record<string, string> = {}
   for (const f of fieldsFor(kind, layout)) out[f.key] = f.sample || (f.key.startsWith('custom.') ? f.label : '')
   return { ...out, ...firmValues(brand) }
+}
+
+/**
+ * The headings out of a filled-in field, so the next form starts from the same shape.
+ *
+ * A field report's structure is the architect's own and holds from week to week — the trades on
+ * site, the standing agenda — while the text under it is last week's and has to go. A heading is
+ * a line marked bold (**…** or "# ") or one ending in a colon, which is how these reports are
+ * written. Everything else is dropped, and each heading keeps one empty child to type into.
+ */
+export function outlineOf(text: string): string {
+  const heads: { line: string; indent: number }[] = []
+  for (const raw of text.split('\n')) {
+    const body = raw.trim()
+    if (!body) continue
+    if (!(/^\*\*.*\*\*$/.test(body) || body.startsWith('# ') || body.endsWith(':'))) continue
+    heads.push({ line: raw.trimEnd(), indent: raw.match(/^ */)![0].length })
+  }
+  const out: string[] = []
+  heads.forEach((h, i) => {
+    out.push(h.line)
+    // A heading with its own sub-headings is already somewhere to type under; only the
+    // deepest ones get a blank line of their own.
+    const next = heads[i + 1]
+    if (!next || next.indent <= h.indent) out.push(' '.repeat(h.indent + 2))
+  })
+  return out.join('\n')
 }

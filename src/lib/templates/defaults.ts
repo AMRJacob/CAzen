@@ -149,16 +149,31 @@ const RFI = (): Layout => simpleForm('RFI Response', 'rfi', 'RFI #:', [
   ...signature(680, 'rfi.answered_by', 'By:'),
 ])
 
-const PR = (): Layout => simpleForm('Proposal Request', 'pr', 'PR #:', [
-  labeled(36, 176, 540, 'pr.title', 'Subject:', 70, { bold: true }),
-  text(36, 196, 540, 34, 'Please submit an itemized proposal for changes in the Contract Sum and Contract Time for the proposed modifications described below. This is not a change order or a direction to proceed with the work described.', { size: 8, color: 'muted' }),
-  labeled(36, 236, 300, 'pr.due', 'Proposal due:', 80, { bold: true }),
-  heading(36, 260, 'Description of Proposed Change:'),
-  field(36, 276, 540, 280, 'pr.description', { rich: true, flow: true }),
-  heading(36, 568, 'Attachments:'),
-  field(36, 584, 540, 60, 'pr.attachments'),
-  ...signature(680, 'pr.issued_by', 'Issued:'),
-])
+/* Follows AMR's own proposal request cover sheet: who it goes to on the left, the numbers on the
+   right, the standing instructions, then the changes listed by discipline and sheet. */
+const PR = (): Layout => ({
+  useLetterhead: true,
+  continuation: DEFAULT_CONTINUATION,
+  elements: [
+    text(118, 30, 320, 18, 'Proposal Request', { size: 13.5, bold: true, color: 'accent', caps: true, repeat: true }),
+    field(118, 54, 320, 14, 'project.name', { size: 10, bold: true, repeat: true }),
+
+    field(36, 126, 236, 62, 'pr.to', { label: 'To:', labelMode: 'left', labelWidth: 40, labelAlign: 'left', size: 8.5 }),
+    labeled(36, 196, 236, 'pr.from', 'From:', 40, { labelAlign: 'left', size: 8.5 }),
+
+    labeled(306, 126, 270, 'pr.number', 'Proposal Number:', 104, { labelAlign: 'left', size: 8.5, bold: true }),
+    labeled(306, 142, 270, 'doc.date', 'Date of Issuance:', 104, { labelAlign: 'left', size: 8.5, bold: true }),
+    labeled(306, 158, 270, 'pr.contract_for', 'Contract For:', 104, { labelAlign: 'left', size: 8.5, bold: true }),
+
+    hline(36, 218, 540),
+    text(36, 228, 100, 12, 'Special Instructions:', { size: 8.5, bold: true }),
+    text(36, 242, 540, 40, 'Please submit an itemized quotation for changes to the Contract Sum and/or Time Incidental to proposed modifications to the Contract Documents as described herein. Submit proposal response within 14 days, or notify the Architect in writing of the day on which you anticipate submitting the proposal.', { size: 8.5 }),
+    text(36, 290, 540, 12, 'This is not a Change Order nor a direction to proceed with the work described herein.', { size: 8.5, bold: true }),
+
+    heading(36, 318, 'Changes to Drawings:'),
+    field(36, 336, 540, 390, 'pr.description', { size: 9, rich: true, flow: true }),
+  ],
+})
 
 const CCD = (): Layout => simpleForm('Construction Change Directive', 'ccd', 'CCD #:', [
   labeled(36, 176, 540, 'ccd.title', 'Subject:', 70, { bold: true }),
