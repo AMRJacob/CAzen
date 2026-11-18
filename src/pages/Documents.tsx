@@ -1,3 +1,4 @@
+import { PageTitle } from '../components/PageTitle'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from '../lib/project'
@@ -92,7 +93,7 @@ export default function Documents() {
   if (!current) {
     return (
       <section>
-        <h1>Drawings</h1>
+        <PageTitle>Drawings</PageTitle>
         <div className="card muted">Choose a project first, on the <Link to="/">Projects</Link> page.</div>
       </section>
     )
@@ -120,7 +121,7 @@ export default function Documents() {
     <section {...pageDropProps} className={pageDrag ? 'page-drop' : ''}>
       <div className="page-head">
         <div>
-          <h1>Drawings</h1>
+          <PageTitle>Drawings</PageTitle>
           <p className="lead">{current.number} {current.name} · {sheets.length} sheets</p>
         </div>
         {!uploading && <button className="primary" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}

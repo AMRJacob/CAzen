@@ -1,3 +1,4 @@
+import { PageTitle } from '../components/PageTitle'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFirm } from '../lib/firm'
@@ -100,7 +101,7 @@ export default function Settings() {
 
   return (
     <section>
-      <h1>Settings</h1>
+      <PageTitle>Settings</PageTitle>
       <p className="lead">Your firm’s details and brand. Change them any time, for example when rebranding. Every new document uses the current settings.</p>
       {!isAdmin && <div className="notice">Only firm admins can change these settings.</div>}
 

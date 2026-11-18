@@ -1,3 +1,4 @@
+import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useFirm } from '../lib/firm'
 import { loadBrand, type Brand } from '../lib/brand'
@@ -211,7 +212,7 @@ export default function Templates() {
     }
   }
 
-  if (!layouts || !layout || !brand) return <section><h1>Form templates</h1><p className="muted">Loading…</p></section>
+  if (!layouts || !layout || !brand) return <section><PageTitle>Form templates</PageTitle><p className="muted">Loading…</p></section>
 
   const fields = fieldsFor(kind)
   const choiceFields = fields.filter((f) => f.choices)
@@ -223,7 +224,7 @@ export default function Templates() {
     <section className="templates">
       <div className="page-head">
         <div>
-          <h1>Form templates</h1>
+          <PageTitle>Form templates</PageTitle>
           <p className="lead">Lay out each form once. Fields fill in from the project and the form when it’s issued.</p>
         </div>
         <div className="actions tight">

@@ -974,3 +974,9 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 @media (max-width: 619px) {
   .set-actions { flex-wrap: wrap; justify-content: flex-start; }
 }
+
+/* The page heading doubles as the way back to the project list. It reads as a heading; only the
+   pointer and an underline on hover say it goes anywhere. */
+.page-title-link { color: inherit; text-decoration: none; }
+.page-title-link:hover { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.page-title-link:focus-visible { outline: 2px solid var(--moss); outline-offset: 3px; border-radius: 4px; }

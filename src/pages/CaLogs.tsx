@@ -1,3 +1,4 @@
+import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
@@ -64,7 +65,7 @@ export default function CaLogs() {
       <section>
         <div className="page-head">
           <div>
-            <h1>New {FORM_LABELS[writing].toLowerCase()}</h1>
+            <PageTitle>New {FORM_LABELS[writing].toLowerCase()}</PageTitle>
             <p className="lead">On your firm’s template. It fills itself in, numbers itself and is kept with the project.</p>
           </div>
           <button onClick={() => { setWriting(null); load() }}>Back to the register</button>
@@ -78,7 +79,7 @@ export default function CaLogs() {
     <section>
       <div className="page-head">
         <div>
-          <h1>Change documents</h1>
+          <PageTitle>Change documents</PageTitle>
           <p className="lead">
             {current ? <>{current.number} {current.name} · </> : null}
             Every clarification and change issued on this project, and where the next one is written.
