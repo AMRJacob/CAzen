@@ -24,6 +24,8 @@ export interface SovLine {
   change_order_id: string | null
   /** A rate for this line alone, where one trade is held at a different percentage. */
   retainage_rate: number | null
+  /** For a change order line: the date the owner approved it. */
+  approved_on: string | null
   sort: number
 }
 
@@ -81,6 +83,18 @@ export interface LineFigures {
   retainage: number
   /** The rate column I was figured at, so a row can say why it holds what it holds. */
   rate: number
+  /** Column F on the previous application: what was sitting in storage a month ago. */
+  storedBefore: number
+  /**
+   * What left storage this period. Material that is no longer stored should have been
+   * installed, so this is the figure column E has to account for.
+   */
+  released: number
+  /**
+   * Material left storage without the work being billed. Either the contractor installed it
+   * and forgot to bill it, or it is no longer on site — both worth asking about.
+   */
+  storedUnaccounted: boolean
 }
 
 export interface Figures {
@@ -112,6 +126,16 @@ export interface Figures {
   }
   /** The rates this application was figured at, after any milestone step. */
   rates: { work: number; stored: number; steppedTo: number | null }
+  /** The block at the foot of a G702: what the change orders have added and taken away. */
+  changeOrderSummary: {
+    previousAdditions: number
+    previousDeductions: number
+    thisAdditions: number
+    thisDeductions: number
+    totalAdditions: number
+    totalDeductions: number
+    net: number
+  }
 }
 
 /**
@@ -142,10 +166,18 @@ export function figure(
   lines: SovLine[],
   application: Application,
   billed: Map<string, Billed>,
-  earlier: { billed: Map<string, Billed> }[],
+  earlier: { billed: Map<string, Billed>; period_to?: string }[],
   steps: RetainageStep[] = [],
 ): Figures {
-  const real = lines.filter((l) => !l.is_heading)
+  /**
+   * A change order the owner approved after this application closed is not on this
+   * application: its value is not in the contract sum, and its line is not on the sheet. An
+   * undated one is taken to predate the applications, which is how a schedule entered before
+   * anybody filled in approval dates keeps working.
+   */
+  const onThisApplication = (l: SovLine): boolean =>
+    !l.change_order_id || !l.approved_on || l.approved_on <= application.period_to
+  const real = lines.filter((l) => !l.is_heading && onThisApplication(l))
 
   const previousOf = (id: string) => sum(earlier.map((a) => a.billed.get(id)?.this_period ?? 0))
 
@@ -166,17 +198,25 @@ export function figure(
   const { rate: workRate, stepped } = rateAt(percentComplete, baseWork, steps)
   const storedRate = application.retainage_stored ?? contract.retainage_stored
 
+  // What the line looked like a month ago, so the sheet can say whether stored material is
+  // still in storage or has gone into the work.
+  const last = earlier[earlier.length - 1]
+
   const figured: LineFigures[] = real.map((l) => {
     const b = billed.get(l.id)
     const previous = previousOf(l.id)
     const thisPeriod = round(b?.this_period ?? 0)
     const stored = round(b?.stored ?? 0)
+    const storedBefore = round(last?.billed.get(l.id)?.stored ?? 0)
+    const released = round(Math.max(0, storedBefore - stored))
     const toDate = round(previous + thisPeriod + stored)
     // A line held at its own rate ignores the step: that is what "variable rate" means.
     const rate = l.retainage_rate ?? workRate
     return {
       line: l,
       previous, thisPeriod, stored, toDate,
+      storedBefore, released,
+      storedUnaccounted: released > thisPeriod + 0.005,
       percent: l.scheduled_value > 0 ? (toDate / l.scheduled_value) * 100 : 0,
       balance: round(l.scheduled_value - toDate),
       // Column I: the rate on work completed, and the stored rate on what is only stored.
@@ -230,6 +270,36 @@ export function figure(
   const retainageTotal = round(retainageWork + retainageStored)
   const earnedLessRetainage = round(totals.toDate - retainageTotal)
 
+  /**
+   * The change order summary at the foot of a G702.
+   *
+   * A change order counts as "this month" when the owner approved it inside this application's
+   * period — that is, after the previous application closed. A line with no approval date on
+   * it is taken to predate the applications, so it sits in the previous column from the second
+   * application on.
+   */
+  const closedLast = last?.period_to ?? null
+  const coLines = real.filter((l) => l.change_order_id)   // already cut to this application
+  const inThisPeriod = (l: SovLine): boolean => {
+    if (!closedLast) return true
+    if (!l.approved_on) return false
+    return l.approved_on > closedLast && l.approved_on <= application.period_to
+  }
+  const add = (ls: SovLine[]) => sum(ls.filter((l) => l.scheduled_value > 0).map((l) => l.scheduled_value))
+  const take = (ls: SovLine[]) => round(-sum(ls.filter((l) => l.scheduled_value < 0).map((l) => l.scheduled_value)))
+  const soFar = coLines
+  const thisMonth = soFar.filter(inThisPeriod)
+  const before = soFar.filter((l) => !inThisPeriod(l))
+  const changeOrderSummary = {
+    previousAdditions: add(before),
+    previousDeductions: take(before),
+    thisAdditions: add(thisMonth),
+    thisDeductions: take(thisMonth),
+    totalAdditions: add(soFar),
+    totalDeductions: take(soFar),
+    net: round(add(soFar) - take(soFar)),
+  }
+
   return {
     lines: figured,
     totals,
@@ -247,6 +317,7 @@ export function figure(
       balanceToFinish: round(round(contract.original_sum + changeOrders) - earnedLessRetainage),
     },
     rates: { work: workRate, stored: storedRate, steppedTo: stepped },
+    changeOrderSummary,
   }
 }
 

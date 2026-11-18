@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
-import { today } from '../lib/dates'
-import { figure, standings, type Billed, type Figures } from '../lib/payapps'
+import { today, usDate } from '../lib/dates'
+import { figure, standings, type Billed, type Figures, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import {
-  listContracts, loadContract, newApplication, setApplication, setBilled,
+  addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setSovLine,
   type LoadedContract,
 } from '../lib/payappsDb'
 
@@ -233,6 +233,9 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
   const app = data.applications[index]
   const editable = app.status === 'draft'
   const g = figures.g702
+  const co = figures.changeOrderSummary
+  const askAbout = figures.lines.filter((f) => f.storedUnaccounted)
+  const nextSort = data.lines.reduce((m, l) => Math.max(m, l.sort), 0) + 1
   const [edits, setEdits] = useState<Record<string, Billed>>({})
 
   useEffect(() => { setEdits({}) }, [app.id])
@@ -260,33 +263,92 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
       <div className="card pay-702">
         <div className="pay-702-head">
           <h3>Application {app.number}</h3>
-          <span className="muted small">Period to {app.period_to} · {app.status}</span>
+          <span className="muted small">Period to {usDate(app.period_to)} · {app.status}</span>
           {editable && <button className="primary-lite" onClick={() => void certify()}>Certify</button>}
         </div>
-        <table className="pay-702-lines">
-          <tbody>
-            <Row n="1" label="Original contract sum" value={g.originalSum} />
-            <Row n="2" label="Net change by change orders" value={g.changeOrders} />
-            <Row n="3" label="Contract sum to date" value={g.contractSum} strong />
-            <Row n="4" label="Total completed and stored to date" value={g.completedAndStored} />
-            <Row n="5a" label={`Retainage, ${figures.rates.work}% of completed work`} value={g.retainageWork} />
-            <Row n="5b" label={`Retainage, ${figures.rates.stored}% of stored material`} value={g.retainageStored} />
-            <Row n="5" label="Total retainage" value={g.retainageTotal} />
-            <Row n="6" label="Total earned less retainage" value={g.earnedLessRetainage} strong />
-            <Row n="7" label="Less previous certificates for payment" value={g.previousCertificates} />
-            <Row n="8" label="Current payment due" value={g.due} strong highlight />
-            <Row n="9" label="Balance to finish, including retainage" value={g.balanceToFinish} />
-          </tbody>
-        </table>
+        <p className="pay-702-preamble">
+          Application is made for payment, as shown below, in connection with the contract.
+          The continuation sheet below is the G703.
+        </p>
+
+        <div className="g702">
+          <Line n="1." label="Original contract sum" value={g.originalSum} />
+          <Line n="2." label="Net change by change orders" value={g.changeOrders} />
+          <Line n="3." label="Contract sum to date" note="line 1 ± 2" value={g.contractSum} strong />
+          <Line n="4." label="Total completed &amp; stored to date" note="column G on G703" value={g.completedAndStored} />
+
+          <div className="g702-n">5.</div>
+          <div className="g702-label g702-label-plain">Retainage:</div>
+          <div className="g702-inner" /><div className="g702-outer" />
+
+          <Line sub n="a." rate={figures.rates.work} rateOf="of completed work"
+            note="columns D + E on G703" value={g.retainageWork} />
+          <Line sub n="b." rate={figures.rates.stored} rateOf="of stored material"
+            note="column F on G703" value={g.retainageStored} />
+          <Line n="" label="Total retainage" note="lines 5a + 5b, or column I on G703"
+            value={g.retainageTotal} />
+
+          <Line n="6." label="Total earned less retainage" note="line 4 less line 5"
+            value={g.earnedLessRetainage} strong />
+          <Line n="7." label="Less previous certificates for payment" note="line 6 from the prior certificate"
+            value={g.previousCertificates} />
+          <Line n="8." label="Current payment due" value={g.due} boxed />
+          <Line sub n="9." label="Balance to finish, including retainage" note="line 3 less line 6"
+            value={g.balanceToFinish} />
+        </div>
+
         {figures.rates.steppedTo != null && (
           <p className="muted small">
             Retainage stepped to {figures.rates.work}% once the job passed {figures.rates.steppedTo}% complete.
           </p>
         )}
+
+        <table className="g702-co">
+          <thead>
+            <tr>
+              <th>Change order summary</th>
+              <th className="right">Additions</th>
+              <th className="right">Deductions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Total changes approved in previous months by owner</td>
+              <td className="right mono"><Money n={co.previousAdditions} /></td>
+              <td className="right mono"><Money n={co.previousDeductions} /></td>
+            </tr>
+            <tr>
+              <td>Total approved this month</td>
+              <td className="right mono"><Money n={co.thisAdditions} /></td>
+              <td className="right mono"><Money n={co.thisDeductions} /></td>
+            </tr>
+            <tr className="g702-co-total">
+              <td className="right">Totals</td>
+              <td className="right mono"><Money n={co.totalAdditions} strong /></td>
+              <td className="right mono"><Money n={co.totalDeductions} strong /></td>
+            </tr>
+            <tr className="g702-co-net">
+              <td colSpan={2}>Net change by change order</td>
+              <td className="right mono"><Money n={co.net} strong /></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div className="card">
         <h3>Continuation sheet</h3>
+        {askAbout.length > 0 && (
+          <div className="notice warn">
+            <span>
+              <strong>{askAbout.length === 1 ? 'One line has' : `${askAbout.length} lines have`} stored
+              material that is no longer stored, without the work to match</strong>
+              {' — '}
+              {askAbout.slice(0, 4).map((f) => f.line.description).join(', ')}
+              {askAbout.length > 4 ? ` and ${askAbout.length - 4} more` : ''}.
+              {' '}Either it went into the work and was not billed, or it has left the site.
+            </span>
+          </div>
+        )}
         <div className="pay-703-wrap">
           <table className="pay-703">
             <thead>
@@ -313,7 +375,10 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
                 return (
                   <tr key={l.id} className={l.change_order_id ? 'pay-703-co' : ''}>
                     <td className="mono pay-703-item">{l.item_no ?? ''}</td>
-                    <td className="pay-703-name">{l.description}</td>
+                    <td className="pay-703-name">
+                      {l.description}
+                      {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
+                    </td>
                     <td className="right mono" data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
                     <td className="right mono" data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
                     <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
@@ -323,12 +388,24 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`This period for ${l.description}`} />
                         : <span className="mono"><Money n={f.thisPeriod} /></span>}
                     </td>
-                    <td className="right" data-label="Stored" data-nothing={editable || f.stored ? undefined : ''}>
+                    <td className="right pay-703-stored"
+                      data-label="Stored"
+                      data-nothing={editable || f.stored || f.storedBefore ? undefined : ''}>
                       {editable
                         ? <input className="cell mono right" inputMode="decimal" value={v.stored || ''}
                             onChange={(e) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(e.target.value) || 0 } }))}
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`Stored for ${l.description}`} />
                         : <span className="mono"><Money n={f.stored} /></span>}
+                      {f.storedBefore > 0 && (
+                        <span className={`pay-703-was${f.storedUnaccounted ? ' pay-703-ask' : ''}`}
+                          title={f.storedUnaccounted
+                            ? `${money(f.released)} left storage this period but only ${money(f.thisPeriod)} of work was billed on this line.`
+                            : `${money(f.storedBefore)} was stored on the previous application.`}>
+                          {f.released > 0
+                            ? <>{money(f.released)} out of storage</>
+                            : <>was {money(f.storedBefore)}</>}
+                        </span>
+                      )}
                     </td>
                     <td className="right mono" data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
                     <td className="right mono" data-label="Complete">{percent(f.percent)}</td>
@@ -351,19 +428,171 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
             </tbody>
           </table>
         </div>
+        {editable && <AddLine contractId={data.contract.id} nextSort={nextSort} onAdded={onChanged} onTrouble={onTrouble} />}
       </div>
     </>
   )
 }
 
-function Row({ n, label, value, strong, highlight }: {
-  n: string; label: string; value: number; strong?: boolean; highlight?: boolean
+/**
+ * When the owner approved a change order.
+ *
+ * It sits on the schedule of values rather than on any one application, because it is what
+ * decides which application's change order summary the change order lands in — so it can be
+ * set from any of them, certified or not.
+ */
+function ApprovedOn({ line, onChanged, onTrouble }: {
+  line: SovLine
+  onChanged: () => void
+  onTrouble: (m: string) => void
 }) {
+  const [editing, setEditing] = useState(false)
+
+  async function set(value: string) {
+    try {
+      await setSovLine(line.id, { approved_on: value || null })
+      setEditing(false)
+      onChanged()
+    } catch (e) { onTrouble(message(e)) }
+  }
+
+  if (editing) {
+    return (
+      <input type="date" className="pay-co-date" autoFocus defaultValue={line.approved_on ?? ''}
+        aria-label={`Date ${line.description} was approved`}
+        onBlur={(e) => void set(e.target.value)} />
+    )
+  }
   return (
-    <tr className={highlight ? 'pay-702-due' : ''}>
-      <td className="pay-702-n">{n}</td>
-      <td>{label}</td>
-      <td className="right mono"><Money n={value} strong={strong} /></td>
-    </tr>
+    <button className="link pay-co-when" onClick={() => setEditing(true)}>
+      {line.approved_on ? `approved ${usDate(line.approved_on)}` : 'set approval date'}
+    </button>
+  )
+}
+
+/**
+ * A line added to the schedule of values part-way through the job.
+ *
+ * Mostly this is a change order, which is why the approval date is asked for: the change order
+ * summary on the G702 turns on whether the owner approved it this period or an earlier one. A
+ * title line costs nothing and is how a change order's own breakdown gets a heading over it.
+ */
+function AddLine({ contractId, nextSort, onAdded, onTrouble }: {
+  contractId: string
+  nextSort: number
+  onAdded: () => void
+  onTrouble: (m: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [kind, setKind] = useState<'line' | 'heading' | 'change_order'>('line')
+  const [itemNo, setItemNo] = useState('')
+  const [description, setDescription] = useState('')
+  const [value, setValue] = useState('')
+  const [approvedOn, setApprovedOn] = useState(today())
+  const [busy, setBusy] = useState(false)
+
+  async function add() {
+    if (!description.trim() || busy) return
+    setBusy(true)
+    try {
+      await addSovLine(contractId, {
+        item_no: kind === 'heading' ? null : (itemNo.trim() || null),
+        description: description.trim(),
+        scheduled_value: kind === 'heading' ? 0 : Number(value) || 0,
+        sort: nextSort,
+        is_heading: kind === 'heading',
+        is_change_order: kind === 'change_order',
+        approved_on: kind === 'change_order' ? approvedOn : null,
+      })
+      setItemNo(''); setDescription(''); setValue('')
+      setOpen(false)
+      onAdded()
+    } catch (e) { onTrouble(message(e)) } finally { setBusy(false) }
+  }
+
+  if (!open) {
+    return <button className="link pay-add-line" onClick={() => setOpen(true)}>Add a line</button>
+  }
+
+  return (
+    <div className="pay-add">
+      <div className="tabs">
+        {([['line', 'Line'], ['heading', 'Title line'], ['change_order', 'Change order']] as const).map(([k, label]) => (
+          <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{label}</button>
+        ))}
+      </div>
+      <div className="pay-add-fields">
+        {kind !== 'heading' && (
+          <label className="stack">Item
+            <input value={itemNo} onChange={(e) => setItemNo(e.target.value)} placeholder="69" />
+          </label>
+        )}
+        <label className="stack pay-add-wide">
+          {kind === 'heading' ? 'Title' : 'Description of work'}
+          <input value={description} onChange={(e) => setDescription(e.target.value)} autoFocus
+            placeholder={kind === 'heading' ? 'Change Order 002' : kind === 'change_order' ? 'CO 002 — storm drainage revision' : 'Painting'} />
+        </label>
+        {kind !== 'heading' && (
+          <label className="stack">Scheduled value
+            <input className="mono" inputMode="decimal" value={value}
+              onChange={(e) => setValue(e.target.value)} placeholder="0.00" />
+          </label>
+        )}
+        {kind === 'change_order' && (
+          <label className="stack">Approved
+            <input type="date" value={approvedOn} onChange={(e) => setApprovedOn(e.target.value)} />
+          </label>
+        )}
+      </div>
+      <div className="folder-actions">
+        <button className="primary-lite" disabled={!description.trim() || busy} onClick={() => void add()}>
+          {busy ? 'Adding…' : 'Add to the schedule'}
+        </button>
+        <button className="link" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+      {kind === 'change_order' && (
+        <p className="muted small">
+          A deduction is entered as a negative scheduled value. The approval date decides whether it
+          counts as approved this month or in a previous one.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One numbered line of a G702.
+ *
+ * The form puts its main figures in one column and its workings — the two halves of the
+ * retainage, the balance to finish — in a column inset from it, so the eye can run down the
+ * amounts that add up without the intermediate ones getting in the way. `sub` is what puts a
+ * figure in the inner column.
+ */
+function Line({ n, label, note, value, rate, rateOf, strong, boxed, sub }: {
+  n: string
+  label?: string
+  note?: string
+  value: number
+  rate?: number
+  rateOf?: string
+  strong?: boolean
+  boxed?: boolean
+  sub?: boolean
+}) {
+  const amount = (
+    <span className={boxed ? 'g702-boxed' : undefined}><Money n={value} strong={strong || boxed} /></span>
+  )
+  return (
+    <>
+      <div className={`g702-n${sub ? ' g702-n-sub' : ''}`}>{n}</div>
+      <div className={`g702-label${strong || boxed ? ' g702-label-strong' : ''}`}>
+        <span className="g702-words">
+          {rate != null ? <><u className="g702-rate">{percent(rate)}</u> {rateOf}</> : label}
+          {note && <span className="g702-note"> ({note})</span>}
+        </span>
+      </div>
+      <div className="g702-inner right mono">{sub ? amount : null}</div>
+      <div className="g702-outer right mono">{sub ? null : amount}</div>
+    </>
   )
 }

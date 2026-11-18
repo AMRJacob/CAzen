@@ -1395,7 +1395,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pay-trades { width: 100%; border-collapse: collapse; }
 .pay-trades th, .pay-trades td { padding: 6px 8px; border-top: 1px solid var(--line); }
 .pay-trades th { text-align: left; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-.pay-trades .right, .pay-703 .right, .pay-702-lines .right { text-align: right; }
+.pay-trades .right, .pay-703 .right, .g702 .right { text-align: right; }
 .pay-item { color: var(--muted); margin-right: 8px; font-size: 12px; }
 .pay-progress { white-space: nowrap; }
 .pay-progress .muted { margin-left: 6px; }
@@ -1405,10 +1405,58 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pay-702-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
 .pay-702-head h3 { margin: 0; }
 .pay-702-head button { margin-left: auto; }
-.pay-702-lines { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.pay-702-lines td { padding: 5px 8px; border-top: 1px solid var(--line); }
-.pay-702-n { width: 1%; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.pay-702-due td { background: var(--moss-soft); }
+.pay-702-preamble { font-size: 13px; color: var(--muted); margin: 0 0 14px; max-width: 54ch; }
+
+/* ---- The G702 block ----
+   Laid out as the form is: a number, a line of words carried to its figure by leaders, and two
+   amount columns — the outer one for the figures that add up, the inner one for the workings
+   (the two halves of the retainage, the balance to finish). */
+.g702 {
+  display: grid;
+  grid-template-columns: 1.9em minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  column-gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.g702-n { font-size: 12.5px; color: var(--muted); white-space: nowrap; padding: 4px 0; }
+.g702-n-sub { padding-left: 0.7em; }
+/* The leader is a rule along the foot of the label, with the words laid over it on their own
+   background. A label that fits leaves the dots running to the figure; one that wraps covers
+   them with its last line and the dots pick up where the words stop. No stub either way. */
+.g702-label { position: relative; min-width: 0; padding: 4px 0; }
+.g702-label::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0.5em;
+  border-bottom: 1px dotted var(--faint);
+}
+.g702-label-strong { font-weight: 500; }
+/* The heading of the retainage block is not carried to a figure, so it is not ruled. */
+.g702-label-plain::before { display: none; }
+.g702-words { position: relative; background: var(--panel); padding-right: 8px; }
+.g702-note { font-size: 11.5px; color: var(--faint); }
+.g702-rate { text-decoration-color: var(--faint); text-underline-offset: 3px; }
+.g702-inner, .g702-outer { padding: 4px 0; white-space: nowrap; }
+.g702-inner { min-width: 7.5em; }
+.g702-outer { min-width: 7.5em; }
+.g702-boxed {
+  display: inline-block; padding: 2px 8px; margin: -2px -8px;
+  border: 1.5px solid var(--ink); border-radius: 4px; background: var(--moss-soft);
+}
+
+.g702-co { width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.g702-co th, .g702-co td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+.g702-co th { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--panel); font-weight: 500; }
+.g702-co th.right, .g702-co td.right { text-align: right; }
+.g702-co-total td { border-top: 1px solid var(--ink); }
+.g702-co-net td { background: var(--wash); font-weight: 500; }
+
+@media (max-width: 599px) {
+  /* Too narrow to rule a line across to the figure, or to reserve room for a column that is
+     empty on most rows. The two amount columns stay — they are what makes the form readable —
+     but only as wide as the figures in them. */
+  .g702 { column-gap: 7px; font-size: 13.5px; }
+  .g702-inner, .g702-outer { min-width: 0; }
+  .g702-leader, .g702-note { display: none; }
+}
 
 /* The sheet is wide by nature. It scrolls inside its card rather than widening the page, and
    the fade at each edge says so without a scrollbar having to appear. */
@@ -1440,6 +1488,24 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pay-703-total td { background: var(--panel); border-top: 2px solid var(--ink); }
 .pay-703 input.cell { width: 96px; padding: 3px 6px; font-size: 14px; }
 .pay-703 input.cell.right { text-align: right; }
+
+/* What was in storage a month ago, under the figure for what is in storage now. The sheet
+   should say whether stored material went into the work or simply went. */
+.pay-703-stored { line-height: 1.3; }
+.pay-703-was { display: block; font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.pay-703-ask { color: var(--danger); }
+.pay-co-when { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pay-co-date { display: block; margin-top: 3px; font-size: 12px; padding: 2px 5px; }
+
+.pay-add-line { margin-top: 12px; }
+.pay-add { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.pay-add-fields { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin: 12px 0 4px; }
+.pay-add-fields label { font-size: 13px; }
+.pay-add-fields input { width: 10em; }
+.pay-add-wide { flex: 1 1 18em; }
+.pay-add-wide input { width: 100%; }
+.pay-add .folder-actions { margin-top: 10px; }
+.pay-add p { margin: 10px 0 0; max-width: 56ch; }
 
 /* ---- Narrow screens ----
    A ten-column sheet cannot be read sideways on a phone, so each line becomes a small card:

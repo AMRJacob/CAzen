@@ -93,9 +93,20 @@ export async function setApplication(id: string, patch: Partial<Application>): P
 }
 
 export async function addSovLine(contractId: string, line: {
-  item_no: string | null; description: string; scheduled_value: number; sort: number; is_change_order?: boolean
+  item_no: string | null
+  description: string
+  scheduled_value: number
+  sort: number
+  is_heading?: boolean
+  is_change_order?: boolean
+  approved_on?: string | null
 }): Promise<void> {
   const { error } = await db().from('sov_lines').insert({ contract_id: contractId, ...line })
+  if (error) throw error
+}
+
+export async function removeSovLine(id: string): Promise<void> {
+  const { error } = await db().from('sov_lines').delete().eq('id', id)
   if (error) throw error
 }
 
