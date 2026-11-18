@@ -1135,3 +1135,4 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 }
 .upload-cover-note { grid-column: 1 / -1; line-height: 1.5; }
 .cover-cell { text-align: center; }
+@media (max-width: 899px) { .desk-only { display: none; } }

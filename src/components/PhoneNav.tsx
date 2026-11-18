@@ -39,6 +39,7 @@ const SPOTS: Spot[] = [
 ]
 
 const MORE: Spot[] = [
+  { to: '/documents?upload=1', label: 'Upload', icon: I(<><path d="M12 16V4M8 8l4-4 4 4" /><path d="M4 20h16" /></>) },
   { to: '/contracts', label: 'Contracts', icon: I(<><path d="M6 3h9l3 3v15H6V3Z" /><path d="M9 12h6M9 16h4" /></>) },
   { to: '/templates', label: 'Templates', icon: I(<><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M3 9h18M9 9v11" /></>) },
   { to: '/settings', label: 'Settings', icon: I(<><circle cx="12" cy="12" r="3.2" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>) },

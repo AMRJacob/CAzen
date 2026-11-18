@@ -20,6 +20,7 @@ import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
 import { ConfirmDelete } from '../components/ConfirmDelete'
+import { useSearchParams } from 'react-router-dom'
 import { useClickAway } from '../lib/clickAway'
 import { joinPages } from '../lib/pdf/bundle'
 import { putFile, SECTIONS } from '../lib/files'
@@ -49,6 +50,15 @@ export default function Documents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('upload') === null) return
+    setUploading(true)
+    // Taken out of the address once it's done its job, so a refresh doesn't reopen it.
+    const next = new URLSearchParams(params)
+    next.delete('upload')
+    setParams(next, { replace: true })
+  }, [params, setParams])
   const [dropped, setDropped] = useState<File[] | undefined>(undefined)
   const [pageDrag, setPageDrag] = useState(false)
   const [view, setView] = useState<'sheets' | 'sets'>('sheets')
@@ -135,7 +145,9 @@ export default function Documents() {
           <PageTitle>Drawings</PageTitle>
           <p className="lead">{current.number} {current.name} · {sheets.length} sheets</p>
         </div>
-        {!uploading && <button className="primary" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
+        {/* Uploading a set from a phone is a rare thing done at a desk, so it isn't given the
+            loudest control on a phone screen; it lives under More in the corner menu instead. */}
+        {!uploading && <button className="primary desk-only" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
       </div>
 
       {uploading && firm && (
