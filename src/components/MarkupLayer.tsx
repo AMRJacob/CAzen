@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   areaOf, buildMarkup, cloudPath, editMarkup, measure, removeMarkup, saveMarkup, squareFeet,
-  type Geometry, type Markup, type MarkupKind, type Point,
+  type Geometry, type InkPoint, type Markup, type MarkupKind, type Point,
 } from '../lib/markups'
 import { message } from '../lib/errors'
 
@@ -12,7 +12,16 @@ import { message } from '../lib/errors'
  * sheet at any zoom and never has to be recalculated. Strokes are told not to scale with it, or a
  * line drawn at fit-to-screen would become a stripe at 400%.
  */
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble }: {
+export interface StylusReading {
+  pressure: number
+  tiltX: number
+  tiltY: number
+  /** How many samples came behind the last move event — 0 where the browser doesn't hand them over. */
+  coalesced: number
+  at: number
+}
+
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -33,6 +42,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   /** Which markup is picked up, with Select. The viewer holds it so the palette can recolour it. */
   selected?: string | null
   onSelect?: (id: string | null) => void
+  /** What a stylus is reporting, for the readout that says whether this device reports anything. */
+  onStylus?: (r: StylusReading) => void
 }) {
   const [drawing, setDrawing] = useState<{ kind: MarkupKind; geometry: Geometry } | null>(null)
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
@@ -84,7 +95,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     return dx >= dy ? { x: to.x, y: from.y } : { x: from.x, y: to.y }
   }
 
-  const at = (e: React.PointerEvent): Point => {
+  const at = (e: { clientX: number; clientY: number; currentTarget?: EventTarget | null }): Point => {
     // The layer, not whatever the event happened to land on — a handle's own box would give
     // coordinates in the wrong frame, and a detached one gives none at all.
     const r = (layer.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect()
@@ -94,7 +105,71 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     }
   }
 
+  /**
+   * Every sample behind one move event.
+   *
+   * The screen reports a pointer move once a frame; a stylus samples several times faster, and
+   * the samples in between are merged into the move event rather than thrown away.
+   * getCoalescedEvents hands them back, which is the difference between a traced wall and a
+   * chain of short straight segments. Safari got it in 18.2, so it is asked for rather than
+   * assumed.
+   *
+   * iOS Safari reports the wrong pointerId on coalesced samples — Flutter hit this and worked
+   * around it — so a sample is taken when its id matches or when it has none to speak of,
+   * rather than trusting the id to route anything.
+   */
+  function samples(e: React.PointerEvent): InkPoint[] {
+    const native = e.nativeEvent as PointerEvent
+    let raw: PointerEvent[] = []
+    try {
+      raw = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : []
+    } catch { raw = [] }
+    const mine = raw.filter((s) => !s.pointerId || s.pointerId === native.pointerId)
+    const list = mine.length ? mine : [native]
+    return list.map((s) => {
+      const p = at(s)
+      return force(s) == null ? [p.x, p.y] as InkPoint : [p.x, p.y, force(s)!] as InkPoint
+    })
+  }
+
+  /**
+   * How hard a stylus was pressed, or nothing for anything that can't say.
+   *
+   * A mouse reports a flat 0.5 while a button is down and a finger usually reports 0 or 0.5, so
+   * a width taken from those would be noise dressed as expression. Only a pen is believed, and
+   * only when what it reports actually moves.
+   */
+  function force(e: PointerEvent): number | null {
+    if (e.pointerType !== 'pen') return null
+    const p = e.pressure
+    return typeof p === 'number' && p > 0 && p < 1 ? p : p === 1 ? 1 : null
+  }
+
+  /**
+   * The pen's own hand, and keeping the hand it rests on out of the way.
+   *
+   * iOS already drops touches while a pen is in use, but not every device does and the drop is
+   * not instant, so a touch arriving within a couple of seconds of a pen sample is taken for a
+   * palm and ignored.
+   */
+  const penAt = useRef(0)
+  const penned = (e: React.PointerEvent) => {
+    if (e.pointerType === 'pen') { penAt.current = Date.now(); report(e); return false }
+    return e.pointerType === 'touch' && Date.now() - penAt.current < 2000
+  }
+
+  const report = (e: React.PointerEvent) => {
+    if (!onStylus) return
+    const n = e.nativeEvent as PointerEvent
+    onStylus({
+      pressure: n.pressure, tiltX: n.tiltX ?? 0, tiltY: n.tiltY ?? 0,
+      coalesced: typeof n.getCoalescedEvents === 'function' ? n.getCoalescedEvents().length : 0,
+      at: Date.now(),
+    })
+  }
+
   function down(e: React.PointerEvent) {
+    if (penned(e)) return
     // An area is clicked corner by corner, and closed by coming back to where it started,
     // by double-clicking, or by pressing Enter.
     if (tool === 'area') {
@@ -130,17 +205,20 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     }
     if (!tool || tool === 'erase') return
     if ((e.target as HTMLElement).closest('.mk-note, .mk-hit')) return
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    // Capture keeps the stroke with this layer if the finger leaves it, but a browser that
+    // refuses the capture must not cost the stroke — the drawing goes on without it.
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* draw anyway */ }
     const p = at(e)
     start.current = p
     setLive(tool === 'ink'
-      ? { kind: 'ink', geometry: { points: [[p.x, p.y]] } }
+      ? { kind: 'ink', geometry: { points: samples(e) } }
       : twoEnded(tool)
         ? { kind: tool as MarkupKind, geometry: { from: p, to: p } }
         : { kind: tool as MarkupKind, geometry: { x: p.x, y: p.y, w: 0, h: 0 } })
   }
 
   function move(e: React.PointerEvent) {
+    if (penned(e)) return
     if (tool === 'area' && poly.current) {
       const p = at(e)
       setLive({ kind: 'area', geometry: { points: [...poly.current, [p.x, p.y]] } })
@@ -164,8 +242,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       const d = live.current
       if (!d) return d
       if (d.kind === 'ink') {
-        const g = d.geometry as { points: [number, number][] }
-        return { ...d, geometry: { points: [...g.points, [p.x, p.y]] } }
+        const g = d.geometry as { points: InkPoint[] }
+        return { ...d, geometry: { points: [...g.points, ...samples(e)] } }
       }
       if (twoEnded(d.kind)) return { ...d, geometry: { from: s, to: square(s, p, e.shiftKey) } }
       return { ...d, geometry: { x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) } }
@@ -222,7 +300,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     if (!made || !from) { setLive(null); return }
 
     const travelled = made.kind === 'ink'
-      ? (made.geometry as { points: [number, number][] }).points.length >= 3
+      ? (made.geometry as { points: InkPoint[] }).points.length >= 3
       : twoEnded(made.kind)
         ? Math.hypot((made.geometry as { from: Point; to: Point }).to.x - from.x,
                      (made.geometry as { from: Point; to: Point }).to.y - from.y) >= 0.004
@@ -297,8 +375,20 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     }
     switch (m.kind) {
       case 'ink': {
-        const g = m.geometry as { points: [number, number][] }
-        return <path key={key} {...common} d={g.points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')} />
+        const g = m.geometry as { points: InkPoint[] }
+        const runs = inkRuns(g.points, m.style?.width ?? 2)
+        // One path at one width is what a finger or a mouse draws, and what everything drawn
+        // before a stylus was ever held draws too.
+        if (runs.length <= 1) {
+          return <path key={key} {...common} d={g.points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')} />
+        }
+        return (
+          <g key={key} opacity={common.opacity}>
+            {runs.map((r, i) => (
+              <path key={i} {...common} opacity={1} strokeWidth={r.width} d={r.d} />
+            ))}
+          </g>
+        )
       }
       case 'area': {
         const g = m.geometry as { points: [number, number][] }
@@ -484,3 +574,45 @@ function moveHandle(g: Geometry, handle: Handle, to: Point, _from: Point): Geome
   const [ax, ay] = handle === 'nw' ? [x2, y2] : handle === 'ne' ? [x1, y2] : handle === 'se' ? [x1, y1] : [x2, y1]
   return { x: Math.min(ax, to.x), y: Math.min(ay, to.y), w: Math.abs(to.x - ax), h: Math.abs(to.y - ay) }
 }
+
+/**
+ * A pressure stroke, as a handful of paths rather than one.
+ *
+ * SVG gives a path a single stroke width, so a line that swells and tapers has to be drawn in
+ * pieces. Drawing a piece per sample would put a thousand elements on a page, so widths are
+ * rounded to a quarter of a pixel and consecutive samples at the same rounded width become one
+ * path — a real stroke comes out as a dozen or so. Each piece starts where the last ended, or
+ * the joins would show as gaps.
+ *
+ * Pressure runs the width from just over a third of the set width to a little over half again,
+ * which is about what a felt tip does on paper. A stroke whose samples carry no pressure comes
+ * back as one run, which is the caller's signal to draw it the plain way.
+ */
+function inkRuns(points: InkPoint[], base: number): { width: number; d: string }[] {
+  if (points.length < 2) return []
+  const widthAt = (p: InkPoint) => {
+    const f = p.length > 2 ? (p[2] as number) : null
+    if (f == null) return base
+    return Math.round(base * (0.4 + 1.3 * f) * 4) / 4
+  }
+  const runs: { width: number; d: string }[] = []
+  let width = widthAt(points[0])
+  let run: InkPoint[] = [points[0]]
+  for (let i = 1; i < points.length; i++) {
+    const w = widthAt(points[i])
+    if (w !== width) {
+      run.push(points[i])
+      runs.push({ width, d: pathOf(run) })
+      // The next run begins at the point the last one ended on, so the pieces meet.
+      run = [points[i]]
+      width = w
+    } else {
+      run.push(points[i])
+    }
+  }
+  if (run.length > 1) runs.push({ width, d: pathOf(run) })
+  return runs
+}
+
+const pathOf = (points: InkPoint[]) =>
+  points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')

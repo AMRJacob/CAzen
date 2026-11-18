@@ -18,7 +18,7 @@ import type { SheetRevision } from '../lib/types'
 /** What to call a revision in the toolbar: what it was labelled, else where it sits. */
 const revLabel = (r: SheetRevision) =>
   r.revision_label || r.issuances?.number || (r.revision_index === 0 ? 'Original' : `Rev ${r.revision_index}`)
-import { MarkupLayer } from './MarkupLayer'
+import { MarkupLayer, type StylusReading } from './MarkupLayer'
 
 /** A sheet the viewer can show: the current revision of a sheet, or a specific older one. */
 export interface ViewSheet {
@@ -77,6 +77,10 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [details, setDetails] = useState<{ number: string; title: string; filedUnder: string } | null>(null)
   const [detailsBusy, setDetailsBusy] = useState(false)
   const [detailsProblem, setDetailsProblem] = useState<string | null>(null)
+  // What a stylus says it is doing, for working out what a given device actually reports.
+  const [stylusOn, setStylusOn] = usePref(PREFS.stylusReadout, false)
+  const [stylus, setStylus] = useState<(StylusReading & { rate: number }) | null>(null)
+  const stylusSeen = useRef<{ at: number; samples: number } | null>(null)
   const [filter, setFilter] = useState('')
   const [markups, setMarkups] = useState<Markup[]>([])
   const [tool, setTool] = useState<Tool>(null)
@@ -487,6 +491,9 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 }}>
                 Sheet details…
               </button>
+              <button className={stylusOn ? 'on' : ''} onClick={() => { setMore(false); setStylusOn(!stylusOn); setStylus(null) }}>
+                {stylusOn ? 'Hide stylus readout' : 'Stylus readout'}
+              </button>
               <button onClick={() => { setMore(false); openStoredPdf(project, sheet.filePath).catch((e) => setError(message(e))) }}>
                 Open PDF
               </button>
@@ -521,6 +528,13 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
           </button>
           <button onClick={() => setDetails(null)} disabled={detailsBusy}>Cancel</button>
           {detailsProblem && <span className="bad-text">{detailsProblem}</span>}
+        </div>
+      )}
+      {stylusOn && (
+        <div className="sv-hint mk-stylus">
+          {stylus
+            ? <>Pressure <strong>{stylus.pressure.toFixed(3)}</strong> · tilt <strong>{Math.round(stylus.tiltX)}°, {Math.round(stylus.tiltY)}°</strong> · {stylus.coalesced || 'no'} samples a move{stylus.rate ? ` · about ${stylus.rate} a second` : ''}</>
+            : <>Draw with the stylus and this will say what it reports. Nothing here means the browser isn’t sending pen events at all.</>}
         </div>
       )}
       {markupsOff && tool !== null && <div className="sv-hint">{markupsOff}</div>}
@@ -651,6 +665,16 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 keep={keep}
                 onTrouble={setError}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
+                onStylus={stylusOn ? (r) => {
+                  // Samples a second, over the last second, which is the figure that says
+                  // whether the sub-frame samples are actually arriving.
+                  const was = stylusSeen.current
+                  const samples = Math.max(1, r.coalesced)
+                  const since = was ? r.at - was.at : 0
+                  const counted = was && since < 1000 ? was.samples + samples : samples
+                  stylusSeen.current = since < 1000 && was ? { at: was.at, samples: counted } : { at: r.at, samples }
+                  setStylus({ ...r, rate: since > 0 && since < 1000 ? Math.round((counted * 1000) / Math.max(since, 1)) : 0 })
+                } : undefined}
               />
             )}
             {draft && <span className="sv-draft" style={pct(draft)} />}

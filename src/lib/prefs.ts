@@ -18,6 +18,8 @@ export const PREFS = {
   groupSheetList: 'cazen.pref.groupSheetList',
   /** Column widths on the drawings register, keyed by column. */
   registerWidths: 'cazen.pref.registerWidths',
+  /** Show what a stylus is reporting while drawing — pressure, tilt, samples a second. */
+  stylusReadout: 'cazen.pref.stylusReadout',
 } as const
 
 export function readPref<T>(key: string, fallback: T): T {
