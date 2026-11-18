@@ -198,3 +198,27 @@ export function punchList(all: Observation[], types: ObservationType[]): Observa
   const punch = new Set(types.filter((t) => t.is_punch).map((t) => t.id))
   return all.filter((o) => o.type_id && punch.has(o.type_id) && o.status !== 'closed')
 }
+
+/**
+ * What other people raise on this project, as they raise it.
+ *
+ * Worth having on a punch walk above all: two people walking a building with phones, and
+ * neither writing down what the other already has.
+ */
+export function watchObservations(projectId: string, on: {
+  added: (o: Observation) => void
+  changed: (o: Observation) => void
+  removed: (id: string) => void
+}): () => void {
+  const filter = `project_id=eq.${projectId}`
+  const channel = db()
+    .channel(`observations:${projectId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'observations', filter },
+      (p) => on.added(p.new as Observation))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'observations', filter },
+      (p) => on.changed(p.new as Observation))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'observations', filter },
+      (p) => on.removed((p.old as { id: string }).id))
+    .subscribe()
+  return () => { void db().removeChannel(channel) }
+}

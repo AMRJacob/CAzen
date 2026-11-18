@@ -1653,3 +1653,12 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .issued-sheet:hover { background: var(--wash); }
 .issued-sheet .mono { min-width: 5.5em; color: var(--muted); }
 .issued-sheet-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A note drawn on a revision that is no longer on screen: still true, not newly drawn. */
+.mk-note.mk-older { opacity: 0.55; border-style: dashed; }
+.mk-older-tag {
+  position: absolute; top: -8px; left: 6px; padding: 0 5px;
+  background: var(--panel); border-radius: 3px;
+  font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint);
+  white-space: nowrap; pointer-events: none;
+}

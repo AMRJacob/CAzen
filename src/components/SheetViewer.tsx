@@ -13,7 +13,7 @@ import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } fro
 import { PREFS, usePref } from '../lib/prefs'
 import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
-import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, type Markup, type Point } from '../lib/markups'
+import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, watchSheet, type Markup, type Point } from '../lib/markups'
 import { listRevisions, renameSheet } from '../lib/sheets'
 import type { SheetRevision } from '../lib/types'
 
@@ -158,6 +158,29 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
       .then((r) => { if (live) setHistory(r) })
       .catch(() => { if (live) setHistory([]) })
     return () => { live = false }
+  }, [sheet.sheetId])
+
+  /** What each revision is called, so a markup can say which one it was drawn on. */
+  const revisionNames = useMemo(
+    () => new Map(history.map((r) => [r.id, revLabel(r)])),
+    [history])
+
+  /**
+   * What anybody else draws on this sheet, while it is open.
+   *
+   * Rows arrive one at a time and are matched on id, so our own marks — which are already on
+   * screen before the server has been told — are not drawn twice. If the connection is not
+   * there the sheet simply behaves as it did before.
+   */
+  useEffect(() => {
+    if (!sheet.sheetId) return
+    try {
+      return watchSheet(sheet.sheetId, {
+        added: (m) => setMarkups((all) => (all.some((x) => x.id === m.id) ? all : [...all, m])),
+        changed: (m) => setMarkups((all) => all.map((x) => (x.id === m.id ? { ...x, ...m } : x))),
+        removed: (id) => setMarkups((all) => all.filter((x) => x.id !== id)),
+      })
+    } catch { return }
   }, [sheet.sheetId])
 
   const revAt = history.findIndex((r) => r.id === sheet.revisionId)
@@ -695,6 +718,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
               <MarkupLayer
                 markups={markups} tool={settingScale ? 'dimension' : tool} colour={colour}
                 projectId={project.id} sheetId={sheet.sheetId} revisionId={sheet.revisionId}
+                revisionNames={revisionNames}
                 scale={scale} aspect={aspect} me={me}
                 onChange={setMarkups}
                 selected={selected}

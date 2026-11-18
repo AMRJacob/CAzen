@@ -23,7 +23,7 @@ export interface StylusReading {
   at: number
 }
 
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus, snapper }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, revisionNames, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus, snapper }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -31,6 +31,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   projectId: string
   sheetId: string
   revisionId: string
+  /** What each revision of this sheet is called, so an older mark can say where it came from. */
+  revisionNames?: Map<string, string>
   scale: { from: Point; to: Point; inches: number } | null
   aspect: number
   me: string | null
@@ -376,12 +378,28 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     left: `${g.x * 100}%`, top: `${g.y * 100}%`, width: `${g.w * 100}%`, height: `${g.h * 100}%`,
   })
 
-  const shape = (m: Markup | { kind: MarkupKind; geometry: Geometry; style: Markup['style']; id?: string }, key: string, live = false) => {
+  /**
+   * A mark drawn on a revision that is no longer on screen.
+   *
+   * It is still true — a note about a detail doesn't stop being true because the sheet was
+   * reissued — but it was drawn over different linework, so it is shown faintly rather than as
+   * though somebody had just drawn it on this one. Bringing it forward is a deliberate act and
+   * the bar offers it; until then, faint and labelled with where it came from.
+   */
+  const olderThan = (m: { revision_id?: string | null }) =>
+    !!m.revision_id && m.revision_id !== revisionId
+
+  const drawnOn = (m: { revision_id?: string | null }) =>
+    m.revision_id ? revisionNames?.get(m.revision_id) ?? 'an earlier revision' : null
+
+  const shape = (m: Markup | { kind: MarkupKind; geometry: Geometry; style: Markup['style']; id?: string; revision_id?: string | null }, key: string, live = false) => {
     const colourOf = stroke(m)
+    const older = !live && olderThan(m)
     const common = {
       stroke: colourOf, fill: 'none', strokeWidth: (m.style?.width ?? 2),
       vectorEffect: 'non-scaling-stroke' as const, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
-      opacity: live ? 0.75 : 1,
+      opacity: live ? 0.75 : older ? 0.32 : 1,
+      strokeDasharray: older ? '5 4' : undefined,
     }
     switch (m.kind) {
       case 'ink': {
@@ -449,7 +467,12 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       onPointerDown={down} onPointerMove={move} onPointerUp={up}
       onDoubleClick={(e) => { if (tool === 'area' && poly.current) { e.preventDefault(); closeArea() } }}>
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="mk-svg">
-        {markups.filter((m) => m.kind !== 'text').map((m) => shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id))}
+        {markups.filter((m) => m.kind !== 'text').map((m) => {
+          const drawn = shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id)
+          if (!olderThan(m)) return drawn
+          // Faint and dashed is the signal; this says what it means to anyone who hovers it.
+          return <g key={`older-${m.id}`}><title>{`Drawn on ${drawnOn(m)}`}</title>{drawn}</g>
+        })}
         {/* A note's leader: drawn under the note itself, so the line runs to the box's edge
             and stops there rather than crossing the words. */}
         {markups.filter((m) => m.kind === 'text').map((m) => {
@@ -493,7 +516,10 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
         const g = m.geometry as { x: number; y: number; w: number; h: number }
         const mine = !m.created_by || m.created_by === me
         return (
-          <div key={m.id} className="mk-note" style={{ ...pct(g), borderColor: stroke(m) }}>
+          <div key={m.id} className={`mk-note${olderThan(m) ? ' mk-older' : ''}`}
+            style={{ ...pct(g), borderColor: stroke(m) }}
+            title={olderThan(m) ? `Drawn on ${drawnOn(m)}` : undefined}>
+            {olderThan(m) && <span className="mk-older-tag">{drawnOn(m)}</span>}
             {mine && tool !== null && (
               <button
                 className={`mk-leader-grip${(g as NoteBox).leader ? ' on' : ''}`}

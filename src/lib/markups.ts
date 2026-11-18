@@ -241,3 +241,28 @@ export function areaOf(
 export function squareFeet(sqft: number): string {
   return `${sqft < 100 ? sqft.toFixed(1) : Math.round(sqft).toLocaleString()} SF`
 }
+
+/**
+ * What other people draw on this sheet, as they draw it.
+ *
+ * The same shape the notes pad uses, for the same reason: a markup is its own row and is never
+ * rewritten except deliberately, so two people on one sheet are never touching the same record
+ * and whatever arrives is simply drawn. The returned function stops listening.
+ */
+export function watchSheet(sheetId: string, on: {
+  added: (m: Markup) => void
+  changed: (m: Markup) => void
+  removed: (id: string) => void
+}): () => void {
+  const filter = `sheet_id=eq.${sheetId}`
+  const channel = db()
+    .channel(`sheet:${sheetId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sheet_markups', filter },
+      (p) => on.added(p.new as Markup))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sheet_markups', filter },
+      (p) => on.changed(p.new as Markup))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sheet_markups', filter },
+      (p) => on.removed((p.old as { id: string }).id))
+    .subscribe()
+  return () => { void db().removeChannel(channel) }
+}

@@ -8,7 +8,7 @@ import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
 import { listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind } from '../lib/pads'
 import {
-  editObservation, listObservations, listTypes, nameOf, onDay, punchList, STATUS_LABELS,
+  editObservation, listObservations, listTypes, nameOf, onDay, punchList, STATUS_LABELS, watchObservations,
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
@@ -259,6 +259,18 @@ function Observations() {
   }, [projectId])
   useEffect(() => { load() }, [load])
   useEffect(() => { listTypes().then(setTypes).catch(() => setTypes([])) }, [])
+
+  // Two people walking the same building, neither writing down what the other already has.
+  useEffect(() => {
+    if (!projectId) return
+    try {
+      return watchObservations(projectId, {
+        added: (o) => setAll((list) => ((list ?? []).some((x) => x.id === o.id) ? list : [o, ...(list ?? [])])),
+        changed: (o) => setAll((list) => (list ?? []).map((x) => (x.id === o.id ? { ...x, ...o } : x))),
+        removed: (id) => setAll((list) => (list ?? []).filter((x) => x.id !== id)),
+      })
+    } catch { return }
+  }, [projectId])
 
   const shown = useMemo(() => {
     const list = all ?? []
