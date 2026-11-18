@@ -1552,3 +1552,56 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pad-head > button:last-child { margin-left: auto; }
 .pad-title { flex: 1 1 16em; font-size: 15px; font-weight: 500; }
 .field-notes-written { font-size: 15px; font-weight: 500; margin: 30px 0 6px; }
+
+/* ---------- Observations ---------- */
+.obs-form { display: flex; flex-direction: column; gap: 14px; }
+.obs-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.obs-types .chip.on { background: var(--moss-soft); border-color: var(--moss); color: var(--ink); font-weight: 500; }
+.obs-more { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 20px; }
+.obs-form textarea { font: inherit; resize: vertical; }
+
+.obs-list { display: flex; flex-direction: column; }
+.obs-row { display: flex; flex-direction: column; gap: 7px; padding: 12px 0; border-top: 1px solid var(--line); }
+.obs-row-main { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.obs-row-side { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.obs-no { color: var(--muted); font-size: 12.5px; min-width: 3.5em; }
+.obs-title { font-size: 15px; text-align: left; }
+.obs-detail { margin: 0; max-width: 72ch; line-height: 1.5; }
+.obs-closed .obs-title { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.obs-row select { font-size: 12.5px; padding: 2px 6px; }
+
+/* ---------- Photographs ---------- */
+.photos { display: flex; flex-direction: column; gap: 6px; }
+.photo-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo {
+  position: relative; width: 92px; height: 92px; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--line); background: var(--wash);
+  display: flex; align-items: center; justify-content: center;
+}
+.photo img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+.photo-add { flex-direction: column; gap: 2px; color: var(--muted); cursor: pointer; border-style: dashed; font: inherit; }
+.photo-add span:first-child { font-size: 20px; line-height: 1; }
+.photo-add:hover { background: var(--moss-soft); color: var(--ink); border-color: var(--moss); }
+.photo-drop {
+  position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; padding: 0;
+  border: none; border-radius: 50%; background: rgba(43, 45, 44, 0.65); color: #fff;
+  font-size: 14px; line-height: 1; cursor: pointer;
+}
+.photo-full {
+  position: fixed; inset: 0; z-index: 60; background: rgba(43, 45, 44, 0.86);
+  display: grid; place-items: center; padding: 20px; cursor: zoom-out;
+}
+.photo-full img { max-width: 100%; max-height: 100%; border-radius: 4px; }
+
+/* The grip that pulls a leader arrow out of a note and points it at something. */
+.mk-leader-grip {
+  position: absolute; left: -9px; bottom: -9px; width: 18px; height: 18px; padding: 0;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--panel);
+  cursor: crosshair; touch-action: none;
+}
+.mk-leader-grip::after {
+  content: ''; position: absolute; inset: 4px;
+  border-left: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+}
+.mk-leader-grip.on { background: var(--moss-soft); border-color: var(--moss); }
+.mk-leader-grip.on::after { border-color: var(--moss); }

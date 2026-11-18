@@ -25,7 +25,8 @@ import type { InkPoint } from './ink'
 export type Geometry =
   | { points: InkPoint[] }                  // ink, area
   | { from: Point; to: Point }              // line, arrow, dimension
-  | { x: number; y: number; w: number; h: number }   // rect, cloud, text
+  /** rect, cloud, text. A note may carry a leader: the point its arrow is pointing at. */
+  | { x: number; y: number; w: number; h: number; leader?: Point }
 
 export interface Markup {
   id: string

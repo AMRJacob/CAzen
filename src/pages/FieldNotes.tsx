@@ -7,6 +7,14 @@ import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
 import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
 import { listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind } from '../lib/pads'
+import {
+  editObservation, listObservations, listTypes, nameOf, onDay, punchList, STATUS_LABELS,
+  type Observation, type ObservationStatus, type ObservationType,
+} from '../lib/observations'
+import { ObservationForm } from '../components/ObservationForm'
+import { Photos } from '../components/Photos'
+import { today } from '../lib/dates'
+import type { Project } from '../lib/types'
 import { openFile } from '../lib/files'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
@@ -236,6 +244,51 @@ const untitled = (kind: PadKind) => (kind === 'meeting_notes' ? 'Meeting notes' 
 
 function Observations() {
   const { current } = useProject()
+  const [types, setTypes] = useState<ObservationType[]>([])
+  const [all, setAll] = useState<Observation[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [writing, setWriting] = useState(false)
+  const [editing, setEditing] = useState<Observation | null>(null)
+  const [view, setView] = useState<'all' | 'day' | 'punch'>('all')
+  const [day, setDay] = useState(today())
+
+  const projectId = current?.id
+  const load = useCallback(() => {
+    if (!projectId) return
+    listObservations(projectId).then(setAll).catch((e) => setError(message(e)))
+  }, [projectId])
+  useEffect(() => { load() }, [load])
+  useEffect(() => { listTypes().then(setTypes).catch(() => setTypes([])) }, [])
+
+  const shown = useMemo(() => {
+    const list = all ?? []
+    if (view === 'day') return onDay(list, day)
+    if (view === 'punch') return punchList(list, types)
+    return list
+  }, [all, view, day, types])
+
+  const days = useMemo(
+    () => [...new Set((all ?? []).map((o) => o.observed_on))].sort().reverse(),
+    [all])
+
+  if (current && (writing || editing)) {
+    return (
+      <section>
+        <div className="page-head">
+          <div>
+            <PageTitle>{editing ? 'Observation' : 'New observation'}</PageTitle>
+            <p className="lead">{editing ? 'What was seen, and where it stands.' : HEADING.observations.lead}</p>
+          </div>
+        </div>
+        {error && <div className="notice error">{error}</div>}
+        <ObservationForm project={current} types={types} existing={editing ?? undefined}
+          onSaved={() => { setWriting(false); setEditing(null); load() }}
+          onCancel={() => { setWriting(false); setEditing(null) }}
+          onTrouble={setError} />
+      </section>
+    )
+  }
+
   return (
     <section>
       <div className="page-head">
@@ -246,13 +299,91 @@ function Observations() {
             {HEADING.observations.lead}
           </p>
         </div>
+        <button className="primary" disabled={!current} onClick={() => setWriting(true)}>New observation</button>
       </div>
-      <div className="card muted">
-        <strong>Not built yet.</strong> The table behind this is in place — an observation carries a
-        type, a date, an area and trade, a status, a pin on a sheet and photographs — and it syncs
-        offline along with markups. What is missing is the way to make one: the form, the pin, and
-        the camera.
+
+      {error && <div className="notice error">{error}</div>}
+
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''}
+          onClick={() => setView('all')}>Everything</button>
+        <button role="tab" aria-selected={view === 'day'} className={view === 'day' ? 'on' : ''}
+          onClick={() => setView('day')}>One visit</button>
+        <button role="tab" aria-selected={view === 'punch'} className={view === 'punch' ? 'on' : ''}
+          onClick={() => setView('punch')}>Punch list</button>
       </div>
+
+      {view === 'day' && (
+        <div className="set-actions">
+          <label className="inline-field">Seen on
+            <select value={day} onChange={(e) => setDay(e.target.value)}>
+              {days.length ? days.map((d) => <option key={d} value={d}>{usDate(d)}</option>)
+                : <option value={day}>{usDate(day)}</option>}
+            </select>
+          </label>
+          <span className="muted small">
+            {shown.length} {shown.length === 1 ? 'observation' : 'observations'} — what a field report of that day is made of.
+          </span>
+        </div>
+      )}
+      {view === 'punch' && (
+        <p className="muted small">
+          Everything still open that was raised under a type that belongs on a punch list. Nothing is
+          copied here; closing one closes it everywhere.
+        </p>
+      )}
+
+      {!all ? <p className="muted">Loading…</p>
+        : !shown.length ? <div className="card muted">Nothing here yet.</div> : (
+          <div className="obs-list">
+            {shown.map((o) => (
+              <ObservationRow key={o.id} o={o} types={types} project={current}
+                onOpen={() => setEditing(o)}
+                onStatus={async (status) => {
+                  try {
+                    const next = await editObservation(o, { status })
+                    setAll((list) => (list ?? []).map((x) => (x.id === o.id ? next : x)))
+                  } catch (e) { setError(message(e)) }
+                }} />
+            ))}
+          </div>
+        )}
     </section>
+  )
+}
+
+function ObservationRow({ o, types, project, onOpen, onStatus }: {
+  o: Observation
+  types: ObservationType[]
+  project: Project | null
+  onOpen: () => void
+  onStatus: (s: ObservationStatus) => void
+}) {
+  const type = types.find((t) => t.id === o.type_id)
+  return (
+    <div className={`obs-row obs-${o.status}`}>
+      <div className="obs-row-main">
+        <span className="mono obs-no">{nameOf(o, types)}</span>
+        <button className="link obs-title" onClick={onOpen}>{o.title}</button>
+        {type && <span className="tag">{type.name}</span>}
+        {o.sheet_id && <span className="tag">on a sheet</span>}
+      </div>
+      <div className="obs-row-side">
+        {o.area && <span className="muted small">{o.area}</span>}
+        {o.trade && <span className="muted small">{o.trade}</span>}
+        <span className="muted small nowrap">{usDate(o.observed_on)}</span>
+        <select value={o.status} aria-label={`Status of ${o.title}`}
+          onChange={(e) => onStatus(e.target.value as ObservationStatus)}>
+          {(Object.keys(STATUS_LABELS) as ObservationStatus[]).map((s) => (
+            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+          ))}
+        </select>
+      </div>
+      {o.photos.length > 0 && project && (
+        <Photos project={project} paths={o.photos} about={o.title} editable={false}
+          onChange={() => {}} onTrouble={() => {}} />
+      )}
+      {o.detail && <p className="muted small obs-detail">{o.detail}</p>}
+    </div>
   )
 }

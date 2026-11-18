@@ -51,6 +51,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 }) {
   const [drawing, setDrawing] = useState<{ kind: MarkupKind; geometry: Geometry } | null>(null)
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
+  /** The note whose leader is being dragged, and where its tip is right now. */
+  const [leading, setLeading] = useState<{ id: string; at: Point; moved: boolean } | null>(null)
   const start = useRef<Point | null>(null)
   /** Where a click-click line began, while it waits for its second click. */
   const waiting = useRef<Point | null>(null)
@@ -448,6 +450,16 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       onDoubleClick={(e) => { if (tool === 'area' && poly.current) { e.preventDefault(); closeArea() } }}>
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="mk-svg">
         {markups.filter((m) => m.kind !== 'text').map((m) => shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id))}
+        {/* A note's leader: drawn under the note itself, so the line runs to the box's edge
+            and stops there rather than crossing the words. */}
+        {markups.filter((m) => m.kind === 'text').map((m) => {
+          const g = (leading?.id === m.id
+            ? { ...(m.geometry as NoteBox), leader: leading.at }
+            : m.geometry) as NoteBox
+          if (!g.leader) return null
+          return <Leader key={`${m.id}-leader`} box={g} tip={g.leader} aspect={aspect}
+            colour={m.style?.colour ?? colour} />
+        })}
         {drawing && shape({ ...drawing, style: { colour, width: 2 } }, 'live', true)}
       </svg>
 
@@ -482,6 +494,36 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
         const mine = !m.created_by || m.created_by === me
         return (
           <div key={m.id} className="mk-note" style={{ ...pct(g), borderColor: stroke(m) }}>
+            {mine && tool !== null && (
+              <button
+                className={`mk-leader-grip${(g as NoteBox).leader ? ' on' : ''}`}
+                title={(g as NoteBox).leader ? 'Drag to move the arrow, or click to take it off' : 'Drag to point this note at something'}
+                aria-label="Leader arrow"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
+                  setLeading({ id: m.id, at: (g as NoteBox).leader ?? at(e.nativeEvent as PointerEvent), moved: false })
+                }}
+                onPointerMove={(e) => {
+                  if (leading?.id !== m.id) return
+                  e.stopPropagation()
+                  setLeading({ id: m.id, at: at(e.nativeEvent as PointerEvent), moved: true })
+                }}
+                onPointerUp={(e) => {
+                  if (leading?.id !== m.id) return
+                  e.stopPropagation()
+                  const box = m.geometry as NoteBox
+                  // A drag places the arrow; a click with no drag takes it off again.
+                  const next: Geometry = leading.moved
+                    ? { ...box, leader: leading.at }
+                    : { x: box.x, y: box.y, w: box.w, h: box.h }
+                  setLeading(null)
+                  onChange(markups.map((x) => (x.id === m.id ? { ...x, geometry: next } : x)))
+                  editMarkup(m.id, { geometry: next }).catch((err) => onTrouble?.(message(err)))
+                }}
+              />
+            )}
             {editing?.id === m.id ? (
               <textarea
                 autoFocus value={editing.body}
@@ -602,3 +644,50 @@ function moveHandle(g: Geometry, handle: Handle, to: Point, _from: Point): Geome
  * which is about what a felt tip does on paper. A stroke whose samples carry no pressure comes
  * back as one run, which is the caller's signal to draw it the plain way.
  */
+
+/** A note's box, with the point its arrow is pointing at when it has one. */
+type NoteBox = { x: number; y: number; w: number; h: number; leader?: Point }
+
+/**
+ * The line from a note to the thing it is about.
+ *
+ * It leaves the note at whichever edge faces the tip, so the line never crosses the words, and
+ * it carries the same arrowhead an arrow markup does. The head is drawn in page fractions with
+ * the aspect divided back out of x, or it would be a flattened arrow on a landscape sheet.
+ */
+function Leader({ box, tip, aspect, colour }: {
+  box: NoteBox
+  tip: Point
+  aspect: number
+  colour: string
+}) {
+  const cx = box.x + box.w / 2
+  // Where the line leaves the box: the point on its edge nearest the tip.
+  const from = {
+    x: Math.max(box.x, Math.min(box.x + box.w, tip.x)),
+    y: Math.max(box.y, Math.min(box.y + box.h, tip.y)),
+  }
+  if (from.x > box.x && from.x < box.x + box.w && from.y > box.y && from.y < box.y + box.h) {
+    // The tip is inside the box; leave from the nearest side rather than from nowhere.
+    from.x = tip.x < cx ? box.x : box.x + box.w
+  }
+  const angle = Math.atan2(tip.y - from.y, (tip.x - from.x) * aspect)
+  const head = 0.012
+  const wing = (turn: number) => [
+    tip.x - (Math.cos(angle + turn) * head) / aspect,
+    tip.y - Math.sin(angle + turn) * head,
+  ]
+  const [ax, ay] = wing(0.4)
+  const [bx, by] = wing(-0.4)
+  const common = {
+    stroke: colour, strokeWidth: 0.0018, fill: 'none',
+    vectorEffect: 'non-scaling-stroke' as const,
+    strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+  }
+  return (
+    <g>
+      <line {...common} x1={from.x} y1={from.y} x2={tip.x} y2={tip.y} />
+      <path {...common} d={`M ${ax} ${ay} L ${tip.x} ${tip.y} L ${bx} ${by}`} />
+    </g>
+  )
+}
