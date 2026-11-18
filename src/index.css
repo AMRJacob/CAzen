@@ -980,6 +980,18 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-stylus { font-variant-numeric: tabular-nums; }
 .mk-stylus strong { font-weight: 600; }
 
+/* Where a point will land when it lands on something drawn on the sheet. */
+.mk-snap {
+  position: absolute; pointer-events: none; z-index: 4;
+  width: 13px; height: 13px; margin: -7px 0 0 -7px;
+  border: 2px solid #1f6f3f; background: rgba(255, 255, 255, 0.55);
+}
+.mk-snap-end { border-radius: 2px; }
+.mk-snap-mid { border-radius: 2px; transform: rotate(45deg); }
+.mk-snap-line { border-radius: 50%; width: 11px; height: 11px; margin: -6px 0 0 -6px; border-style: dashed; }
+@media (pointer: coarse) { .mk-snap { width: 17px; height: 17px; margin: -9px 0 0 -9px; } }
+
+
 
 .mk-note {
   position: absolute; pointer-events: auto; min-width: 90px; min-height: 34px;

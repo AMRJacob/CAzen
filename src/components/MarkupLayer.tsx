@@ -4,6 +4,7 @@ import {
   type Geometry, type InkPoint, type Markup, type MarkupKind, type Point,
 } from '../lib/markups'
 import { message } from '../lib/errors'
+import type { Snap, Snapper } from '../lib/pdf/geometry'
 
 /**
  * What people have drawn on a sheet, and the drawing of it.
@@ -21,7 +22,7 @@ export interface StylusReading {
   at: number
 }
 
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus, snapper }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -44,6 +45,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   onSelect?: (id: string | null) => void
   /** What a stylus is reporting, for the readout that says whether this device reports anything. */
   onStylus?: (r: StylusReading) => void
+  /** The lines on the sheet, for snapping to what is actually drawn. Null on a scan. */
+  snapper?: Snapper | null
 }) {
   const [drawing, setDrawing] = useState<{ kind: MarkupKind; geometry: Geometry } | null>(null)
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
@@ -68,6 +71,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   const [dragGeom, setDragGeom] = useState<{ id: string; geometry: Geometry } | null>(null)
 
   useEffect(() => {
+    setMark(null)
     if (tool) return
     waiting.current = null
     setLive(null)
@@ -103,6 +107,32 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
       y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
     }
+  }
+
+  /**
+   * Snapping to the lines on the sheet.
+   *
+   * A drawing is vector, so the end of that wall has a real coordinate in the file. Measuring to
+   * within a few pixels of it by eye is the part of using a drawing on screen that has always
+   * been worse than using one on paper, and there is no reason for it: the geometry is right
+   * there. Ends win over middles and middles over anywhere-along-a-line, which is the order of
+   * how much somebody means it.
+   *
+   * Freehand doesn't snap — a sketch is a sketch — and holding Alt turns it off for one stroke,
+   * which is the usual way out when the thing you want isn't drawn.
+   */
+  const SNAPS = new Set(['line', 'arrow', 'dimension', 'rect', 'cloud', 'area'])
+  const [mark, setMark] = useState<Snap | null>(null)
+
+  const pt = (e: React.PointerEvent): Point => {
+    const raw = at(e)
+    if (!snapper || !tool || !SNAPS.has(tool) || e.altKey) { if (mark) setMark(null); return raw }
+    const box = layer.current?.getBoundingClientRect()
+    // A dozen screen pixels, whatever the zoom — close enough to mean it, far enough to reach.
+    const tol = box?.height ? 12 / box.height : 0.012
+    const found = snapper.near(raw, tol)
+    setMark(found)
+    return found ? { x: found.x, y: found.y } : raw
   }
 
   /**
@@ -173,7 +203,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     // An area is clicked corner by corner, and closed by coming back to where it started,
     // by double-clicking, or by pressing Enter.
     if (tool === 'area') {
-      const p = at(e)
+      const p = pt(e)
       const started = poly.current
       if (!started) {
         poly.current = [[p.x, p.y]]
@@ -193,7 +223,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       const kind = live.current.kind
       waiting.current = null
       start.current = null
-      const to = square(from, at(e), e.shiftKey)
+      const to = square(from, pt(e), e.shiftKey)
       setLive(null)
       finish({ kind, geometry: { from, to } }, from)
       return
@@ -208,7 +238,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     // Capture keeps the stroke with this layer if the finger leaves it, but a browser that
     // refuses the capture must not cost the stroke — the drawing goes on without it.
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* draw anyway */ }
-    const p = at(e)
+    const p = pt(e)
     start.current = p
     setLive(tool === 'ink'
       ? { kind: 'ink', geometry: { points: samples(e) } }
@@ -219,6 +249,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 
   function move(e: React.PointerEvent) {
     if (penned(e)) return
+    // Hovering shows where a point would land, before anything is committed to.
+    if (!live.current && !grabbed.current) { pt(e); return }
     if (tool === 'area' && poly.current) {
       const p = at(e)
       setLive({ kind: 'area', geometry: { points: [...poly.current, [p.x, p.y]] } })
@@ -227,7 +259,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     // Waiting for a second click: the shape follows the pointer with nothing held down.
     if (waiting.current && live.current) {
       const from = waiting.current
-      setLive(live.current ? { ...live.current, geometry: { from, to: square(from, at(e), e.shiftKey) } } : null)
+      setLive(live.current ? { ...live.current, geometry: { from, to: square(from, pt(e), e.shiftKey) } } : null)
       return
     }
     const g = grabbed.current
@@ -236,7 +268,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       return
     }
     if (!live.current || !start.current) return
-    const p = at(e)
+    const p = pt(e)
     const s = start.current
     setLive((() => {
       const d = live.current
@@ -310,7 +342,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     // click sets the far end. Dragging it out in one go still works, which is what most hands do.
     if (!travelled && twoEnded(made.kind)) {
       waiting.current = from
-      setLive({ kind: made.kind, geometry: { from, to: square(from, at(e), e.shiftKey) } })
+      setLive({ kind: made.kind, geometry: { from, to: square(from, pt(e), e.shiftKey) } })
       return
     }
 
@@ -490,6 +522,12 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
           </div>
         )
       })}
+
+      {/* Where a point would land, if it would land on something drawn. */}
+      {mark && (
+        <span className={`mk-snap mk-snap-${mark.kind}`} aria-hidden="true"
+          style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%` }} />
+      )}
 
       {/* Select: something to click on each markup, then handles on the one that's picked up. */}
       {tool === 'select' && markups.map((m) => {

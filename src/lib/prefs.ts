@@ -20,6 +20,8 @@ export const PREFS = {
   registerWidths: 'cazen.pref.registerWidths',
   /** Show what a stylus is reporting while drawing — pressure, tilt, samples a second. */
   stylusReadout: 'cazen.pref.stylusReadout',
+  /** Snap measurements and lines to the geometry in the sheet. */
+  snapToDrawing: 'cazen.pref.snapToDrawing',
 } as const
 
 export function readPref<T>(key: string, fallback: T): T {

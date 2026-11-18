@@ -5,6 +5,7 @@ import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
+import { readGeometry, Snapper } from '../lib/pdf/geometry'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
 import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } from '../lib/disciplines'
@@ -79,6 +80,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [detailsProblem, setDetailsProblem] = useState<string | null>(null)
   // What a stylus says it is doing, for working out what a given device actually reports.
   const [stylusOn, setStylusOn] = usePref(PREFS.stylusReadout, false)
+  const [snapOn, setSnapOn] = usePref(PREFS.snapToDrawing, true)
   const [stylus, setStylus] = useState<(StylusReading & { rate: number }) | null>(null)
   const stylusSeen = useRef<{ at: number; samples: number } | null>(null)
   const [filter, setFilter] = useState('')
@@ -107,6 +109,27 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   // drawn again from the original vectors over the top of it.
   const detail = useRef<HTMLCanvasElement>(null)
   useDetailRender(detail, scroller, view, page, width, !busy)
+
+  /**
+   * The lines on this sheet, so measuring can land on them.
+   *
+   * Read once when the sheet opens, off the back of the page pdf.js has already parsed, and
+   * thrown away when it closes. A scan has no geometry and gets none: there is nothing in the
+   * file to recover, and guessing at lines in a photograph would be worse than an honest cursor.
+   */
+  const [snapper, setSnapper] = useState<Snapper | null>(null)
+  useEffect(() => {
+    setSnapper(null)
+    if (!page) return
+    let dropped = false
+    // After the first paint: a sheet should appear, then become snappable, not the other way round.
+    const soon = window.setTimeout(() => {
+      readGeometry(page)
+        .then((g) => { if (!dropped && g.count > 0) setSnapper(new Snapper(g, aspect)) })
+        .catch(() => { /* a sheet that won't give up its lines still opens */ })
+    }, 60)
+    return () => { dropped = true; window.clearTimeout(soon) }
+  }, [page, aspect])
 
   const byNumber = useMemo(() => new Map(sheets.map((s) => [norm(s.number), s])), [sheets])
   const index = sheets.findIndex((s) => norm(s.number) === norm(sheet.number))
@@ -495,6 +518,14 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 }}>
                 Sheet details…
               </button>
+              <button className={snapOn ? 'on' : ''} disabled={!snapper}
+                title={snapper
+                  ? 'Measurements and lines land on the linework in the sheet. Hold Alt to ignore it for one stroke.'
+                  : 'This sheet is a scan, so there is no linework to land on.'}
+                onClick={() => { setMore(false); setSnapOn(!snapOn) }}>
+                {snapOn ? 'Snapping on' : 'Snap to drawing'}
+                {snapper && <span className="muted small"> · {snapper.count.toLocaleString()} lines</span>}
+              </button>
               <button className={stylusOn ? 'on' : ''} onClick={() => { setMore(false); setStylusOn(!stylusOn); setStylus(null) }}>
                 {stylusOn ? 'Hide stylus readout' : 'Stylus readout'}
               </button>
@@ -670,6 +701,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 keep={keep}
                 onTrouble={setError}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
+                snapper={snapOn ? snapper : null}
                 onStylus={stylusOn ? (r) => {
                   // Samples a second, over the last second, which is the figure that says
                   // whether the sub-frame samples are actually arriving.
