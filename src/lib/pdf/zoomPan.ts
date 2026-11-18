@@ -1,266 +1,264 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist'
 
-const MIN_ZOOM = 1
+const MIN_ZOOM = 0.25
 const MAX_ZOOM = 8
 export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
+/** How much of the sheet must stay on screen, so it can't be flung out of sight. */
+const KEEP_ON_SCREEN = 0.25
+
+export interface View { x: number; y: number; zoom: number }
+
 /**
- * Fit a page to the room there is, and let fingers move it: one to pan (left to the browser, which
- * does it better), two to zoom about the point between them, a double tap to zoom in on whatever it
- * landed on.
+ * Moving a drawing around: one finger or the mouse drags it, two fingers or the wheel zoom it.
  *
- * Whatever is in the middle of the view is kept in the middle of it through every change of size.
- * That is what a zoom should do anyway, and it is also what a folding phone needs: unfolding one
- * re-lays out the page with no reload and no event to say what happened, so the only sound response
- * is to re-fit to the new size and hold the reader's place while doing it.
+ * The sheet is moved by a transform rather than by scrolling it. Scrolling was the obvious way and
+ * it was the wrong one for three reasons, all of which this fixes at once:
  *
- * The caller owns the scrolling element and the page inside it; this returns the size to draw the
- * page at and the handlers to wire up.
+ *  - It was not smooth. Changing the drawn size of a very large canvas every frame makes the
+ *    browser lay out and repaint it each time; a transform is handed to the compositor and costs
+ *    the main thread nothing.
+ *  - There was nothing to pan once the sheet fit the screen, because a scroller with no overflow
+ *    does not scroll. A transform has no such edge: the sheet can be moved wherever is useful,
+ *    zoomed in or out.
+ *  - Zooming out past the fit was impossible for the same reason. It is often what you want on a
+ *    phone — the whole sheet, small, to find your place on it.
+ *
+ * The canvas is redrawn at the new scale once the movement settles. Until it does, the browser
+ * scales the pixels it already has, which is why a pinch looks continuous.
  */
-export function usePageZoom(scroller: React.RefObject<HTMLDivElement | null>, aspect: number) {
+export function usePageZoom(
+  viewport: React.RefObject<HTMLDivElement | null>,
+  page: React.RefObject<HTMLDivElement | null>,
+  aspect: number,
+) {
   const [fitWidth, setFitWidth] = useState(1000)
   const [zoom, setZoom] = useState(1)
-  /** A point on the page, as a fraction of it, to be held still through the next change of size. */
-  const centre = useRef({ x: 0.5, y: 0.5 })
-  /** Where in the view that point should sit. The middle, unless a gesture says otherwise. */
-  const anchor = useRef({ x: 0.5, y: 0.5 })
-  /** The zoom as the gesture handlers below see it; they outlive any one render. */
-  const zoomRef = useRef(zoom)
-  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  /** Where the sheet sits, in pixels, before this render has been committed. */
+  const view = useRef<View>({ x: 0, y: 0, zoom: 1 })
+  const frame = useRef(0)
 
-  const width = fitWidth * zoom
-  const height = width / aspect
+  const width = fitWidth
+  const height = fitWidth / aspect
 
-  // Fit to the element's content box, whatever padding the stylesheet gives it at this size.
+  /** Put the transform on the element now, without waiting for React. */
+  const paint = useCallback(() => {
+    const el = page.current
+    if (!el) return
+    const v = view.current
+    el.style.transform = `translate3d(${v.x}px, ${v.y}px, 0) scale(${v.zoom})`
+  }, [page])
+
+  const schedule = useCallback(() => {
+    if (frame.current) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0
+      paint()
+    })
+  }, [paint])
+
+  /** Keep enough of the sheet on screen to grab hold of. */
+  const contain = useCallback(() => {
+    const box = viewport.current?.getBoundingClientRect()
+    if (!box) return
+    const v = view.current
+    const w = width * v.zoom
+    const h = (width / aspect) * v.zoom
+    const slackX = box.width - w * KEEP_ON_SCREEN
+    const slackY = box.height - h * KEEP_ON_SCREEN
+    v.x = Math.min(slackX, Math.max(-w + box.width * KEEP_ON_SCREEN, v.x))
+    v.y = Math.min(slackY, Math.max(-h + box.height * KEEP_ON_SCREEN, v.y))
+  }, [viewport, width, aspect])
+
+  /** Centre the sheet at its current zoom. */
+  const centre = useCallback(() => {
+    const box = viewport.current?.getBoundingClientRect()
+    if (!box) return
+    const v = view.current
+    v.x = (box.width - width * v.zoom) / 2
+    v.y = (box.height - (width / aspect) * v.zoom) / 2
+    paint()
+  }, [viewport, width, aspect, paint])
+
+  /** Zoom about a point on the screen, so whatever is under it stays under it. */
+  const zoomAbout = useCallback((factor: number, clientX?: number, clientY?: number) => {
+    const box = viewport.current?.getBoundingClientRect()
+    if (!box) return
+    const v = view.current
+    const next = clampZoom(v.zoom * factor)
+    const applied = next / v.zoom
+    const px = (clientX ?? box.left + box.width / 2) - box.left
+    const py = (clientY ?? box.top + box.height / 2) - box.top
+    v.x = px - (px - v.x) * applied
+    v.y = py - (py - v.y) * applied
+    v.zoom = next
+    contain()
+    schedule()
+    setZoom(next)
+  }, [viewport, contain, schedule])
+
+  const moveBy = useCallback((dx: number, dy: number) => {
+    view.current.x += dx
+    view.current.y += dy
+    contain()
+    schedule()
+  }, [contain, schedule])
+
+  /** Fit the sheet to the room there is, and put it in the middle. */
+  const fit = useCallback(() => {
+    const box = viewport.current?.getBoundingClientRect()
+    if (!box) return
+    view.current.zoom = 1
+    setZoom(1)
+    const w = Math.max(240, Math.min(box.width - 24, (box.height - 24) * aspect))
+    setFitWidth(w)
+    // Centre against the size about to be applied, not the one on screen.
+    view.current.x = (box.width - w) / 2
+    view.current.y = (box.height - w / aspect) / 2
+    schedule()
+  }, [viewport, aspect, schedule])
+
+  // Re-fit when the window changes shape — which is also what a folding phone does, with no
+  // reload and no event to say so.
   useEffect(() => {
-    const fit = () => {
-      const el = scroller.current
-      if (!el) return
-      const style = getComputedStyle(el)
-      const gutter = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
-      const vGutter = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0)
-      setFitWidth(Math.max(320, Math.min(el.clientWidth - gutter, (el.clientHeight - vGutter) * aspect)))
-    }
     fit()
-    window.addEventListener('resize', fit)
-    window.addEventListener('orientationchange', fit)
+    const onResize = () => fit()
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
     return () => {
-      window.removeEventListener('resize', fit)
-      window.removeEventListener('orientationchange', fit)
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
     }
-  }, [aspect, scroller])
+  }, [fit])
 
-  const recentre = useCallback(() => {
-    const el = scroller.current
-    if (!el || !el.scrollWidth) return
-    el.scrollLeft = centre.current.x * el.scrollWidth - anchor.current.x * el.clientWidth
-    el.scrollTop = centre.current.y * el.scrollHeight - anchor.current.y * el.clientHeight
-  }, [scroller])
+  useEffect(() => { paint() }, [paint, width, height])
 
-  useEffect(recentre, [width, height, recentre])
-
-  /** Remember where the reader is looking, so the next re-size can put it back. */
-  const onScroll = useCallback(() => {
-    const el = scroller.current
-    if (!el || !el.scrollWidth || !el.scrollHeight) return
-    anchor.current = { x: 0.5, y: 0.5 }
-    centre.current = {
-      x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
-      y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight,
-    }
-  }, [scroller])
-
-  /**
-   * The wheel zooms, the way it does in every drawing program, and it zooms about the pointer so
-   * the detail under it stays under it rather than sliding off the screen.
-   */
+  // Drag to pan, wheel to zoom, two fingers to pinch. All on the viewport, all by hand, because
+  // these have to be able to stop the browser doing its own thing with the same gesture.
   useEffect(() => {
-    const el = scroller.current
+    const el = viewport.current
     if (!el) return
-    const onWheel = (e: WheelEvent) => {
-      if (!e.deltaY) return
-      e.preventDefault()
-      const r = el.getBoundingClientRect()
-      // Where the pointer is on the page, and where it sits in the view: hold both.
-      centre.current = {
-        x: (el.scrollLeft + (e.clientX - r.left)) / Math.max(1, el.scrollWidth),
-        y: (el.scrollTop + (e.clientY - r.top)) / Math.max(1, el.scrollHeight),
-      }
-      anchor.current = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
-      // A line of wheel is a line; a trackpad sends pixels. Both end up a gentle step.
-      const step = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
-      setZoom((z) => clampZoom(z * Math.exp(-step / 400)))
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [scroller])
+    let dragging: { x: number; y: number; id: number } | null = null
+    let pinch: { gap: number; zoom: number } | null = null
 
-  /**
-   * Drag to pan. Once the wheel zooms, a trackpad has no way left to move around the sheet — and
-   * dragging the drawing is what the hand expects anyway. Not while a link is being drawn, where
-   * the drag is drawing the box.
-   */
-  useEffect(() => {
-    const el = scroller.current
-    if (!el) return
-    let from: { x: number; y: number; left: number; top: number } | null = null
+    const drawingHere = (target: EventTarget | null) =>
+      (target as HTMLElement | null)?.closest('.mk-layer.on, .sv-page.linking, .sv-link, .sv-pop, .mk-note')
 
     const down = (e: PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return
-      if ((e.target as HTMLElement).closest('.sv-page.linking, .sv-link, .sv-pop')) return
-      from = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+      if (drawingHere(e.target)) return
+      dragging = { x: e.clientX, y: e.clientY, id: e.pointerId }
+      el.classList.add('dragging')
     }
     const move = (e: PointerEvent) => {
-      if (!from) return
-      const dx = e.clientX - from.x
-      const dy = e.clientY - from.y
-      if (!el.classList.contains('dragging') && Math.hypot(dx, dy) < 4) return   // let a click be a click
-      el.classList.add('dragging')
+      if (!dragging || e.pointerId !== dragging.id || pinch) return
+      moveBy(e.clientX - dragging.x, e.clientY - dragging.y)
+      dragging = { ...dragging, x: e.clientX, y: e.clientY }
       el.setPointerCapture?.(e.pointerId)
-      el.scrollLeft = from.left - dx
-      el.scrollTop = from.top - dy
     }
-    const up = () => { from = null; el.classList.remove('dragging') }
+    const up = () => { dragging = null; el.classList.remove('dragging') }
+
+    const wheel = (e: WheelEvent) => {
+      if (!e.deltaY) return
+      e.preventDefault()
+      const step = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      zoomAbout(Math.exp(-step / 400), e.clientX, e.clientY)
+    }
+
+    const gap = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const mid = (t: TouchList) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 })
+    let lastMid = { x: 0, y: 0 }
+    let lastTap = 0
+
+    const touchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        if (drawingHere(e.target)) return
+        e.preventDefault()
+        dragging = null
+        pinch = { gap: gap(e.touches), zoom: view.current.zoom }
+        lastMid = mid(e.touches)
+        return
+      }
+      if (e.touches.length !== 1 || drawingHere(e.target)) return
+      const now = Date.now()
+      if (now - lastTap < 300) {
+        lastTap = 0
+        e.preventDefault()
+        const t = e.touches[0]
+        zoomAbout(view.current.zoom > 1.2 ? 1 / view.current.zoom : 2.5, t.clientX, t.clientY)
+      } else {
+        lastTap = now
+      }
+    }
+    const touchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !pinch) return
+      e.preventDefault()
+      const m = mid(e.touches)
+      // Two fingers move the sheet as well as scale it, which is what makes it feel attached.
+      moveBy(m.x - lastMid.x, m.y - lastMid.y)
+      lastMid = m
+      zoomAbout((gap(e.touches) / pinch.gap) * (pinch.zoom / view.current.zoom), m.x, m.y)
+    }
+    const touchEnd = (e: TouchEvent) => { if (e.touches.length < 2) pinch = null }
+
+    // Safari handles pinch above touch events; preventing these is what stops it zooming the page.
+    const gesture = (e: Event) => e.preventDefault()
 
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
     el.addEventListener('pointercancel', up)
+    el.addEventListener('wheel', wheel, { passive: false })
+    el.addEventListener('touchstart', touchStart, { passive: false })
+    el.addEventListener('touchmove', touchMove, { passive: false })
+    el.addEventListener('touchend', touchEnd)
+    el.addEventListener('gesturestart', gesture, { passive: false })
+    el.addEventListener('gesturechange', gesture, { passive: false })
     return () => {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
+      el.removeEventListener('wheel', wheel)
+      el.removeEventListener('touchstart', touchStart)
+      el.removeEventListener('touchmove', touchMove)
+      el.removeEventListener('touchend', touchEnd)
+      el.removeEventListener('gesturestart', gesture)
+      el.removeEventListener('gesturechange', gesture)
     }
-  }, [scroller])
+  }, [viewport, moveBy, zoomAbout])
 
-  /**
-   * Pinch on iOS.
-   *
-   * Safari handles a two-finger pinch above the level of touch events — touch-action doesn't stop
-   * it and neither does preventing the touchmove, so the page itself zooms and the handler below
-   * never gets a look in. WebKit's own gesture events are the way in: preventing gesturestart
-   * stops Safari zooming the page, and gesturechange carries the scale since the pinch began.
-   */
-  useEffect(() => {
-    const el = scroller.current
-    if (!el || !('ongesturestart' in window)) return
-    let startZoom = 1
+  /** Put a point on the sheet (0–1) in the middle of the view, at a given zoom. */
+  const showPoint = useCallback((fx: number, fy: number, atZoom?: number) => {
+    const box = viewport.current?.getBoundingClientRect()
+    if (!box) return
+    const v = view.current
+    if (atZoom) { v.zoom = clampZoom(atZoom); setZoom(v.zoom) }
+    v.x = box.width / 2 - fx * width * v.zoom
+    v.y = box.height / 2 - fy * (width / aspect) * v.zoom
+    contain()
+    paint()
+  }, [viewport, width, aspect, contain, paint])
 
-    type GestureEvent = Event & { scale: number; clientX: number; clientY: number }
-    const start = (e: Event) => {
-      e.preventDefault()
-      startZoom = zoomRef.current
-    }
-    const change = (e: Event) => {
-      e.preventDefault()
-      const g = e as GestureEvent
-      const r = el.getBoundingClientRect()
-      anchor.current = { x: (g.clientX - r.left) / r.width, y: (g.clientY - r.top) / r.height }
-      centre.current = {
-        x: (el.scrollLeft + (g.clientX - r.left)) / Math.max(1, el.scrollWidth),
-        y: (el.scrollTop + (g.clientY - r.top)) / Math.max(1, el.scrollHeight),
-      }
-      setZoom(clampZoom(startZoom * g.scale))
-    }
-    const end = (e: Event) => e.preventDefault()
-
-    el.addEventListener('gesturestart', start, { passive: false })
-    el.addEventListener('gesturechange', change, { passive: false })
-    el.addEventListener('gestureend', end, { passive: false })
-    return () => {
-      el.removeEventListener('gesturestart', start)
-      el.removeEventListener('gesturechange', change)
-      el.removeEventListener('gestureend', end)
-    }
-  }, [scroller])
-
-  // Touch gestures, for everything that isn't Safari. Registered by hand rather than through React
-  // because the two-finger case has to be able to stop the browser scrolling along with it.
-  useEffect(() => {
-    const el = scroller.current
-    if (!el) return
-    let startGap = 0
-    let startZoom = 1
-    let lastTap = 0
-    const gap = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
-    const pointAt = (clientX: number, clientY: number) => {
-      const r = el.getBoundingClientRect()
-      return {
-        x: (el.scrollLeft + (clientX - r.left)) / Math.max(1, el.scrollWidth),
-        y: (el.scrollTop + (clientY - r.top)) / Math.max(1, el.scrollHeight),
-      }
-    }
-
-    const onStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        startGap = gap(e.touches)
-        startZoom = zoomRef.current
-        return
-      }
-      if (e.touches.length !== 1) return
-      // A tap on a link is a tap on a link, not half of a zoom.
-      if ((e.target as HTMLElement).closest('.sv-link, .sv-pop')) { lastTap = 0; return }
-      const t = e.touches[0]
-      const now = Date.now()
-      if (now - lastTap < 300) {
-        lastTap = 0
-        anchor.current = { x: 0.5, y: 0.5 }
-        centre.current = pointAt(t.clientX, t.clientY)
-        setZoom((z) => (z > 1.2 ? MIN_ZOOM : clampZoom(2.5)))
-        e.preventDefault()
-      } else {
-        lastTap = now
-      }
-    }
-    const onMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !startGap) return
-      e.preventDefault()
-      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2
-      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2
-      const r = el.getBoundingClientRect()
-      anchor.current = { x: (mx - r.left) / r.width, y: (my - r.top) / r.height }
-      centre.current = pointAt(mx, my)
-      setZoom(clampZoom(startZoom * (gap(e.touches) / startGap)))
-    }
-    const onEnd = (e: TouchEvent) => { if (e.touches.length < 2) startGap = 0 }
-
-    el.addEventListener('touchstart', onStart, { passive: false })
-    el.addEventListener('touchmove', onMove, { passive: false })
-    el.addEventListener('touchend', onEnd)
-    el.addEventListener('touchcancel', onEnd)
-    return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('touchend', onEnd)
-      el.removeEventListener('touchcancel', onEnd)
-    }
-  }, [scroller])
-
-  return {
-    zoom,
-    setZoom,
-    width,
-    height,
-    centre,
-    onScroll,
-    recentre,
-    fit: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom(MIN_ZOOM) }, []),
-    zoomIn: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom((z) => clampZoom(z * 1.5)) }, []),
-    zoomOut: useCallback(() => { anchor.current = { x: 0.5, y: 0.5 }; setZoom((z) => clampZoom(z / 1.5)) }, []),
-  }
+  return { zoom, width, height, fit, centre, zoomAbout, showPoint, view }
 }
 
+/** How many pixels a canvas may have. Past this, Safari on a phone quietly gives up and draws nothing. */
+const MAX_CANVAS_PIXELS = 16_000_000
+
 /**
- * Draw a PDF page into a canvas at a given width, a moment after that width settles. The canvas is
- * already stretched to the new size by the time this runs, so the page scales on screen at once and
- * sharpens just after; waiting keeps a pinch smooth instead of starting a render on every frame.
+ * Draw a PDF page into a canvas at the size it is being shown, a moment after that size settles.
+ *
+ * The cap matters more than it looks: a D-size sheet at 400% on a 3x screen asks for something
+ * near 80 megapixels, and rather than being slow, Safari returns a blank canvas. Holding the area
+ * down trades a little sharpness at extreme zoom for a drawing that is actually there.
  */
 export function usePageRender(
   canvas: React.RefObject<HTMLCanvasElement | null>,
   page: PDFPageProxy | null,
-  width: number,
+  cssWidth: number,
+  zoom: number,
   ready: boolean,
 ) {
   useEffect(() => {
@@ -269,16 +267,17 @@ export function usePageRender(
     const timer = window.setTimeout(() => {
       const base = page.getViewport({ scale: 1 })
       const ratio = Math.min(window.devicePixelRatio || 1, 2)
-      const scale = Math.min((width * ratio) / base.width, 9000 / base.width)
-      const vp = page.getViewport({ scale })
+      const wanted = (cssWidth * Math.max(1, zoom) * ratio) / base.width
+      const budget = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height))
+      const vp = page.getViewport({ scale: Math.min(wanted, budget) })
       const c = canvas.current
       if (!c) return
-      c.width = vp.width
-      c.height = vp.height
+      c.width = Math.floor(vp.width)
+      c.height = Math.floor(vp.height)
       const t = page.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport: vp })
       task = t
       t.promise.catch(() => {})
-    }, 90)
+    }, 140)
     return () => { window.clearTimeout(timer); task?.cancel() }
-  }, [page, ready, width, canvas])
+  }, [page, ready, cssWidth, zoom, canvas])
 }

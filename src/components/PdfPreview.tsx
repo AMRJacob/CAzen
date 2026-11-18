@@ -20,6 +20,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const pageEl = useRef<HTMLDivElement>(null)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [page, setPage] = useState<PDFPageProxy | null>(null)
   const [number, setNumber] = useState(1)
@@ -27,8 +28,8 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const { zoom, width, height, onScroll, fit, zoomIn, zoomOut } = usePageZoom(scroller, aspect)
-  usePageRender(canvas, page, width, !busy)
+  const { zoom, width, height, fit, zoomAbout } = usePageZoom(scroller, pageEl, aspect)
+  usePageRender(canvas, page, width, zoom, !busy)
 
   // pdf.js takes the buffer over, so it gets a copy: the caller still needs these bytes to save
   // and to download.
@@ -52,6 +53,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
       setAspect(vp.width / vp.height)
       setPage(p)
       setBusy(false)
+      requestAnimationFrame(fit)
     }, (e: unknown) => { if (!cancelled) { setError(e instanceof Error ? e.message : String(e)); setBusy(false) } })
     return () => { cancelled = true }
   }, [pdf, number])
@@ -81,9 +83,9 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
         )}
         <div className="sv-bar-group sv-inline-tools">
           <span className="sv-sep" />
-          <button className="icon" onClick={zoomOut} aria-label="Zoom out">−</button>
+          <button className="icon" onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
           <button onClick={fit} title="Fit the page to the screen">{Math.round(zoom * 100)}%</button>
-          <button className="icon" onClick={zoomIn} aria-label="Zoom in">+</button>
+          <button className="icon" onClick={() => zoomAbout(1.5)} aria-label="Zoom in">+</button>
         </div>
         <div className="sv-bar-group">
           {onDownload && <button onClick={onDownload}>Download</button>}
@@ -91,11 +93,11 @@ export function PdfPreview({ bytes, title, onClose, onDownload }: {
         </div>
       </div>
       <div className="sv-body">
-        <div className="sv-scroll" ref={scroller} onScroll={onScroll}>
+        <div className="sv-scroll" ref={scroller}>
           {busy && <p className="muted sv-msg">Drawing the page…</p>}
           {error && <div className="notice error sv-msg">{error}</div>}
-          <div className="sv-page" style={{ width, height, visibility: busy && !page ? 'hidden' : 'visible' }}>
-            <canvas ref={canvas} style={{ width, height }} />
+          <div ref={pageEl} className="sv-page" style={{ width, height, visibility: busy && !page ? 'hidden' : 'visible' }}>
+            <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
           </div>
         </div>
       </div>

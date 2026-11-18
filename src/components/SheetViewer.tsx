@@ -6,6 +6,7 @@ import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
+import { isMissingTable, message } from '../lib/errors'
 import { bringForward, listMarkups, MARKUP_COLOURS, type Markup, type MarkupKind, type Point } from '../lib/markups'
 import { MarkupLayer } from './MarkupLayer'
 
@@ -67,24 +68,26 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const [scaleLength, setScaleLength] = useState('')
   const [scale, setScale] = useState<{ from: Point; to: Point; inches: number } | null>(null)
   const [me, setMe] = useState<string | null>(null)
+  /** Why markups aren't available here, when they aren't. */
+  const [markupsOff, setMarkupsOff] = useState<string | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
   const [page, setPage] = useState<PDFPageProxy | null>(null)
   const [aspect, setAspect] = useState(1.5)
 
-  const { zoom, setZoom, width, height, centre, onScroll, recentre, fit, zoomIn, zoomOut } = usePageZoom(scroller, aspect)
-  usePageRender(canvas, page, width, !busy)
+  const pageEl = useRef<HTMLDivElement>(null)
+  const { zoom, width, height, fit, zoomAbout, showPoint } = usePageZoom(scroller, pageEl, aspect)
+  usePageRender(canvas, page, width, zoom, !busy)
 
   const byNumber = useMemo(() => new Map(sheets.map((s) => [norm(s.number), s])), [sheets])
   const index = sheets.findIndex((s) => norm(s.number) === norm(sheet.number))
 
   const go = useCallback((s: ViewSheet) => {
     setStack((st) => [...st, s])
-    setZoom(1)
     setIndexOpen(false)
     setMore(false)
-  }, [setZoom])
+  }, [])
   const back = () => stack.length > 1 && setStack(stack.slice(0, -1))
 
   // Load the PDF, its words and its hand-drawn links.
@@ -93,7 +96,6 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
     setBusy(true)
     setError(null)
     setText(null)
-    centre.current = { x: 0.5, y: 0.5 }
     ;(async () => {
       try {
         const pdf = await getDocument({ data: await readFile(project, sheet.filePath) }).promise
@@ -109,20 +111,33 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
         if (!cancelled) setManual((links.data ?? []) as ManualLink[])
         const { data: who } = await db().auth.getUser()
         if (!cancelled) setMe(who.user?.id ?? null)
+        // Markups are an addition to a sheet, not a condition of showing one: if they can't be
+        // read the drawing still opens and says so, rather than the whole viewer failing.
         if (sheet.sheetId) {
-          const [drawn, row] = await Promise.all([
-            listMarkups(sheet.sheetId),
-            db().from('sheets').select('scale').eq('id', sheet.sheetId).single(),
-          ])
-          if (!cancelled) {
-            setMarkups(drawn)
-            setScale((row.data?.scale ?? null) as typeof scale)
+          try {
+            const [drawn, row] = await Promise.all([
+              listMarkups(sheet.sheetId),
+              db().from('sheets').select('scale').eq('id', sheet.sheetId).single(),
+            ])
+            if (!cancelled) {
+              setMarkups(drawn)
+              setScale((row.data?.scale ?? null) as typeof scale)
+              setMarkupsOff(null)
+            }
+          } catch (e) {
+            if (!cancelled) {
+              setMarkups([])
+              setMarkupsOff(isMissingTable(e)
+                ? 'Markups need migration 0015 run on the database.'
+                : message(e))
+            }
           }
         } else if (!cancelled) {
           setMarkups([])
+          setMarkupsOff('Open this sheet from the register to mark it up.')
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+        if (!cancelled) setError(message(e))
       } finally {
         if (!cancelled) setBusy(false)
       }
@@ -132,8 +147,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
 
   useEffect(() => () => { pdfRef.current?.loadingTask.destroy() }, [])
 
-  // Put the reader back where they were once a new sheet has drawn.
-  useEffect(() => { if (!busy) recentre() }, [busy, recentre])
+  // A new sheet arrives fitted to the screen.
+  useEffect(() => { if (!busy) fit() }, [busy, fit])
 
   const autoLinks = useMemo<AutoLink[]>(() => {
     if (!text) return []
@@ -166,16 +181,10 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
 
   // Put the first match in the middle of the view, zoomed in enough to read.
   useEffect(() => {
-    if (!hits.length || !scroller.current) return
+    if (!hits.length) return
     const h = hits[0]
-    centre.current = { x: h.x + h.w / 2, y: h.y + h.h / 2 }
-    if (zoom < 2) { setZoom(2.5); return }
-    scroller.current.scrollTo({
-      left: centre.current.x * width - scroller.current.clientWidth / 2,
-      top: centre.current.y * height - scroller.current.clientHeight / 2,
-      behavior: 'smooth',
-    })
-  }, [hits, zoom, width, height])
+    showPoint(h.x + h.w / 2, h.y + h.h / 2, 2.5)
+  }, [hits, showPoint])
 
   const follow = useCallback((number: string) => {
     const s = byNumber.get(norm(number))
@@ -267,12 +276,17 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           {sheet.superseded && <span className="tag muted">superseded</span>}
         </div>
         <div className="sv-bar-group sv-inline-tools">
+          <button className={tool !== null ? 'on' : ''} onClick={() => setTool(tool === null ? 'ink' : null)}
+            disabled={!sheet.sheetId} title={sheet.sheetId ? 'Draw, note and measure on this sheet' : 'Open this sheet from the register to mark it up'}>
+            {tool !== null ? 'Done' : 'Mark up'}
+          </button>
+          <span className="sv-sep" />
           <button className="icon" disabled={index <= 0} onClick={() => stepTo(index - 1)} aria-label="Previous sheet">‹</button>
           <button className="icon" disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)} aria-label="Next sheet">›</button>
           <span className="sv-sep" />
-          <button className="icon" onClick={zoomOut} aria-label="Zoom out">−</button>
+          <button className="icon" onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
           <button onClick={fit} title="Fit the sheet to the screen">{Math.round(zoom * 100)}%</button>
-          <button className="icon" onClick={zoomIn} aria-label="Zoom in">+</button>
+          <button className="icon" onClick={() => zoomAbout(1.5)} aria-label="Zoom in">+</button>
           <span className="sv-find-group">
             <span className="sv-sep" />
             <input className="sv-find" placeholder="Find on sheet" value={hl} onChange={(e) => setHl(e.target.value)} />
@@ -290,18 +304,18 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 <button disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)}>Next ›</button>
               </div>
               <div className="sv-more-row sv-narrow-only">
-                <button onClick={zoomOut} aria-label="Zoom out">−</button>
+                <button onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
                 <button onClick={fit}>Fit</button>
-                <button onClick={zoomIn} aria-label="Zoom in">+</button>
+                <button onClick={() => zoomAbout(1.5)} aria-label="Zoom in">+</button>
               </div>
-              <button className={tool !== null ? 'on' : ''} onClick={() => { setTool(tool === null ? 'ink' : null); setMore(false) }}
+              <button className={`sv-narrow-only ${tool !== null ? 'on' : ''}`} onClick={() => { setTool(tool === null ? 'ink' : null); setMore(false) }}
                 disabled={!sheet.sheetId} title={sheet.sheetId ? undefined : 'Open this sheet from the register to mark it up'}>
                 {tool !== null ? 'Done marking up' : 'Mark up'}
               </button>
               <button className={linkMode ? 'on' : ''} onClick={() => { setLinkMode(!linkMode); setPending(null); setMore(false) }}>
                 {linkMode ? 'Done linking' : 'Add link'}
               </button>
-              <button onClick={() => { setMore(false); openStoredPdf(project, sheet.filePath).catch((e) => setError(e instanceof Error ? e.message : String(e))) }}>
+              <button onClick={() => { setMore(false); openStoredPdf(project, sheet.filePath).catch((e) => setError(message(e))) }}>
                 Open PDF
               </button>
             </div>
@@ -311,6 +325,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           <button onClick={onClose} aria-label="Close">Close</button>
         </div>
       </div>
+      {markupsOff && tool !== null && <div className="sv-hint">{markupsOff}</div>}
       {tool !== null && (
         <div className="mk-bar">
           <div className="mk-tools">
@@ -387,12 +402,13 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           </div>
         </aside>
         {indexOpen && <button className="sv-scrim" aria-label="Close the sheet list" onClick={() => setIndexOpen(false)} />}
-        <div className="sv-scroll" ref={scroller} onScroll={onScroll}>
+        <div className="sv-scroll" ref={scroller}>
           {busy && <p className="muted sv-msg">Loading {sheet.number}…</p>}
           {error && <div className="notice error sv-msg">{error}</div>}
-          <div className={`sv-page ${linkMode ? 'linking' : ''}`} style={{ width, height, visibility: busy ? 'hidden' : 'visible' }}
+          <div ref={pageEl} className={`sv-page ${linkMode ? 'linking' : ''}`}
+            style={{ width, height, visibility: busy ? 'hidden' : 'visible' }}
             onPointerDown={down} onPointerMove={move} onPointerUp={up}>
-            <canvas ref={canvas} style={{ width, height }} />
+            <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
             {hits.map((b, i) => <span key={'h' + i} className="sv-hit" style={pct(b)} />)}
             {!linkMode && autoLinks.map((l, i) => (
               <button key={'a' + i} className="sv-link auto" style={pct(l)} title={`Open ${l.target}`} onClick={() => follow(l.target)} />

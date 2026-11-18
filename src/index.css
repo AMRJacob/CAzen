@@ -566,20 +566,16 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
   height: 100vh; height: 100dvh;
 }
 .sv-body { flex: 1; display: flex; min-height: 0; }
-/* Centre the sheet in whatever room it has instead of pinning it to the top
-   corner. The auto margin does it without the clipping that centring a flex
-   item causes once it is zoomed past the edges of the screen. */
-.sv-scroll { padding: 16px; display: flex; }
-.sv-page { margin: auto; }
+/* The sheet is moved by a transform, so this is a window onto it rather than a
+   scroller. That is what lets it be dragged at any zoom — including when it
+   already fits, where a scroller has nothing to scroll — and what keeps the
+   movement off the main thread. */
+.sv-scroll { padding: 0; overflow: hidden; position: relative; touch-action: none; }
+.sv-page { position: absolute; top: 0; left: 0; margin: 0; transform-origin: 0 0; will-change: transform; }
 
-/* One finger pans the sheet, two fingers pinch it (handled in SheetViewer so
-   the zoom can stay anchored where the fingers are). Naming the pans rather
-   than leaving it to the browser is what keeps a two-finger gesture from
-   becoming a zoom of the whole page. While a link is being drawn the page
-   takes the gesture instead. */
-.sv-scroll { touch-action: pan-x pan-y; }
-.sv-page { touch-action: pan-x pan-y; }
-.sv-page.linking { touch-action: none; }
+/* Every gesture over the sheet is handled in code, so the browser is told to
+   keep its hands off all of them. */
+.sv-page.linking { cursor: crosshair; }
 
 /* The sheet index: the fastest way to the next sheet, which beats stepping
    through 200 of them with arrows. Where it sits depends on which way the
