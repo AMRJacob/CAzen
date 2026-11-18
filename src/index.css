@@ -1047,3 +1047,89 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 @media (max-width: 899px) { .sv-revs-more { display: flex; align-items: center; gap: 8px; } }
 .mk-area { font-variant-numeric: tabular-nums; }
 .sheet-edit .f-name { flex: 1 1 200px; }
+
+/* ---------- Getting around on a phone ---------- */
+.phone-nav { display: none; }
+
+/* Both postures of a folding phone, not just the folded one: the strip the sidebar takes is
+   worth more as drawing on a 669px screen than it is as a row of links. */
+@media (max-width: 899px) {
+  /* The sidebar's job is done by the corner mark here, so it stops taking a strip of screen. */
+  .shell > .sidebar { display: none; }
+  .shell { grid-template-columns: 1fr; display: block; }
+  .content { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+  .phone-nav {
+    display: flex; align-items: center; gap: 8px;
+    position: fixed; z-index: 40;
+    left: calc(10px + env(safe-area-inset-left));
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    pointer-events: none;                 /* only its own controls take taps */
+  }
+  /* A phone browser's fixed `bottom` is the layout viewport's, which is behind the browser's own
+     bar — the reason a bottom-anchored control ends up under the address bar. The dynamic
+     viewport unit follows the chrome as it comes and goes, so the mark stays where a thumb is. */
+  @supports (height: 100dvh) {
+    .phone-nav {
+      bottom: auto;
+      top: calc(100dvh - 62px - env(safe-area-inset-bottom));
+      /* Width too: on a phone the layout viewport can be wider than what you can see, which
+         would run the last destination off the right-hand edge. */
+      right: auto;
+      width: calc(100dvw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    }
+  }
+  .phone-nav > * { pointer-events: auto; }
+
+  .pn-mark {
+    flex: 0 0 auto; display: grid; place-items: center;
+    width: 52px; height: 52px; padding: 0;
+    border: 1px solid var(--line); border-radius: 50%;
+    background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
+    cursor: pointer;
+  }
+  .pn-mark:active { transform: scale(0.95); }
+
+  /* Slides out to the right from behind the mark, and is not reachable while it's away. */
+  .pn-bar {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: stretch; gap: 2px;
+    padding: 5px; border: 1px solid var(--line); border-radius: 26px;
+    background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
+    transform-origin: left center;
+    transform: scaleX(0.02); opacity: 0;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.14s;
+  }
+  .phone-nav.open .pn-bar { transform: scaleX(1); opacity: 1; }
+
+  .pn-spot {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    padding: 6px 2px; border: none; border-radius: 21px;
+    font: inherit; font-size: 10px; line-height: 1.2;
+    color: var(--muted); background: none; text-decoration: none; cursor: pointer;
+  }
+  .pn-spot span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Where you are, said plainly, which is the thing a hidden menu usually loses. */
+  .pn-spot.active, .pn-spot.on { color: var(--moss); background: var(--moss-soft); font-weight: 500; }
+  .pn-bar > * { opacity: 0; transition: opacity 0.1s; }
+  .phone-nav.open .pn-bar > * { opacity: 1; transition: opacity 0.16s 0.12s; }
+
+  /* The sheet viewer is the whole screen; nothing floats over the drawing. */
+  .sheet-viewer ~ .phone-nav, body:has(.sheet-viewer) .phone-nav { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pn-bar { transition: opacity 0.14s; }
+}
+
+/* The landing page on a phone is one question — which job? — so it stops explaining itself and
+   gives the list the screen. */
+@media (max-width: 619px) {
+  .page-head .lead { display: none; }
+  .projects tr.opens { padding: 16px; margin-bottom: 8px; }
+  .projects td.p-name { font-size: 18px; line-height: 1.3; }
+  .projects td.p-number { font-size: 12px; letter-spacing: 0.02em; }
+  /* Editing a project is a desk job; on a phone it opens as plain stacked cards. */
+  .projects tr:not(.opens) > td { padding: 0 0 14px; }
+}

@@ -5,6 +5,7 @@ import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
 import { FirmProvider } from './lib/firm'
 import { ProjectProvider, useProject } from './lib/project'
 import { Logo } from './components/Logo'
+import { PhoneNav } from './components/PhoneNav'
 import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import Documents from './pages/Documents'
@@ -55,6 +56,9 @@ function Shell({ offline = false }: { offline?: boolean }) {
       {screen.on && (
         <button className="fs-exit" onClick={screen.toggle}>Exit full screen</button>
       )}
+      {/* On a phone the sidebar gives up its strip of screen to the drawing, and this takes
+          over: a corner mark that opens a bar of destinations. */}
+      {!offline && <PhoneNav />}
       <aside className="sidebar">
         <div className="sidebar-logo"><Logo size={23} /></div>
         {!offline && <ProjectSwitcher />}
