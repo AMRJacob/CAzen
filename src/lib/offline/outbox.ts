@@ -38,6 +38,23 @@ export async function queue(projectId: string, job: Job): Promise<void> {
 
 export const pending = (projectId?: string) => all<Queued>('outbox', projectId)
 
+/**
+ * The ids of rows this device has changed and the server hasn't been told about.
+ *
+ * A refresh from the server must not treat these as rows that were deleted elsewhere — they are
+ * rows the server has simply never heard of. Without this, drawing something and refreshing
+ * loses it.
+ */
+export async function unsentIds(): Promise<Set<string>> {
+  const out = new Set<string>()
+  for (const q of await all<Queued>('outbox').catch(() => [] as Queued[])) {
+    const j = q.job
+    if ('row' in j && typeof j.row.id === 'string') out.add(j.row.id)
+    else if ('id' in j) out.add(j.id)
+  }
+  return out
+}
+
 /** Each job, as the one request that carries it out. Errors bubble so drain can decide. */
 async function send(job: Job): Promise<void> {
   if (job.kind === 'markup.add') {

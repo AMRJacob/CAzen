@@ -64,6 +64,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const [markups, setMarkups] = useState<Markup[]>([])
   const [tool, setTool] = useState<Tool>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [keep, setKeep] = useState(true)
   const [colour, setColour] = useState<string>(MARKUP_COLOURS[0])
   const [settingScale, setSettingScale] = useState(false)
   const [pendingScale, setPendingScale] = useState<{ from: Point; to: Point } | null>(null)
@@ -251,6 +252,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       if (tool !== null && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const pick = TOOL_KEYS[e.key.toLowerCase()]
         if (pick && !(pick === 'dimension' && !scale && !settingScale)) { e.preventDefault(); setTool(pick); if (pick !== 'select') setSelected(null) }
+        if (e.key === 'Delete' || e.key === 'Backspace') { /* handled by the layer's erase targets */ }
       }
       if (e.key === 'ArrowRight' && index >= 0 && index < sheets.length - 1) go(sheets[index + 1])
       if (e.key === 'ArrowLeft' && index > 0) go(sheets[index - 1])
@@ -285,7 +287,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           {sheet.superseded && <span className="tag muted">superseded</span>}
         </div>
         <div className="sv-bar-group sv-inline-tools">
-          <button className={tool !== null ? 'on' : ''} onClick={() => setTool(tool === null ? 'ink' : null)}
+          <button className={tool !== null ? 'on' : ''} onClick={() => setTool(tool === null ? 'select' : null)}
             disabled={!sheet.sheetId} title={sheet.sheetId ? 'Draw, note and measure on this sheet' : 'Open this sheet from the register to mark it up'}>
             {tool !== null ? 'Done' : 'Mark up'}
           </button>
@@ -386,6 +388,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
               setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
             }}
             onDone={() => { setTool(null); setSettingScale(false); setSelected(null) }}
+            keep={keep} setKeep={setKeep}
+            scratch={markups.filter((m) => m.id.startsWith('scratch:')).length}
           />
         )}
         <aside className={`sv-index${indexOpen ? ' open' : ''}`} aria-label="Sheets in this set">
@@ -430,6 +434,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 onChange={setMarkups}
                 selected={selected}
                 onSelect={setSelected}
+                keep={keep}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
               />
             )}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   addMarkup, cloudPath, editMarkup, measure, removeMarkup,
   type Geometry, type Markup, type MarkupKind, type Point,
@@ -11,7 +11,7 @@ import {
  * sheet at any zoom and never has to be recalculated. Strokes are told not to scale with it, or a
  * line drawn at fit-to-screen would become a stripe at 400%.
  */
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -25,6 +25,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   onChange: (markups: Markup[]) => void
   /** Picking the two ends of the scale line, when that's what's being set. */
   onPick?: (from: Point, to: Point) => void
+  /** False while marks are scratch: drawn on screen, never written anywhere. */
+  keep?: boolean
   /** Which markup is picked up, with Select. The viewer holds it so the palette can recolour it. */
   selected?: string | null
   onSelect?: (id: string | null) => void
@@ -32,15 +34,55 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   const [drawing, setDrawing] = useState<{ kind: MarkupKind; geometry: Geometry } | null>(null)
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
   const start = useRef<Point | null>(null)
+  /** Where a click-click line began, while it waits for its second click. */
+  const waiting = useRef<Point | null>(null)
+  /**
+   * The shape being drawn, as a ref as well as state.
+   *
+   * A click is a pointerdown and a pointerup in the same tick, and React has not re-rendered in
+   * between — so the state `drawing` is still null when pointerup runs, and a click that starts
+   * a line looked to the release like nothing had started. The ref is written synchronously and
+   * is what the release reads; the state is what draws.
+   */
+  const live = useRef<{ kind: MarkupKind; geometry: Geometry } | null>(null)
+  const layer = useRef<HTMLDivElement>(null)
+  const setLive = (d: { kind: MarkupKind; geometry: Geometry } | null) => { live.current = d; setDrawing(d) }
   /** Which handle of the selected markup is being dragged, and where it started. */
   const grabbed = useRef<{ id: string; handle: Handle; from: Geometry; at: Point } | null>(null)
   const [dragGeom, setDragGeom] = useState<{ id: string; geometry: Geometry } | null>(null)
 
+  useEffect(() => {
+    if (tool) return
+    waiting.current = null
+    setLive(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool])
+
   const picked = selected ? markups.find((m) => m.id === selected) ?? null : null
   const mineToEdit = (m: Markup) => !m.created_by || !me || m.created_by === me
 
+  /** Kinds drawn from one point to another, which are the ones shift and click-click apply to. */
+  const twoEnded = (k: string) => k === 'line' || k === 'arrow' || k === 'dimension'
+
+  /**
+   * Square the second point up with the first while shift is held.
+   *
+   * Orthographic on a drawing means horizontal or vertical, so whichever of the two the line is
+   * closer to wins. The page is wider than it is tall in page fractions, so the horizontal
+   * distance is weighted by the aspect before they are compared, or a line that looks 45° would
+   * not behave like one.
+   */
+  const square = (from: Point, to: Point, on: boolean): Point => {
+    if (!on) return to
+    const dx = Math.abs(to.x - from.x) * aspect
+    const dy = Math.abs(to.y - from.y)
+    return dx >= dy ? { x: to.x, y: from.y } : { x: from.x, y: to.y }
+  }
+
   const at = (e: React.PointerEvent): Point => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    // The layer, not whatever the event happened to land on — a handle's own box would give
+    // coordinates in the wrong frame, and a detached one gives none at all.
+    const r = (layer.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect()
     return {
       x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
       y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
@@ -48,6 +90,17 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   function down(e: React.PointerEvent) {
+    // A shape begun with a click is finished by the next one.
+    if (waiting.current && live.current) {
+      const from = waiting.current
+      const kind = live.current.kind
+      waiting.current = null
+      start.current = null
+      const to = square(from, at(e), e.shiftKey)
+      setLive(null)
+      void finish({ kind, geometry: { from, to } }, from)
+      return
+    }
     if (tool === 'select') {
       // Pressing anywhere that isn't a markup lets go of the one in hand.
       if (!(e.target as HTMLElement).closest('.mk-pickable, .mk-handle, .mk-note')) onSelect?.(null)
@@ -58,34 +111,69 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     const p = at(e)
     start.current = p
-    setDrawing(tool === 'ink'
+    setLive(tool === 'ink'
       ? { kind: 'ink', geometry: { points: [[p.x, p.y]] } }
-      : tool === 'arrow' || tool === 'dimension'
-        ? { kind: tool, geometry: { from: p, to: p } }
-        : { kind: tool, geometry: { x: p.x, y: p.y, w: 0, h: 0 } })
+      : twoEnded(tool)
+        ? { kind: tool as MarkupKind, geometry: { from: p, to: p } }
+        : { kind: tool as MarkupKind, geometry: { x: p.x, y: p.y, w: 0, h: 0 } })
   }
 
   function move(e: React.PointerEvent) {
+    // Waiting for a second click: the shape follows the pointer with nothing held down.
+    if (waiting.current && live.current) {
+      const from = waiting.current
+      setLive(live.current ? { ...live.current, geometry: { from, to: square(from, at(e), e.shiftKey) } } : null)
+      return
+    }
     const g = grabbed.current
     if (g) {
       setDragGeom({ id: g.id, geometry: moveHandle(g.from, g.handle, at(e), g.at) })
       return
     }
-    if (!drawing || !start.current) return
+    if (!live.current || !start.current) return
     const p = at(e)
     const s = start.current
-    setDrawing((d) => {
+    setLive((() => {
+      const d = live.current
       if (!d) return d
       if (d.kind === 'ink') {
         const g = d.geometry as { points: [number, number][] }
         return { ...d, geometry: { points: [...g.points, [p.x, p.y]] } }
       }
-      if (d.kind === 'arrow' || d.kind === 'dimension') return { ...d, geometry: { from: s, to: p } }
+      if (twoEnded(d.kind)) return { ...d, geometry: { from: s, to: square(s, p, e.shiftKey) } }
       return { ...d, geometry: { x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) } }
-    })
+    })())
   }
 
-  async function up() {
+  /** A finished shape: kept, or handed to whoever is picking the scale line. */
+  async function finish(made: { kind: MarkupKind; geometry: Geometry }, from: Point) {
+    waiting.current = null
+    if (onPick && made.kind === 'dimension') {
+      const g = made.geometry as { from: Point; to: Point }
+      onPick(g.from, g.to)
+      return
+    }
+    // Scratch marks are the same thing on screen and nothing at all on disk: no row, no queue,
+    // no trip to the server. Closing the sheet is what gets rid of them.
+    const saved = keep
+      ? await addMarkup({
+          sheetId, projectId, revisionId, kind: made.kind, geometry: made.geometry,
+          style: { colour, width: 2 },
+          body: made.kind === 'text' ? '' : null,
+        })
+      : {
+          id: `scratch:${crypto.randomUUID()}`,
+          sheet_id: sheetId, project_id: projectId, revision_id: revisionId,
+          kind: made.kind, geometry: made.geometry, style: { colour, width: 2 },
+          body: made.kind === 'text' ? '' : null,
+          created_by: me, created_at: new Date().toISOString(),
+        } as Markup
+    onChange([...markups, saved])
+    if (saved.kind === 'text') setEditing({ id: saved.id, body: '' })
+    void from
+  }
+
+  async function up(e: React.PointerEvent) {
     // Finishing a handle drag, not a new shape.
     const g = grabbed.current
     if (g) {
@@ -94,51 +182,50 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       setDragGeom(null)
       if (moved && JSON.stringify(moved.geometry) !== JSON.stringify(g.from)) {
         onChange(markups.map((m) => (m.id === g.id ? { ...m, geometry: moved.geometry } : m)))
-        await editMarkup(g.id, { geometry: moved.geometry })
+        if (!isScratch(g.id)) await editMarkup(g.id, { geometry: moved.geometry })
       }
       return
     }
+    if (waiting.current) return   // mid click-click: the next press is what finishes it
 
-    const made = drawing
+    const made = live.current
     const from = start.current
     start.current = null
-    setDrawing(null)
-    if (!made || !from) return
+    if (!made || !from) { setLive(null); return }
 
-    // Ignore a tap that was meant as a tap.
-    const tiny = made.kind === 'ink'
-      ? (made.geometry as { points: [number, number][] }).points.length < 3
-      : made.kind === 'arrow' || made.kind === 'dimension'
-        ? Math.hypot((made.geometry as { from: Point; to: Point }).to.x - from.x, (made.geometry as { from: Point; to: Point }).to.y - from.y) < 0.004
-        : (made.geometry as { w: number; h: number }).w < 0.004 || (made.geometry as { w: number; h: number }).h < 0.004
-    if (tiny) return
+    const travelled = made.kind === 'ink'
+      ? (made.geometry as { points: [number, number][] }).points.length >= 3
+      : twoEnded(made.kind)
+        ? Math.hypot((made.geometry as { from: Point; to: Point }).to.x - from.x,
+                     (made.geometry as { from: Point; to: Point }).to.y - from.y) >= 0.004
+        : (made.geometry as { w: number; h: number }).w >= 0.004 && (made.geometry as { w: number; h: number }).h >= 0.004
 
-    if (onPick && made.kind === 'dimension') {
-      const g = made.geometry as { from: Point; to: Point }
-      onPick(g.from, g.to)
+    // A press and release in one spot starts a line rather than throwing it away: the second
+    // click sets the far end. Dragging it out in one go still works, which is what most hands do.
+    if (!travelled && twoEnded(made.kind)) {
+      waiting.current = from
+      setLive({ kind: made.kind, geometry: { from, to: square(from, at(e), e.shiftKey) } })
       return
     }
 
-    const saved = await addMarkup({
-      sheetId, projectId, revisionId, kind: made.kind, geometry: made.geometry,
-      style: { colour, width: 2 },
-      body: made.kind === 'text' ? '' : null,
-    })
-    onChange([...markups, saved])
-    if (saved.kind === 'text') setEditing({ id: saved.id, body: '' })
+    setLive(null)
+    if (!travelled) return
+    await finish(made, from)
   }
+
+  const isScratch = (id: string) => id.startsWith('scratch:')
 
   async function erase(m: Markup) {
     if (m.created_by && me && m.created_by !== me) return
-    await removeMarkup(m.id)
     onChange(markups.filter((x) => x.id !== m.id))
+    if (!isScratch(m.id)) await removeMarkup(m.id)
   }
 
   async function saveNote() {
     if (!editing) return
-    await editMarkup(editing.id, { body: editing.body })
     onChange(markups.map((m) => (m.id === editing.id ? { ...m, body: editing.body } : m)))
     setEditing(null)
+    if (!isScratch(editing.id)) await editMarkup(editing.id, { body: editing.body })
   }
 
   const stroke = (m: Markup | { style: Markup['style'] }) => m.style?.colour ?? '#c0392b'
@@ -157,6 +244,10 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       case 'ink': {
         const g = m.geometry as { points: [number, number][] }
         return <path key={key} {...common} d={g.points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')} />
+      }
+      case 'line': {
+        const g = m.geometry as { from: Point; to: Point }
+        return <line key={key} {...common} x1={g.from.x} y1={g.from.y} x2={g.to.x} y2={g.to.y} />
       }
       case 'arrow':
       case 'dimension': {
@@ -193,7 +284,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   return (
-    <div className={`mk-layer${tool ? ' on' : ''}`} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+    <div ref={layer} className={`mk-layer${tool ? ' on' : ''}${tool === 'select' ? ' picking' : ''}`}
+      onPointerDown={down} onPointerMove={move} onPointerUp={up}>
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="mk-svg">
         {markups.filter((m) => m.kind !== 'text').map((m) => shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id))}
         {drawing && shape({ ...drawing, style: { colour, width: 2 } }, 'live', true)}

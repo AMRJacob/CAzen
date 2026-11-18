@@ -1,6 +1,6 @@
 import { db } from './supabase'
 import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
-import { queue } from './offline/outbox'
+import { queue, unsentIds } from './offline/outbox'
 
 /**
  * Markups: what someone drew on a sheet.
@@ -14,13 +14,13 @@ import { queue } from './offline/outbox'
  * That survives zooming, and it survives a sheet being reissued at another paper size.
  */
 
-export type MarkupKind = 'ink' | 'arrow' | 'rect' | 'cloud' | 'text' | 'dimension'
+export type MarkupKind = 'ink' | 'line' | 'arrow' | 'rect' | 'cloud' | 'text' | 'dimension'
 
 export interface Point { x: number; y: number }
 
 export type Geometry =
   | { points: [number, number][] }          // ink
-  | { from: Point; to: Point }              // arrow, dimension
+  | { from: Point; to: Point }              // line, arrow, dimension
   | { x: number; y: number; w: number; h: number }   // rect, cloud, text
 
 export interface Markup {
@@ -59,6 +59,12 @@ export async function listMarkups(sheetId: string): Promise<Markup[]> {
   // when the local copy is worth answering from. The sheets store says so without being told.
   const held = !!(await localGet('sheets', sheetId).catch(() => undefined))
   const here = await localFor(sheetId).catch(() => [] as Markup[])
+  // What this device has drawn and the server hasn't been told about yet. These are not rows
+  // somebody else deleted — they are rows nobody else has seen — so a refresh must keep them
+  // whether or not the project was taken to the field.
+  const unsent = await unsentIds().catch(() => new Set<string>())
+  const mine = here.filter((m) => unsent.has(m.id))
+
   if (held && !navigator.onLine) return here
 
   try {
@@ -66,15 +72,15 @@ export async function listMarkups(sheetId: string): Promise<Markup[]> {
       .from('sheet_markups').select(COLUMNS).eq('sheet_id', sheetId).order('created_at')
     if (error) throw error
     const theirs = (data ?? []) as Markup[]
+    const known = new Set(theirs.map((m) => m.id))
+    const stillMine = mine.filter((m) => !known.has(m.id))
+
     if (held) {
-      const known = new Set(theirs.map((m) => m.id))
       await localPut('markups', theirs)
-      for (const m of here) if (!known.has(m.id)) await localRemove('markups', m.id)
-      // Anything this device made and hasn't managed to send yet is still true here.
-      const unsent = (await localFor(sheetId)).filter((m) => !known.has(m.id))
-      return [...theirs, ...unsent].sort(byTime)
+      // Drop only what the server doesn't have AND this device isn't still trying to send.
+      for (const m of here) if (!known.has(m.id) && !unsent.has(m.id)) await localRemove('markups', m.id)
     }
-    return theirs
+    return [...theirs, ...stillMine].sort(byTime)
   } catch (e) {
     if (here.length || !navigator.onLine) return here
     throw e

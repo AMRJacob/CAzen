@@ -142,12 +142,36 @@ export function usePageZoom(
     let dragging: { x: number; y: number; id: number } | null = null
     let pinch: { gap: number; zoom: number } | null = null
 
+    /**
+     * Somewhere a drag means something other than moving the sheet.
+     *
+     * Marking up is two different jobs sharing a screen. A drawing tool is drawing, so a drag
+     * over the sheet is a stroke; Select is not, so a drag over the sheet is the sheet moving —
+     * which is what makes the drawing still feel like a drawing while the tools are out. The
+     * things Select can take hold of are listed too, so dragging a handle resizes rather than
+     * pans.
+     */
     const drawingHere = (target: EventTarget | null) =>
-      (target as HTMLElement | null)?.closest('.mk-layer.on, .sv-page.linking, .sv-link, .sv-pop, .mk-note, .mk-palette')
+      (target as HTMLElement | null)?.closest(
+        '.mk-layer.on:not(.picking), .mk-pickable, .mk-handle, .sv-page.linking, .sv-link, .sv-pop, .mk-note, .mk-palette')
+
+    // Holding space turns any tool into a hand for as long as it's held, as drawing apps do.
+    let spaceHeld = false
+    const keyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || (e.target as HTMLElement)?.closest('input, textarea, select')) return
+      spaceHeld = true
+      el.classList.add('hand')
+    }
+    const keyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      spaceHeld = false
+      el.classList.remove('hand')
+    }
 
     const down = (e: PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return
-      if (drawingHere(e.target)) return
+      // The middle button is never drawing, and space says to move the sheet whatever is in hand.
+      if (e.button !== 1 && !spaceHeld && drawingHere(e.target)) return
       dragging = { x: e.clientX, y: e.clientY, id: e.pointerId }
       el.classList.add('dragging')
     }
@@ -205,6 +229,8 @@ export function usePageZoom(
     // Safari handles pinch above touch events; preventing these is what stops it zooming the page.
     const gesture = (e: Event) => e.preventDefault()
 
+    window.addEventListener('keydown', keyDown)
+    window.addEventListener('keyup', keyUp)
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
@@ -216,6 +242,8 @@ export function usePageZoom(
     el.addEventListener('gesturestart', gesture, { passive: false })
     el.addEventListener('gesturechange', gesture, { passive: false })
     return () => {
+      window.removeEventListener('keydown', keyDown)
+      window.removeEventListener('keyup', keyUp)
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)

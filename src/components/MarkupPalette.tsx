@@ -19,6 +19,7 @@ export type Tool = MarkupKind | 'erase' | 'select' | null
 const TOOLS: { key: Exclude<Tool, null>; name: string; key_: string; icon: ReactElement }[] = [
   { key: 'select', name: 'Select', key_: 'S', icon: <path d="M5 3.5 18.5 12 12 13.2l-2.4 6.3L5 3.5Z" /> },
   { key: 'ink', name: 'Draw', key_: 'D', icon: <path d="M3 17.3V21h3.7L17.6 10.1l-3.7-3.7L3 17.3ZM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7L20.7 7Z" /> },
+  { key: 'line', name: 'Line', key_: 'L', icon: <path d="M4 20 20 4" /> },
   { key: 'arrow', name: 'Arrow', key_: 'A', icon: <path d="M4 20 20 4M20 4h-7M20 4v7" /> },
   { key: 'rect', name: 'Box', key_: 'B', icon: <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" /> },
   { key: 'cloud', name: 'Cloud', key_: 'C', icon: <path d="M7 18h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.9 3.9 0 0 0 7 18Z" /> },
@@ -46,6 +47,7 @@ const write = (p: { x: number; y: number }) => { try { localStorage.setItem(SPOT
 
 export function MarkupPalette({
   tool, setTool, colour, setColour, scale, settingScale, setSettingScale, stale, onBringForward, onDone,
+  keep, setKeep, scratch,
 }: {
   tool: Tool
   setTool: (t: Tool) => void
@@ -57,6 +59,11 @@ export function MarkupPalette({
   stale: number
   onBringForward: () => void
   onDone: () => void
+  /** Whether what gets drawn now is kept with the project or only for this sitting. */
+  keep: boolean
+  setKeep: (k: boolean) => void
+  /** How many of the markups on screen are this sitting's. */
+  scratch: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ x: number; y: number }>(() => read() ?? { x: 16, y: 16 })
@@ -131,6 +138,18 @@ export function MarkupPalette({
             aria-label={`Draw in ${c}`} aria-pressed={colour === c} data-tip={c} onClick={() => setColour(c)} />
         ))}
       </div>
+
+      {/* Not every mark is a record. Working something out on a sheet in a meeting is worth
+          drawing and not worth keeping, so this says which kind of marking this is. */}
+      <button className={`mk-keep${keep ? '' : ' off'}`} onClick={() => setKeep(!keep)}
+        aria-pressed={!keep}
+        data-tip={keep
+          ? 'Kept with the project — click for marks that go when you close the sheet'
+          : `Scratch: ${scratch || 'nothing'} ${scratch === 1 ? 'mark goes' : 'marks go'} when you close the sheet`}>
+        <Icon>{keep
+          ? <><path d="M5 4h14v16l-7-4-7 4V4Z" /></>
+          : <><path d="M5 4h14v16l-7-4-7 4V4Z" /><path d="M3 3l18 18" /></>}</Icon>
+      </button>
 
       <div className="mk-foot">
         <button className={settingScale ? 'on' : ''} onClick={() => setSettingScale(true)}
