@@ -15,8 +15,9 @@ import Settings from './pages/Settings'
 import Templates from './pages/Templates'
 import { useFullscreen } from './lib/fullscreen'
 
+// The project switcher at the top of the sidebar is how you change project, so the list of all of
+// them belongs with the other things you go to now and then, not at the head of the work.
 const nav = [
-  { to: '/', label: 'Projects' },
   { to: '/documents', label: 'Drawings' },
   { to: '/submittals', label: 'Submittals' },
   { to: '/ca-logs', label: 'Document creation' },
@@ -59,11 +60,12 @@ function Shell({ offline = false }: { offline?: boolean }) {
         {!offline && <ProjectSwitcher />}
         <nav>
           {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'}>{n.label}</NavLink>
+            <NavLink key={n.to} to={n.to}>{n.label}</NavLink>
           ))}
         </nav>
         {!offline && (
           <div className="sidebar-foot">
+            <NavLink to="/" end className="settings-link">All projects</NavLink>
             <NavLink to="/templates" className="settings-link">Form templates</NavLink>
             <NavLink to="/settings" className="settings-link">Settings</NavLink>
             <FeedbackButton />

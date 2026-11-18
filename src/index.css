@@ -38,8 +38,11 @@ a { color: var(--moss); }
 .sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; padding-left: env(safe-area-inset-left); }
 .sidebar-logo { padding: 0 24px 28px; }
 .context { padding: 0 12px 18px; position: relative; }
-.project-switch { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 12px; color: var(--ink); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
-.project-switch:hover, .project-switch.open { background: var(--wash); }
+/* It's the control that changes everything below it, so it reads as a control at rest rather
+   than only once the pointer finds it. */
+.project-switch { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; background: #e8e4da; border: 1px solid #dad5c8; border-radius: 8px; padding: 8px 12px; color: var(--ink); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+.project-switch:hover, .project-switch.open { background: #ded9cc; border-color: #ccc6b6; }
+.project-switch .ps-chev { color: var(--muted); }
 .project-switch:focus-visible { outline: none; border-color: var(--moss); }
 .ps-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .ps-number { font-size: 11px; letter-spacing: 0.06em; color: var(--faint); }
