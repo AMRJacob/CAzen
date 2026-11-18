@@ -573,7 +573,7 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   height: 100vh; height: 100dvh;
 }
-.sv-body { flex: 1; display: flex; min-height: 0; }
+.sv-body { flex: 1; display: flex; min-height: 0; position: relative; }  /* the markup palette floats against this */
 /* The sheet is moved by a transform, so this is a window onto it rather than a
    scroller. That is what lets it be dragged at any zoom — including when it
    already fits, where a scroller has nothing to scroll — and what keeps the
@@ -855,55 +855,72 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-hit { position: absolute; pointer-events: auto; background: rgba(192, 57, 43, 0.12); border: 1px dashed var(--danger); padding: 0; }
 .mk-hit.theirs { background: rgba(43, 45, 44, 0.06); border-style: dotted; cursor: not-allowed; }
 
-/* The markup tools. A strip across the top where the screen is narrow, and a rail down the left
-   beside the drawing where there is room — which is where a hand reaches for them, and keeps them
-   still while the sheet moves. */
-/* Only where the bar is a full-width strip: wrapping a row container is how the strip gets a
-   line of its own. Left global, it also applied to the column layout below, where it wrapped the
-   sheet into a second column and pushed it out of its own container. */
-@media (max-width: 899px) { .sv-body { flex-wrap: wrap; } }
-.mk-bar {
-  flex: 0 0 100%; order: -1;
-  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-  padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+/* ---------- The markup palette ----------
+   It floats over the drawing and is dragged by its grip, so the tools sit where the hand is
+   rather than where the layout put them, and never take width from the sheet. */
+.mk-palette {
+  position: absolute; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 6px; width: 78px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(43, 45, 44, 0.16);
+  touch-action: none;
 }
-.mk-tools, .mk-colours, .mk-right { display: flex; gap: 6px; align-items: center; }
-.mk-right { margin-left: auto; }
-.mk-colours .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
-.mk-colours .swatch.on { border-color: var(--ink); }
+.mk-grip {
+  width: 100%; padding: 2px 0; border: none; background: none; cursor: grab;
+  color: var(--faint); display: flex; justify-content: center; border-radius: 6px;
+}
+.mk-grip:active { cursor: grabbing; }
+.mk-grip:hover { background: var(--wash); }
+.mk-grip svg { fill: currentColor; }
+
+.mk-grid { display: grid; grid-template-columns: repeat(2, 32px); gap: 4px; }
+.mk-palette button {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--ink); cursor: pointer;
+}
+.mk-palette .mk-grid button:hover,
+.mk-palette .mk-foot button:hover { background: var(--wash); }
+.mk-palette button.on { background: var(--moss-soft); border-color: var(--moss); color: var(--moss); }
+.mk-palette button:disabled { color: var(--faint); cursor: not-allowed; }
+.mk-palette button:disabled:hover { background: none; }
+.mk-palette .mk-grip { width: 100%; height: auto; }
+
+.mk-swatches { display: grid; grid-template-columns: repeat(3, 20px); gap: 5px; justify-content: center; }
+.mk-palette .swatch {
+  width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; padding: 0;
+}
+.mk-palette .swatch.on { border-color: var(--ink); }
+.mk-palette .swatch:hover { background-clip: padding-box; }
+
+.mk-foot { display: flex; gap: 4px; justify-content: center; border-top: 1px solid var(--line); padding-top: 6px; width: 100%; }
+.mk-palette .mk-done { color: var(--moss); }
+
+/* Each control says what it is after a second — long enough that crossing the palette on the way
+   somewhere else doesn't set off a row of labels. */
+.mk-palette [data-tip] { position: relative; }
+.mk-palette [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+  padding: 5px 9px; border-radius: 7px; white-space: nowrap;
+  background: var(--ink); color: var(--paper); font-size: 12px; line-height: 1.3;
+  opacity: 0; pointer-events: none; z-index: 8;
+  transition: opacity 0.12s; transition-delay: 0s;
+}
+.mk-palette [data-tip]:hover::after,
+.mk-palette [data-tip]:focus-visible::after { opacity: 1; transition-delay: 1s; }
+@media (pointer: coarse) { .mk-palette [data-tip]::after { display: none; } }
+
+/* Thumbs need more than 32px, and a phone has no hover to explain an icon with. */
+@media (pointer: coarse) {
+  .mk-palette { width: 98px; gap: 10px; padding: 8px; }
+  .mk-grid { grid-template-columns: repeat(2, 40px); gap: 6px; }
+  .mk-palette button { width: 40px; height: 40px; }
+  .mk-swatches { grid-template-columns: repeat(3, 26px); gap: 7px; }
+  .mk-palette .swatch { width: 26px; height: 26px; }
+}
+
 .mk-scale-ask { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .mk-scale-ask input { width: 120px; }
-
-@media (min-width: 900px) {
-  .mk-bar {
-    flex: 0 0 104px; width: 104px; align-self: stretch;
-    flex-direction: column; align-items: stretch; gap: 14px;
-    padding: 10px 8px; overflow-y: auto;
-    border-bottom: none; border-right: 1px solid var(--line);
-  }
-  .mk-tools { flex-direction: column; align-items: stretch; gap: 4px; }
-  .mk-tools button { justify-content: flex-start; text-align: left; }
-  .mk-colours { flex-wrap: wrap; justify-content: center; gap: 8px; }
-  .mk-right { flex-direction: column; align-items: stretch; gap: 6px; margin-left: 0; margin-top: auto; }
-}
-@media (max-width: 619px) {
-  .mk-bar { padding: 6px 8px; gap: 8px; }
-  .mk-right { margin-left: 0; }
-}
-
-/* The tall in-between screen stacks the index under the sheet, so the body is a column there and
-   the bar is simply its first row — no wrapping, and no 104px rail. Must follow the 900px block
-   to win between 900 and 1099. */
-@media (min-width: 620px) and (max-width: 1099px) and (max-aspect-ratio: 299/200) and (min-height: 700px) {
-  .sv-body { flex-wrap: nowrap; }
-  .mk-bar {
-    flex: none; width: auto; align-self: auto;
-    flex-direction: row; align-items: center; gap: 12px;
-    padding: 8px 12px; overflow-y: visible;
-    border-right: none; border-bottom: 1px solid var(--line);
-  }
-  .mk-tools { flex-direction: row; align-items: center; gap: 6px; }
-  .mk-tools button { justify-content: center; text-align: center; }
-  .mk-colours { flex-wrap: nowrap; }
-  .mk-right { flex-direction: row; align-items: center; margin-left: auto; margin-top: 0; }
-}

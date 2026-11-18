@@ -7,6 +7,7 @@ import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
+import { MarkupPalette, TOOL_KEYS } from './MarkupPalette'
 import { bringForward, listMarkups, MARKUP_COLOURS, type Markup, type MarkupKind, type Point } from '../lib/markups'
 import { MarkupLayer } from './MarkupLayer'
 
@@ -239,9 +240,16 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       if (e.key === 'Escape') {
         if (pending) setPending(null)
         else if (more) setMore(false)
+        else if (settingScale) setSettingScale(false)
+        else if (tool !== null) setTool(null)
         else if (indexOpen) setIndexOpen(false)
         else if (linkMode) setLinkMode(false)
         else onClose()
+      }
+      // Single letters pick a tool while marking up, as the palette's own labels say.
+      if (tool !== null && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const pick = TOOL_KEYS[e.key.toLowerCase()]
+        if (pick && !(pick === 'dimension' && !scale && !settingScale)) { e.preventDefault(); setTool(pick) }
       }
       if (e.key === 'ArrowRight' && index >= 0 && index < sheets.length - 1) go(sheets[index + 1])
       if (e.key === 'ArrowLeft' && index > 0) go(sheets[index - 1])
@@ -355,38 +363,20 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       )}
       {linkMode && <div className="sv-hint">Drag a box over a detail tag or note, then choose the sheet it should open. Click × on a link you drew to remove it.</div>}
       <div className="sv-body">
-      {tool !== null && (
-    <div className="mk-bar">
-      <div className="mk-tools">
-        {([['ink', 'Draw'], ['arrow', 'Arrow'], ['rect', 'Box'], ['cloud', 'Cloud'], ['text', 'Note'], ['dimension', 'Measure'], ['erase', 'Erase']] as const).map(([k, label]) => (
-          <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}
-            disabled={k === 'dimension' && !scale && !settingScale}
-            title={k === 'dimension' && !scale ? 'Set the scale first' : undefined}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="mk-colours">
-        {MARKUP_COLOURS.map((c) => (
-          <button key={c} className={`swatch${colour === c ? ' on' : ''}`} style={{ background: c }}
-            aria-label={`Draw in ${c}`} onClick={() => setColour(c)} />
-        ))}
-      </div>
-      <div className="mk-right">
-        <button onClick={() => setSettingScale(true)} className={settingScale ? 'on' : ''}>
-          {scale ? 'Reset scale' : 'Set scale'}
-        </button>
-        {stale > 0 && (
-          <button onClick={async () => {
-            if (!sheet.sheetId) return
-            await bringForward(sheet.sheetId, sheet.revisionId)
-            setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
-          }}>Bring {stale} forward</button>
+        {tool !== null && (
+          <MarkupPalette
+            tool={tool} setTool={setTool}
+            colour={colour} setColour={setColour}
+            scale={scale} settingScale={settingScale} setSettingScale={setSettingScale}
+            stale={stale}
+            onBringForward={async () => {
+              if (!sheet.sheetId) return
+              await bringForward(sheet.sheetId, sheet.revisionId)
+              setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
+            }}
+            onDone={() => { setTool(null); setSettingScale(false) }}
+          />
         )}
-        <button onClick={() => { setTool(null); setSettingScale(false) }}>Done</button>
-      </div>
-    </div>
-  )}
         <aside className={`sv-index${indexOpen ? ' open' : ''}`} aria-label="Sheets in this set">
           <div className="sv-jump">
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={`Jump to a sheet (${sheets.length})`} aria-label="Filter sheets" />

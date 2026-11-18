@@ -143,7 +143,7 @@ export function usePageZoom(
     let pinch: { gap: number; zoom: number } | null = null
 
     const drawingHere = (target: EventTarget | null) =>
-      (target as HTMLElement | null)?.closest('.mk-layer.on, .sv-page.linking, .sv-link, .sv-pop, .mk-note')
+      (target as HTMLElement | null)?.closest('.mk-layer.on, .sv-page.linking, .sv-link, .sv-pop, .mk-note, .mk-palette')
 
     const down = (e: PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return
