@@ -1059,62 +1059,68 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   .shell { grid-template-columns: 1fr; display: block; }
   .content { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
+  /* The menu IS the ensō, grown. Closed, it is a 52px circle with the mark in it; open, the
+     ring becomes the border around a pill of destinations and the CA fades out from inside. One
+     element doing both means the menu costs no screen beyond the circle it came from. */
   .phone-nav {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center;
     position: fixed; z-index: 40;
     left: calc(10px + env(safe-area-inset-left));
-    right: calc(10px + env(safe-area-inset-right));
     bottom: calc(10px + env(safe-area-inset-bottom));
-    pointer-events: none;                 /* only its own controls take taps */
+    width: 52px; height: 52px;
+    border: 2px solid var(--ink); border-radius: 26px;
+    background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
+    overflow: hidden;
+    transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
   }
-  /* A phone browser's fixed `bottom` is the layout viewport's, which is behind the browser's own
-     bar — the reason a bottom-anchored control ends up under the address bar. The dynamic
-     viewport unit follows the chrome as it comes and goes, so the mark stays where a thumb is. */
   @supports (height: 100dvh) {
     .phone-nav {
       bottom: auto;
       top: calc(100dvh - 62px - env(safe-area-inset-bottom));
-      /* Width too: on a phone the layout viewport can be wider than what you can see, which
-         would run the last destination off the right-hand edge. */
-      right: auto;
+    }
+  }
+  .phone-nav.open {
+    width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    height: 58px;
+  }
+  @supports (width: 100dvw) {
+    .phone-nav.open {
       width: calc(100dvw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
     }
   }
-  .phone-nav > * { pointer-events: auto; }
 
+  /* The mark sits under everything and gets out of the way once the menu is out. */
   .pn-mark {
-    flex: 0 0 auto; display: grid; place-items: center;
-    width: 52px; height: 52px; padding: 0;
-    border: 1px solid var(--line); border-radius: 50%;
-    background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
-    cursor: pointer;
+    position: absolute; inset: 0; display: grid; place-items: center;
+    width: 48px; height: 48px; padding: 0; border: none; background: none; cursor: pointer;
+    transition: opacity 0.14s;
   }
-  .pn-mark:active { transform: scale(0.95); }
+  .phone-nav.open .pn-mark { opacity: 0; pointer-events: none; }
+  .phone-nav:not(.open) .pn-mark:active { transform: scale(0.94); }
 
-  /* Slides out to the right from behind the mark, and is not reachable while it's away. */
+  /* Closed, the whole circle is the button. */
+  .phone-nav:not(.open) .pn-mark { width: 100%; height: 100%; }
+
   .pn-bar {
-    flex: 1 1 auto; min-width: 0;
     display: flex; align-items: stretch; gap: 2px;
-    padding: 5px; border: 1px solid var(--line); border-radius: 26px;
-    background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
-    transform-origin: left center;
-    transform: scaleX(0.02); opacity: 0;
-    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.14s;
+    width: 100%; height: 100%; padding: 3px;
+    opacity: 0; transition: opacity 0.12s;
+    /* Clipped out of sight while closed, but still laid out — so it must also stop taking the
+       taps meant for the mark underneath it. */
+    pointer-events: none;
   }
-  .phone-nav.open .pn-bar { transform: scaleX(1); opacity: 1; }
+  .phone-nav.open .pn-bar { opacity: 1; pointer-events: auto; transition: opacity 0.18s 0.1s; }
 
   .pn-spot {
     flex: 1 1 0; min-width: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    padding: 6px 2px; border: none; border-radius: 21px;
+    padding: 4px 2px; border: none; border-radius: 22px;
     font: inherit; font-size: 10px; line-height: 1.2;
     color: var(--muted); background: none; text-decoration: none; cursor: pointer;
   }
   .pn-spot span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Where you are, said plainly, which is the thing a hidden menu usually loses. */
   .pn-spot.active, .pn-spot.on { color: var(--moss); background: var(--moss-soft); font-weight: 500; }
-  .pn-bar > * { opacity: 0; transition: opacity 0.1s; }
-  .phone-nav.open .pn-bar > * { opacity: 1; transition: opacity 0.16s 0.12s; }
 
   /* The sheet viewer is the whole screen; nothing floats over the drawing. */
   .sheet-viewer ~ .phone-nav, body:has(.sheet-viewer) .phone-nav { display: none; }

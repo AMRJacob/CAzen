@@ -80,7 +80,18 @@ export function PhoneNav() {
   const let_go = () => { if (open) startClock() }
 
   return (
-    <nav className={`phone-nav${open ? ' open' : ''}`} aria-label="Go to">
+    <nav
+      className={`phone-nav${open ? ' open' : ''}`}
+      aria-label="Go to"
+      onPointerDown={held}
+      onPointerUp={let_go}
+      onPointerCancel={let_go}
+      onMouseEnter={held}
+      onMouseLeave={let_go}
+    >
+      {/* One shape, not two. Closed it is the ensō; opening it grows the ring into the border
+          around the whole menu and fades the CA out from inside it, so the menu costs no screen
+          beyond the circle it came from. */}
       <button
         className="pn-mark"
         aria-expanded={open}
@@ -90,17 +101,7 @@ export function PhoneNav() {
         <Mark size={30} />
       </button>
 
-      {/* Kept in the page while closed so it can slide rather than appear, and so nothing in it
-          takes a tap while it is out of sight. */}
-      <div
-        className="pn-bar"
-        onPointerDown={held}
-        onPointerUp={let_go}
-        onPointerCancel={let_go}
-        onMouseEnter={held}
-        onMouseLeave={let_go}
-        {...(open ? {} : { inert: '' as unknown as boolean })}
-      >
+      <div className="pn-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
         {(more ? MORE : SPOTS).map((s) => (
           <NavLink key={s.to} to={s.to} end={s.end} className="pn-spot">
             {s.icon}
