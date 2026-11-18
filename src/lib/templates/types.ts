@@ -52,6 +52,8 @@ export interface FieldEl extends Base {
   flow?: boolean
   /** Lines can be indented outlines: "1." / "-" markers, Tab or spaces to nest, "# " for a heading. */
   rich?: boolean
+  /** In a rich outline, leave a blank line wherever it steps back out, so groups read apart. */
+  spaced?: boolean
   /** Print several fields one after another, each under its own heading (empty ones are skipped). */
   combine?: { field: string; heading: string }[]
 }

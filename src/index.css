@@ -733,6 +733,17 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 .sheet-edit .f-number { flex: 0 1 150px; }
 .sheet-edit .f-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
 .sheet-edit .f-title { flex: 1 1 260px; }
+/* Headings to add with a tap rather than type, under a rich outline box. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+.chips-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.chip {
+  padding: 4px 10px; font: inherit; font-size: 12.5px; line-height: 1.5;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--paper); color: var(--ink); cursor: pointer;
+}
+.chip:hover { border-color: var(--moss); background: var(--moss-soft); }
+@media (pointer: coarse) { .chip { padding: 8px 14px; font-size: 14px; } }
+
 .sheet-edit .f-kind { flex: 0 1 170px; }
 .sheet-edit .f-date { flex: 0 1 170px; }
 .sheet-edit select {

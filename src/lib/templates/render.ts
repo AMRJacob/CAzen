@@ -74,15 +74,22 @@ export interface RichLine { text: string; bold: boolean; indent: number; marker?
 
 const MARKER = /^(\d+[.)]|[a-zA-Z][.)]|[-•*])\s+/
 
-export function richLines(text: string, fonts: Fonts, size: number, width: number, serif?: boolean): RichLine[] {
+export function richLines(text: string, fonts: Fonts, size: number, width: number, serif?: boolean, spaced?: boolean): RichLine[] {
   const regular = fontFor(fonts, serif, false)
   const bold = fontFor(fonts, serif, true)
   const step = size * 1.9
   const out: RichLine[] = []
+  let lastLevel = 0
   for (const raw of safe(text).split('\n')) {
-    if (!raw.trim()) { out.push({ text: '', bold: false, indent: 0 }); continue }
+    if (!raw.trim()) { out.push({ text: '', bold: false, indent: 0 }); lastLevel = 0; continue }
     const spaces = raw.match(/^ */)![0].length
     const level = Math.min(5, Math.floor(spaces / 2))
+    // A list that is really a set of groups — a PR's sheets under their disciplines — reads
+    // better with air where it steps back out. Opt in per field, since minutes don't want it.
+    if (spaced && level < lastLevel && out.length && out[out.length - 1].text !== '') {
+      out.push({ text: '', bold: false, indent: 0 })
+    }
+    lastLevel = level
     let body = raw.trim()
     let isBold = false
     if (body.startsWith('# ')) {
@@ -171,7 +178,7 @@ function drawField(c: Ctx, el: FieldEl, flowSlice?: RichLine[]) {
   const value = fieldText(el, c.value)
   if (!value) return
   if (el.rich) {
-    const lines = richLines(value, c.fonts, el.size, vw, el.serif)
+    const lines = richLines(value, c.fonts, el.size, vw, el.serif, el.spaced)
     const max = Math.floor((vh + el.size * 0.3) / (el.size * LINE_HEIGHT))
     return drawRich(c, lines.slice(0, max), vx, vy, el)
   }
@@ -309,7 +316,7 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
     const { vw, vh } = fieldParts(flow)
     const text = fieldText(flow, (k) => values[k] ?? '')
     const all = flow.rich
-      ? richLines(text, fonts, flow.size, vw, flow.serif)
+      ? richLines(text, fonts, flow.size, vw, flow.serif, flow.spaced)
       : wrap(text, fontFor(fonts, flow.serif, flow.bold), flow.size, vw).map((t) => ({ text: t, bold: false, indent: 0 }))
     const lh = flow.size * LINE_HEIGHT
     const cap1 = Math.max(1, Math.floor((vh + flow.size * 0.3) / lh))

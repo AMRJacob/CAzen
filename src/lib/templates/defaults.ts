@@ -169,9 +169,10 @@ const PR = (): Layout => ({
     text(36, 228, 100, 12, 'Special Instructions:', { size: 8.5, bold: true }),
     text(36, 242, 540, 40, 'Please submit an itemized quotation for changes to the Contract Sum and/or Time Incidental to proposed modifications to the Contract Documents as described herein. Submit proposal response within 14 days, or notify the Architect in writing of the day on which you anticipate submitting the proposal.', { size: 8.5 }),
     text(36, 290, 540, 12, 'This is not a Change Order nor a direction to proceed with the work described herein.', { size: 8.5, bold: true }),
+    hline(36, 312, 540),
 
-    heading(36, 318, 'Changes to Drawings:'),
-    field(36, 336, 540, 390, 'pr.description', { size: 9, rich: true, flow: true }),
+    heading(36, 324, 'Changes to Drawings:'),
+    field(36, 342, 540, 384, 'pr.description', { size: 9, rich: true, flow: true, spaced: true }),
   ],
 })
 

@@ -222,3 +222,55 @@ export function outlineOf(text: string): string {
   })
   return out.join('\n')
 }
+
+/**
+ * Trades to comment on in a field report's site observations.
+ *
+ * Not CSI divisions — those are how a spec is organised, not how a walk is written up. These are
+ * the headings an architect puts on a site observation, in roughly the order a building goes up.
+ * The project's own earlier reports come first; this is what's offered when it hasn't come up yet.
+ */
+export const SITE_TRADES = [
+  'Site / Parking', 'Earthwork', 'Utilities', 'Foundations', 'Concrete', 'Masonry',
+  'Structural Steel', 'Metal Building', 'Framing', 'Roofing', 'Waterproofing',
+  'Storefront / Glazing', 'Doors / Hardware', 'Drywall', 'Finishes', 'Millwork',
+  'Mechanical', 'Electrical', 'Plumbing', 'Fire Protection', 'Landscape', 'Punch / Closeout',
+]
+
+/** The heading lines already in an outline, without their markers or bold marks. */
+export function headingsIn(text: string): string[] {
+  const out: string[] = []
+  for (const raw of text.split('\n')) {
+    let body = raw.trim()
+    if (!body) continue
+    const bold = /^\*\*(.*)\*\*$/.exec(body)
+    if (bold) body = bold[1]
+    else if (body.startsWith('# ')) body = body.slice(2)
+    else if (!body.endsWith(':')) continue
+    out.push(body.replace(/^(\d+[.)]|[a-z][.)]|[-*•])\s*/i, '').replace(/:$/, '').trim())
+  }
+  return out.filter(Boolean)
+}
+
+/** Trades worth offering next: ones this project has used before, then the standard list. */
+export function tradeSuggestions(current: string, seenBefore: string[] = []): string[] {
+  const have = new Set(headingsIn(current).map((h) => h.toLowerCase()))
+  const ordered = [...seenBefore, ...SITE_TRADES]
+  const out: string[] = []
+  for (const t of ordered) {
+    const key = t.toLowerCase()
+    if (have.has(key) || out.some((o) => o.toLowerCase() === key)) continue
+    out.push(t)
+  }
+  return out
+}
+
+/** The outline with one more top-level heading on the end, numbered on from the last. */
+export function withHeading(current: string, trade: string): string {
+  const tops = current.split('\n').filter((l) => l.trim() && !/^\s/.test(l))
+  let next = tops.length + 1
+  const last = tops[tops.length - 1]?.match(/^\*{0,2}(\d+)[.)]/)
+  if (last) next = Number(last[1]) + 1
+  const body = current.replace(/\s*$/, '')
+  return `${body ? body + '\n' : ''}**${next}. ${trade}**\n  a. `
+}

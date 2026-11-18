@@ -11,7 +11,7 @@ import { listIssued, nextNumber, openIssued, saveIssued, type IssuedForm } from 
 import { DIVISION_OPTIONS, divisionFor, nextInSection, normaliseSection, sectionOf } from '../lib/csi'
 import { db } from '../lib/supabase'
 import { defaultLayout } from '../lib/templates/defaults'
-import { FORM_LABELS, firmValues, inputFieldsFor, outlineOf, usDate, type FieldDef } from '../lib/templates/fields'
+import { FORM_LABELS, firmValues, headingsIn, inputFieldsFor, outlineOf, tradeSuggestions, usDate, withHeading, type FieldDef } from '../lib/templates/fields'
 import { momentOf, weatherAt } from '../lib/weather'
 import { prependTo, renderForm } from '../lib/templates/render'
 import { loadLayouts } from '../lib/templates/store'
@@ -147,6 +147,15 @@ function Form({ kind, brand, layouts, project, signer }: {
     if (typed && !known.has(typed)) known.set(typed, '')
     return [...known.entries()].map(([sec, title]) => ({ value: nextInSection(sec, used), label: [title, divisionFor(sec)].filter(Boolean).join(' · ') }))
   }
+  // Trades this project's earlier reports already used, so the suggestions are its own before
+  // they are the standard list.
+  const trades = useMemo(() => {
+    if (kind !== 'field_report') return []
+    const seen: string[] = []
+    for (const l of log) for (const h of headingsIn(l.values['fr.observations'] ?? '')) if (!seen.includes(h)) seen.push(h)
+    return seen
+  }, [kind, log])
+
   const values = () => Object.fromEntries(fields.map((f) => [f.key, value(f.key)]))
   const set = (k: string, v: string) => setOverrides((o) => ({ ...o, [k]: v }))
   const reset = (k: string) => setOverrides((o) => { const n = { ...o }; delete n[k]; return n })
@@ -209,7 +218,8 @@ function Form({ kind, brand, layouts, project, signer }: {
         {shown.map((f) => (
           <Input key={f.key} f={f} value={value(f.key)} onChange={(v) => set(f.key, v)} layout={layout}
             autoValue={liveAuto[f.key]} overridden={f.key in overrides && !!liveAuto[f.key]} onReset={() => reset(f.key)}
-            suggestions={suggestions(f)} />
+            suggestions={suggestions(f)}
+            chips={f.key === 'fr.observations' ? tradeSuggestions(value(f.key), trades).slice(0, 10) : []} />
         ))}
         {kind === 'submittal_cover' && (
           <label className="wide">Contractor’s submittal (PDF) — added behind the transmittal
@@ -261,9 +271,11 @@ function Form({ kind, brand, layouts, project, signer }: {
   )
 }
 
-function Input({ f, value, onChange, layout, autoValue, overridden, onReset, suggestions = [] }: {
+function Input({ f, value, onChange, layout, autoValue, overridden, onReset, suggestions = [], chips = [] }: {
   f: FieldDef; value: string; onChange: (v: string) => void; layout: Layout
   autoValue?: string; overridden: boolean; onReset: () => void; suggestions?: { value: string; label: string }[]
+  /** Headings offered under the box, to add rather than type. */
+  chips?: string[]
 }) {
   const tag = overridden && value !== autoValue
     ? <button type="button" className="auto-reset" onClick={onReset} title={`Back to: ${autoValue}`}>↺ reset</button>
@@ -298,6 +310,14 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
           onKeyDown={rich ? (e) => indentKeys(e, onChange) : undefined}
           className={`${rich ? 'mono-ish' : ''} ${state}`}
         />
+        {chips.length > 0 && (
+          <span className="chips">
+            <span className="chips-label">Add a trade:</span>
+            {chips.map((t) => (
+              <button key={t} type="button" className="chip" onClick={() => onChange(withHeading(value, t))}>{t}</button>
+            ))}
+          </span>
+        )}
         {f.hint && <span className="hint">{f.hint}</span>}
         {rich && <span className="hint">Start lines with 1. or - for lists. Tab indents a sub-item (Shift+Tab outdents). Start a line with # for a bold heading.</span>}
       </label>
