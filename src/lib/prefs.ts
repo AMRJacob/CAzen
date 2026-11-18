@@ -22,6 +22,8 @@ export const PREFS = {
   stylusReadout: 'cazen.pref.stylusReadout',
   /** Snap measurements and lines to the geometry in the sheet. */
   snapToDrawing: 'cazen.pref.snapToDrawing',
+  /** Where the section number sits on a page of a project manual, when it has been pointed at. */
+  manualNumberBox: 'cazen.pref.manualNumberBox',
 } as const
 
 export function readPref<T>(key: string, fallback: T): T {

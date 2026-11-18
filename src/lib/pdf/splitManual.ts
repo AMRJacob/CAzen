@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
 import { getDocument } from './pdfjs'
-import { pageBody, readPageText, type PageText } from './pageText'
+import { pageBody, readPageText, wordsInRegion, type PageText, type Region } from './pageText'
 
 /**
  * Cutting a project manual into its sections.
@@ -142,21 +142,62 @@ function clean(s: string): string {
   return t
 }
 
-/** Read a manual and work out where its sections begin and end. Nothing is written. */
+/**
+ * The section number inside a box somebody drew around it.
+ *
+ * Automatic detection reads the whole page and weighs what it finds, which is right for a manual
+ * set the way CSI describes and wrong for one that isn't — a footer in the middle of the page, a
+ * number printed beside a page count, a division cover with four numbers on it. Pointing at the
+ * box ends the argument: whatever section-shaped number sits there is this page's number, and
+ * nothing else on the page is consulted.
+ */
+export function sectionInRegion(text: PageText, box: Region): string | null {
+  let best: { value: string; size: number } | null = null
+  for (const w of wordsInRegion(text, box)) {
+    SECTION.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = SECTION.exec(w.str))) {
+      if (!DIVISIONS.has(m[1])) continue
+      const size = w.vertical ? w.w : w.h
+      if (!best || size > best.size) best = { value: tidy(m[1], m[2], m[3]), size }
+    }
+  }
+  return best?.value ?? null
+}
+
+/** Read every page of a manual. Nothing is decided here and nothing is written. */
 export async function readManual(
   file: ArrayBuffer,
   onProgress?: (done: number, total: number) => void,
-): Promise<{ pages: ManualPage[]; sections: ManualSection[] }> {
+): Promise<ManualPage[]> {
   const reader = await getDocument({ data: new Uint8Array(file.slice(0)) }).promise
   const pages: ManualPage[] = []
   for (let i = 0; i < reader.numPages; i++) {
     const text = await readPageText(await reader.getPage(i + 1))
-    const { found, declares } = sectionOnPage(text)
-    pages.push({ index: i, text, found, declares })
+    pages.push({ index: i, text, found: null, declares: false })
     onProgress?.(i + 1, reader.numPages)
   }
   await reader.loadingTask.destroy()
-  return { pages, sections: sectionsFrom(pages) }
+  return pages
+}
+
+/**
+ * Work out which section each page belongs to, and group them.
+ *
+ * Separate from reading the file so that pointing at the number's box re-cuts the manual at
+ * once, without opening it again — which is what makes correcting the cut feel like a setting
+ * rather than a re-upload.
+ */
+export function detectSections(pages: ManualPage[], box?: Region | null): { pages: ManualPage[]; sections: ManualSection[] } {
+  const read = pages.map((p) => {
+    if (box) {
+      const found = sectionInRegion(p.text, box)
+      return { ...p, found, declares: false }
+    }
+    const { found, declares } = sectionOnPage(p.text)
+    return { ...p, found, declares }
+  })
+  return { pages: read, sections: sectionsFrom(read) }
 }
 
 /** Group pages into sections: a run of pages carrying one number, plus whatever follows it. */

@@ -13,7 +13,10 @@ import {
   byDivision, listManual, listSectionRevisions, renameSection, saveManual, searchManual,
   type CurrentSpec, type SectionToSave, type SpecHit, type SpecRevision,
 } from '../lib/manual'
-import { cutSection, bodyOf, readManual, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
+import { cutSection, bodyOf, detectSections, readManual, sectionInRegion, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
+import { RegionPicker } from '../components/RegionPicker'
+import { PREFS, usePref } from '../lib/prefs'
+import type { Region } from '../lib/pdf/pageText'
 import { existingSets, suggestSetName, type SetName } from '../lib/sheets'
 import { useClickAway } from '../lib/clickAway'
 
@@ -298,6 +301,11 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [firsts, setFirsts] = useState<Record<string, Uint8Array>>({})
   const [peek, setPeek] = useState<number | null>(null)
+  const [peekBytes, setPeekBytes] = useState<Uint8Array | null>(null)
+  // Where the section number sits, when automatic detection needs telling.
+  const [box, setBox] = usePref<Region | null>(PREFS.manualNumberBox, null)
+  const [picking, setPicking] = useState<number | null>(null)
+  const [pickBytes, setPickBytes] = useState<Uint8Array | null>(null)
 
   const [kind, setKind] = useState<IssuanceKind>(existing.length ? 'addendum' : 'bid_set')
   const [number, setNumber] = useState('')
@@ -317,16 +325,26 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     setError(null)
     try {
       const buf = await pdf.arrayBuffer()
-      const { pages: read, sections } = await readManual(buf, (done, total) => setProgress(`${done} of ${total} pages`))
+      const read = await readManual(buf, (done, total) => setProgress(`${done} of ${total} pages`))
+      const cut = detectSections(read, box)
       setFile(buf)
-      setPages(read)
-      setDrafts(sections.map((s) => ({ ...s, include: true })))
+      setPages(cut.pages)
+      setDrafts(cut.sections.map((d) => ({ ...d, title: niceTitle(d.title), include: true })))
       setStep('review')
     } catch (e) {
       setError(message(e))
       setStep('pick')
     }
   }
+
+  /** Re-cut with whatever the box says now. Hand edits go, which is the point of re-cutting. */
+  const recut = useCallback((next: Region | null) => {
+    setBox(next)
+    if (!pages.length) return
+    const cut = detectSections(pages, next)
+    setPages(cut.pages)
+    setDrafts(cut.sections.map((s) => ({ ...s, title: niceTitle(s.title), include: true })))
+  }, [pages, setBox])
 
   // The first page of each section, cut on demand, so the review has something to look at.
   useEffect(() => {
@@ -348,6 +366,27 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file, step, drafts.length])
 
+  // The preview shows the whole section, not just its first page, so it can be paged through.
+  useEffect(() => {
+    setPeekBytes(null)
+    if (!file || peek === null) return
+    const d = drafts[peek]
+    if (!d) return
+    let stop = false
+    cutSection(file, d.pages).then((b) => { if (!stop) setPeekBytes(b) }).catch(() => { /* the first page still shows */ })
+    return () => { stop = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, peek, drafts[peek ?? -1]?.pages.length])
+
+  // The page being checked against the box.
+  useEffect(() => {
+    setPickBytes(null)
+    if (!file || picking === null) return
+    let stop = false
+    cutSection(file, [picking]).then((b) => { if (!stop) setPickBytes(b) }).catch(() => { /* nothing to draw on */ })
+    return () => { stop = true }
+  }, [file, picking])
+
   const edit = (i: number, patch: Partial<Draft>) =>
     setDrafts((ds) => ds.map((d, j) => (j === i ? { ...d, ...patch, touched: true } : d)))
 
@@ -357,6 +396,15 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     const out = ds.slice()
     out[i - 1] = { ...out[i - 1], pages: [...out[i - 1].pages, ...out[i].pages], guessed: true }
     out.splice(i, 1)
+    return out
+  })
+
+  /** Fold the section below into this one. */
+  const joinDown = (i: number) => setDrafts((ds) => {
+    if (i >= ds.length - 1) return ds
+    const out = ds.slice()
+    out[i] = { ...out[i], pages: [...out[i].pages, ...out[i + 1].pages], guessed: true }
+    out.splice(i + 1, 1)
     return out
   })
 
@@ -375,6 +423,12 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     out.splice(i, 1, before, after)
     return out
   })
+
+  // How much of the manual the box actually reads, which is the thing worth knowing about it.
+  const numbered = useMemo(
+    () => (box ? pages.filter((p) => sectionInRegion(p.text, box)).length : 0),
+    [box, pages],
+  )
 
   const chosen = drafts.filter((d) => d.include)
   const blank = chosen.filter((d) => !d.number.trim()).length
@@ -456,10 +510,20 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
         <>
           <div className="tb-bar">
             <div>
-              <strong>{drafts.length}</strong> {drafts.length === 1 ? 'section' : 'sections'} across {pages.length} pages.{' '}
-              {drafts.some((d) => d.guessed)
-                ? <span className="muted small">Sections marked “check” ran on past a page that didn’t say which section it was.</span>
-                : <span className="muted small">Every page said which section it belongs to.</span>}
+              <strong>{drafts.length}</strong> {drafts.length === 1 ? 'section' : 'sections'} across {pages.length} pages,{' '}
+              {box
+                ? <>read from the box you drew — <strong>{numbered}</strong> of {pages.length} pages carry a number there.</>
+                : <>read from wherever the number appears.</>}
+              {' '}
+              {drafts.some((d) => d.guessed) && (
+                <span className="muted small">Sections marked “check” ran on past a page that didn’t say which section it was.</span>
+              )}
+            </div>
+            <div className="tb-bar-actions">
+              <button className={box ? '' : 'primary'} onClick={() => setPicking(pages.length > 1 ? 1 : 0)}>
+                {box ? 'Move the number box' : 'Show where the number is'}
+              </button>
+              {box && <button onClick={() => recut(null)}>Read it automatically</button>}
             </div>
           </div>
 
@@ -503,6 +567,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                     </td>
                     <td className="right nowrap">
                       {i > 0 && <button className="link small" onClick={() => joinUp(i)} title="This section is really part of the one above">join up</button>}
+                      {i < drafts.length - 1 && <button className="link small" onClick={() => joinDown(i)} title="The section below is really part of this one">join down</button>}
                       {d.pages.length > 1 && (
                         <button className="link small" onClick={() => splitAt(i, d.pages[1])} title="Start a new section at the second page of this one">split</button>
                       )}
@@ -527,13 +592,15 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
         </>
       )}
 
-      {peek !== null && drafts[peek] && firsts[`${drafts[peek].pages[0]}`] && (
+      {/* The section as it stands: every page of it, with the fields and the two joins to hand,
+          because deciding where a section ends is done by looking at the pages. */}
+      {peek !== null && drafts[peek] && (peekBytes ?? firsts[`${drafts[peek].pages[0]}`]) && (
         <PdfPreview
-          bytes={firsts[`${drafts[peek].pages[0]}`]}
-          title={`${drafts[peek].number || 'Section'} · first page`}
-          onClose={() => setPeek(null)}
+          bytes={(peekBytes ?? firsts[`${drafts[peek].pages[0]}`])!}
+          title={`${drafts[peek].number || 'Section'}${peekBytes ? '' : ' · first page'} · pages ${drafts[peek].pages[0] + 1}–${drafts[peek].pages[drafts[peek].pages.length - 1] + 1}`}
+          onClose={() => { setPeek(null); setPeekBytes(null) }}
           step={{
-            label: `${peek + 1} of ${drafts.length}`,
+            label: `section ${peek + 1} of ${drafts.length}`,
             onPrev: peek > 0 ? () => setPeek(peek - 1) : undefined,
             onNext: peek < drafts.length - 1 ? () => setPeek(peek + 1) : undefined,
           }}
@@ -545,8 +612,38 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
               <label className="pv-field pv-title">Title
                 <input value={drafts[peek].title} onChange={(e) => edit(peek, { title: e.target.value })} />
               </label>
+              <span className="pv-joins">
+                <button disabled={peek === 0}
+                  title="This section is really part of the one above"
+                  onClick={() => { joinUp(peek); setPeek(peek - 1) }}>Join up</button>
+                <button disabled={peek >= drafts.length - 1}
+                  title="The section below is really part of this one"
+                  onClick={() => joinDown(peek)}>Join down</button>
+              </span>
             </Fragment>
           )}
+        />
+      )}
+
+      {/* Pointing at the section number, checked against any page of the book. */}
+      {picking !== null && pickBytes && (
+        <RegionPicker
+          bytes={pickBytes}
+          value={box}
+          reads={{
+            here: pages[picking] && box ? sectionInRegion(pages[picking].text, box) : null,
+            across: numbered,
+            total: pages.length,
+          }}
+          onChange={recut}
+          onClose={() => setPicking(null)}
+          onStep={{
+            label: `page ${picking + 1} of ${pages.length}`,
+            onPrev: picking > 0 ? () => setPicking(picking - 1) : undefined,
+            onNext: picking < pages.length - 1 ? () => setPicking(picking + 1) : undefined,
+          }}
+          label="Where the section number is"
+          hint="Drag a box around the section number as it is printed on this page — usually in the footer. Every page is then read from that box alone."
         />
       )}
 
