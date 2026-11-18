@@ -625,12 +625,6 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
           bytes={(peekBytes ?? firsts[`${drafts[peek].pages[0]}`])!}
           title={`${drafts[peek].number || 'Section'}${peekBytes ? '' : ' · first page'} · pages ${drafts[peek].pages[0] + 1}–${drafts[peek].pages[drafts[peek].pages.length - 1] + 1}`}
           onClose={() => { setPeek(null); setPeekBytes(null) }}
-          flag={(n) => {
-            // A page inside a section that declares a section of its own is where a join went
-            // one too far, which is the thing the rail is being looked at to find.
-            const at = drafts[peek].pages[n - 1]
-            return n > 1 && at != null && pages[at]?.declares ? 'section' : null
-          }}
           step={{
             label: `section ${peek + 1} of ${drafts.length}`,
             onPrev: peek > 0 ? () => setPeek(peek - 1) : undefined,
