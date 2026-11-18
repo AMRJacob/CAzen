@@ -7,8 +7,8 @@ import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
-import { MarkupPalette, TOOL_KEYS } from './MarkupPalette'
-import { bringForward, listMarkups, MARKUP_COLOURS, type Markup, type MarkupKind, type Point } from '../lib/markups'
+import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
+import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, type Markup, type Point } from '../lib/markups'
 import { MarkupLayer } from './MarkupLayer'
 
 /** A sheet the viewer can show: the current revision of a sheet, or a specific older one. */
@@ -62,7 +62,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const [more, setMore] = useState(false)
   const [filter, setFilter] = useState('')
   const [markups, setMarkups] = useState<Markup[]>([])
-  const [tool, setTool] = useState<MarkupKind | 'erase' | null>(null)
+  const [tool, setTool] = useState<Tool>(null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [colour, setColour] = useState<string>(MARKUP_COLOURS[0])
   const [settingScale, setSettingScale] = useState(false)
   const [pendingScale, setPendingScale] = useState<{ from: Point; to: Point } | null>(null)
@@ -249,7 +250,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       // Single letters pick a tool while marking up, as the palette's own labels say.
       if (tool !== null && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const pick = TOOL_KEYS[e.key.toLowerCase()]
-        if (pick && !(pick === 'dimension' && !scale && !settingScale)) { e.preventDefault(); setTool(pick) }
+        if (pick && !(pick === 'dimension' && !scale && !settingScale)) { e.preventDefault(); setTool(pick); if (pick !== 'select') setSelected(null) }
       }
       if (e.key === 'ArrowRight' && index >= 0 && index < sheets.length - 1) go(sheets[index + 1])
       if (e.key === 'ArrowLeft' && index > 0) go(sheets[index - 1])
@@ -365,8 +366,18 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       <div className="sv-body">
         {tool !== null && (
           <MarkupPalette
-            tool={tool} setTool={setTool}
-            colour={colour} setColour={setColour}
+            tool={tool} setTool={(t) => { setTool(t); if (t !== 'select') setSelected(null) }}
+            colour={colour}
+            setColour={async (c) => {
+              setColour(c)
+              // With a markup in hand, the swatch is a change to that markup, not just the
+              // colour of the next thing drawn.
+              const m = selected ? markups.find((x) => x.id === selected) : null
+              if (!m || (m.created_by && me && m.created_by !== me)) return
+              const style = { ...(m.style ?? {}), colour: c }
+              setMarkups((ms) => ms.map((x) => (x.id === m.id ? { ...x, style } : x)))
+              await editMarkup(m.id, { style }).catch((e) => setError(message(e)))
+            }}
             scale={scale} settingScale={settingScale} setSettingScale={setSettingScale}
             stale={stale}
             onBringForward={async () => {
@@ -374,7 +385,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
               await bringForward(sheet.sheetId, sheet.revisionId)
               setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
             }}
-            onDone={() => { setTool(null); setSettingScale(false) }}
+            onDone={() => { setTool(null); setSettingScale(false); setSelected(null) }}
           />
         )}
         <aside className={`sv-index${indexOpen ? ' open' : ''}`} aria-label="Sheets in this set">
@@ -417,6 +428,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 projectId={project.id} sheetId={sheet.sheetId} revisionId={sheet.revisionId}
                 scale={scale} aspect={aspect} me={me}
                 onChange={setMarkups}
+                selected={selected}
+                onSelect={setSelected}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
               />
             )}

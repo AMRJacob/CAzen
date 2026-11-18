@@ -19,6 +19,7 @@ import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
 import { ConfirmDelete } from '../components/ConfirmDelete'
+import { useClickAway } from '../lib/clickAway'
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
@@ -343,6 +344,10 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
     if (e.key === 'Escape') { e.preventDefault(); setEditing(null) }
   }
 
+  // Clicking anywhere else leaves the rename, as Cancel does.
+  const editBox = useRef<HTMLDivElement>(null)
+  useClickAway(editBox, () => { if (!saving) setEditing(null) }, !!editing)
+
   async function saveEdit() {
     if (!editing || saving) return
     setSaving(true)
@@ -397,6 +402,7 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
           than inside it, so the fields have room to be typed into on a phone. */}
       {editing && (
         <tr className="confirm-row"><td colSpan={7}>
+          <div ref={editBox}>
           <div className="sheet-edit">
             <label className="f-number">Sheet
               <input value={editing.number} autoFocus aria-label="Sheet number"
@@ -416,6 +422,7 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
               ? <span className="bad-text">{problem}</span>
               : <>Fixes the sheet and this revision’s title. Earlier revisions keep the title they were issued with, and the stored file keeps its own name.</>}
           </p>
+          </div>
         </td></tr>
       )}
       {open && history?.map((r) => (
@@ -466,6 +473,8 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
   const [note, setNote] = useState<string | null>(null)
   const reload = useCallback(() => { listIssuances(project.id).then(setRows).catch((e) => setError(message(e))) }, [project.id])
   useEffect(() => { reload() }, [reload])
+  const setBox = useRef<HTMLDivElement>(null)
+  useClickAway(setBox, () => { if (!saving) setEditing(null) }, !!editing)
   if (error) return <div className="notice error">{error}</div>
   if (!rows) return <p className="muted">Loading…</p>
   if (!rows.length) return <div className="card muted">No sets uploaded yet.{note && <> {note}</>}</div>
@@ -506,6 +515,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
               </tr>
               {editing?.id === r.id && (
                 <tr className="confirm-row"><td colSpan={5}>
+                  <div ref={setBox}>
                   <div className="sheet-edit">
                     <label className="f-kind">Issued as
                       <select value={editing.kind} onChange={(e) => setEditing({ ...editing, kind: e.target.value as IssuanceKind })}>
@@ -535,6 +545,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                     </div>
                   </div>
                   {problem && <p className="muted small"><span className="bad-text">{problem}</span></p>}
+                  </div>
                 </td></tr>
               )}
               {deleting === r.id && (

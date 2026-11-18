@@ -14,9 +14,10 @@ import { MARKUP_COLOURS, type MarkupKind } from '../lib/markups'
  * the palette on its way somewhere else.
  */
 
-export type Tool = MarkupKind | 'erase' | null
+export type Tool = MarkupKind | 'erase' | 'select' | null
 
 const TOOLS: { key: Exclude<Tool, null>; name: string; key_: string; icon: ReactElement }[] = [
+  { key: 'select', name: 'Select', key_: 'S', icon: <path d="M5 3.5 18.5 12 12 13.2l-2.4 6.3L5 3.5Z" /> },
   { key: 'ink', name: 'Draw', key_: 'D', icon: <path d="M3 17.3V21h3.7L17.6 10.1l-3.7-3.7L3 17.3ZM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7L20.7 7Z" /> },
   { key: 'arrow', name: 'Arrow', key_: 'A', icon: <path d="M4 20 20 4M20 4h-7M20 4v7" /> },
   { key: 'rect', name: 'Box', key_: 'B', icon: <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" /> },
@@ -134,7 +135,12 @@ export function MarkupPalette({
       <div className="mk-foot">
         <button className={settingScale ? 'on' : ''} onClick={() => setSettingScale(true)}
           aria-label={scale ? 'Reset scale' : 'Set scale'} data-tip={scale ? 'Reset the scale' : 'Set the scale, so Measure can read in feet'}>
-          <Icon><><path d="M4 6h16M4 6v3M20 6v3M12 6v2" /><path d="M7 14h10M7 14v4M17 14v4" /></></Icon>
+          <Icon><>
+            {/* A span measured, over the thing that measures it. */}
+            <path d="M3 6h18M3 6l2.6-2M3 6l2.6 2M21 6l-2.6-2M21 6l-2.6 2" />
+            <rect x="2.5" y="11.5" width="19" height="7" rx="0.8" />
+            <path d="M6 11.5v3M9 11.5v2M12 11.5v3M15 11.5v2M18 11.5v3" />
+          </></Icon>
         </button>
         {stale > 0 && (
           <button onClick={onBringForward} aria-label={`Bring ${stale} forward`}

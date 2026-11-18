@@ -944,3 +944,19 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .fc-name { font-size: 14px; font-weight: 500; }
 .fc-size { font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .fc-about { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* Select: something to take hold of on each markup, and handles on the one in hand. */
+.mk-pickable {
+  position: absolute; pointer-events: auto; padding: 0;
+  background: none; border: 1px solid transparent; border-radius: 3px; cursor: pointer;
+}
+.mk-pickable:hover { border-color: rgba(43, 45, 44, 0.35); background: rgba(43, 45, 44, 0.05); }
+.mk-pickable.on { border: 1px dashed var(--moss); background: rgba(95, 122, 97, 0.08); }
+.mk-handle {
+  position: absolute; pointer-events: auto; padding: 0;
+  width: 13px; height: 13px; margin: -7px 0 0 -7px;
+  border: 1.5px solid var(--moss); border-radius: 3px; background: var(--paper);
+  cursor: grab; box-shadow: 0 1px 3px rgba(43, 45, 44, 0.25);
+}
+.mk-handle:active { cursor: grabbing; }
+@media (pointer: coarse) { .mk-handle { width: 20px; height: 20px; margin: -10px 0 0 -10px; } }

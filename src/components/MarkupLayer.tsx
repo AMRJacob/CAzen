@@ -11,10 +11,10 @@ import {
  * sheet at any zoom and never has to be recalculated. Strokes are told not to scale with it, or a
  * line drawn at fit-to-screen would become a stripe at 400%.
  */
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
-  tool: MarkupKind | 'erase' | null
+  tool: MarkupKind | 'erase' | 'select' | null
   colour: string
   projectId: string
   sheetId: string
@@ -25,10 +25,19 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   onChange: (markups: Markup[]) => void
   /** Picking the two ends of the scale line, when that's what's being set. */
   onPick?: (from: Point, to: Point) => void
+  /** Which markup is picked up, with Select. The viewer holds it so the palette can recolour it. */
+  selected?: string | null
+  onSelect?: (id: string | null) => void
 }) {
   const [drawing, setDrawing] = useState<{ kind: MarkupKind; geometry: Geometry } | null>(null)
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
   const start = useRef<Point | null>(null)
+  /** Which handle of the selected markup is being dragged, and where it started. */
+  const grabbed = useRef<{ id: string; handle: Handle; from: Geometry; at: Point } | null>(null)
+  const [dragGeom, setDragGeom] = useState<{ id: string; geometry: Geometry } | null>(null)
+
+  const picked = selected ? markups.find((m) => m.id === selected) ?? null : null
+  const mineToEdit = (m: Markup) => !m.created_by || !me || m.created_by === me
 
   const at = (e: React.PointerEvent): Point => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -39,6 +48,11 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   function down(e: React.PointerEvent) {
+    if (tool === 'select') {
+      // Pressing anywhere that isn't a markup lets go of the one in hand.
+      if (!(e.target as HTMLElement).closest('.mk-pickable, .mk-handle, .mk-note')) onSelect?.(null)
+      return
+    }
     if (!tool || tool === 'erase') return
     if ((e.target as HTMLElement).closest('.mk-note, .mk-hit')) return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -52,6 +66,11 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   function move(e: React.PointerEvent) {
+    const g = grabbed.current
+    if (g) {
+      setDragGeom({ id: g.id, geometry: moveHandle(g.from, g.handle, at(e), g.at) })
+      return
+    }
     if (!drawing || !start.current) return
     const p = at(e)
     const s = start.current
@@ -67,6 +86,19 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   async function up() {
+    // Finishing a handle drag, not a new shape.
+    const g = grabbed.current
+    if (g) {
+      grabbed.current = null
+      const moved = dragGeom
+      setDragGeom(null)
+      if (moved && JSON.stringify(moved.geometry) !== JSON.stringify(g.from)) {
+        onChange(markups.map((m) => (m.id === g.id ? { ...m, geometry: moved.geometry } : m)))
+        await editMarkup(g.id, { geometry: moved.geometry })
+      }
+      return
+    }
+
     const made = drawing
     const from = start.current
     start.current = null
@@ -163,7 +195,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   return (
     <div className={`mk-layer${tool ? ' on' : ''}`} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="mk-svg">
-        {markups.filter((m) => m.kind !== 'text').map((m) => shape(m, m.id))}
+        {markups.filter((m) => m.kind !== 'text').map((m) => shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id))}
         {drawing && shape({ ...drawing, style: { colour, width: 2 } }, 'live', true)}
       </svg>
 
@@ -202,6 +234,29 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
         )
       })}
 
+      {/* Select: something to click on each markup, then handles on the one that's picked up. */}
+      {tool === 'select' && markups.map((m) => {
+        if (m.kind === 'text') return null  // a note is already a thing you click
+        const box = pad(boundsOf(m.geometry))
+        return (
+          <button key={`s${m.id}`} className={`mk-pickable${selected === m.id ? ' on' : ''}`} style={pct(box)}
+            aria-label={`Select this ${m.kind}`}
+            onPointerDown={(e) => { e.stopPropagation(); onSelect?.(m.id) }} />
+        )
+      })}
+      {tool === 'select' && picked && mineToEdit(picked) && handlesOf(dragGeom?.id === picked.id ? dragGeom.geometry : picked.geometry).map((h) => (
+        <button key={`h${h.name}`} className="mk-handle" aria-label={`Drag ${h.name}`}
+          style={{ left: `${h.at.x * 100}%`, top: `${h.at.y * 100}%` }}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+            grabbed.current = { id: picked.id, handle: h.name, from: picked.geometry, at: at(e) }
+          }}
+          onPointerMove={move}
+          onPointerUp={up}
+        />
+      ))}
+
       {/* In erase mode every markup gets something to hit. */}
       {tool === 'erase' && markups.map((m) => {
         const box = boundsOf(m.geometry)
@@ -228,4 +283,37 @@ function boundsOf(g: Geometry): { x: number; y: number; w: number; h: number } {
     return { x, y, w: Math.abs(g.to.x - g.from.x), h: Math.abs(g.to.y - g.from.y) }
   }
   return g
+}
+
+type Handle = 'from' | 'to' | 'nw' | 'ne' | 'se' | 'sw'
+
+const pad = (b: { x: number; y: number; w: number; h: number }) => ({
+  x: b.x - 0.004, y: b.y - 0.004, w: b.w + 0.008, h: b.h + 0.008,
+})
+
+/**
+ * Where a shape can be taken hold of.
+ *
+ * A line has its two ends; a box and a cloud have their corners. Ink is left alone — a freehand
+ * stroke has no handle that means anything, and the way to change one is to rub it out and draw
+ * it again.
+ */
+function handlesOf(g: Geometry): { name: Handle; at: Point }[] {
+  if ('from' in g) return [{ name: 'from', at: g.from }, { name: 'to', at: g.to }]
+  if ('points' in g) return []
+  return [
+    { name: 'nw', at: { x: g.x, y: g.y } },
+    { name: 'ne', at: { x: g.x + g.w, y: g.y } },
+    { name: 'se', at: { x: g.x + g.w, y: g.y + g.h } },
+    { name: 'sw', at: { x: g.x, y: g.y + g.h } },
+  ]
+}
+
+/** The shape after a handle has been dragged to a point. */
+function moveHandle(g: Geometry, handle: Handle, to: Point, _from: Point): Geometry {
+  if ('from' in g) return handle === 'from' ? { from: to, to: g.to } : { from: g.from, to }
+  if ('points' in g) return g
+  const x1 = g.x, y1 = g.y, x2 = g.x + g.w, y2 = g.y + g.h
+  const [ax, ay] = handle === 'nw' ? [x2, y2] : handle === 'ne' ? [x1, y2] : handle === 'se' ? [x1, y1] : [x2, y1]
+  return { x: Math.min(ax, to.x), y: Math.min(ay, to.y), w: Math.abs(to.x - ax), h: Math.abs(to.y - ay) }
 }
