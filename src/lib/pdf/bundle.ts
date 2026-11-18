@@ -26,9 +26,20 @@ export interface Bundle {
   missing: string[]
 }
 
-/** A file name that says what this is: "24-1043 - Addendum 2 - 2026-10-29.pdf". */
-export function bundleName(projectNumber: string | undefined, label: string, date?: string): string {
-  const parts = [projectNumber, label, date].filter(Boolean)
+/**
+ * A file name that says what this is, in the order a folder should sort it:
+ * "24-1043 - CAW Westrock Landing - 2026-10-29 - Record set.pdf".
+ *
+ * The job first, because that is the folder it will end up in; then the date, so a year of
+ * downloads lines up in order; then what the set is, last, because that is what somebody reads
+ * when they are looking for it.
+ */
+export function bundleName(
+  project: { number?: string | null; name?: string | null },
+  label: string,
+  date?: string,
+): string {
+  const parts = [project.number, project.name, date, label].filter(Boolean)
   return `${parts.join(' - ').replace(/[\\/:*?"<>|]/g, '-')}.pdf`
 }
 

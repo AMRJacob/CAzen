@@ -6,6 +6,7 @@ import { PageThumb } from '../components/PageThumb'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import { niceTitle } from '../lib/titles'
+import { today } from '../lib/dates'
 import { readFile } from '../lib/files'
 import { ISSUANCE_LABELS, type IssuanceKind, type Project } from '../lib/types'
 import {
@@ -25,7 +26,6 @@ import { useClickAway } from '../lib/clickAway'
  * opening, reissuing, superseding — is the section.
  */
 
-const today = () => new Date().toISOString().slice(0, 10)
 
 const usDate = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split('-')

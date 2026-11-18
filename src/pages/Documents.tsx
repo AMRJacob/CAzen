@@ -1,5 +1,6 @@
 import { PageTitle } from '../components/PageTitle'
 import { niceTitle } from '../lib/titles'
+import { today } from '../lib/dates'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from '../lib/project'
@@ -40,7 +41,6 @@ import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
 
-const today = () => new Date().toISOString().slice(0, 10)
 
 /** True when a sheet has been filed somewhere other than where its number would put it. */
 function movedAway(s: CurrentSheet, order: Discipline[]): boolean {
@@ -240,7 +240,8 @@ export default function Documents() {
               <DownloadSet
                 project={current}
                 order={order}
-                label={asOfRows ? `Set as of ${usDate(asOf).replace(/\//g, '-')}` : 'Record set'}
+                label="Record set"
+                date={asOfRows ? asOf.slice(0, 10) : today()}
                 gather={async () => (asOfRows
                   ? asOfRows.map((r) => ({ number: r.sheet_number, title: r.sheet_title, revisionLabel: null, filePath: r.file_path }))
                   : sheets.map((s) => ({ number: s.number, title: s.title, revisionLabel: s.revision_label, filePath: s.file_path, filedUnder: s.filed_under })))}
@@ -358,7 +359,7 @@ function DownloadSet({ project, order, label, date, gather, className }: {
       if (!sheets.length) { setProblem('No sheets in this set.'); return }
       const bundle = await bundleSheets(project, sheets, order, (done, total, number) =>
         setBusy(done >= total ? 'writing the file' : `sheet ${done + 1} of ${total} · ${number}`))
-      saveBundle(bundle.bytes, bundleName(project.number, label, date))
+      saveBundle(bundle.bytes, bundleName(project, label, date))
       if (bundle.missing.length) setProblem(`${bundle.missing.length} sheet${bundle.missing.length === 1 ? '' : 's'} could not be read and ${bundle.missing.length === 1 ? 'is' : 'are'} not in the file: ${bundle.missing.join(', ')}.`)
     } catch (e) {
       setProblem(message(e))
