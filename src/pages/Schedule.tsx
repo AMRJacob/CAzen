@@ -111,7 +111,7 @@ export default function Schedule() {
       {error && <div className="notice error">{error}</div>}
       {needsSetUp && (
         <div className="notice warn">
-          The schedule's two tables are not in the database yet. The migration is in the repository
+          The schedule's two tables are not in this database. The migration is in the repository
           at <code>supabase/migrations/0028_construction_schedule.sql</code>; everything on this page
           works as soon as it has been run.
         </div>

@@ -50,7 +50,9 @@ export function NotePad({ pad, onChanged, onTrouble }: {
   const surface = useRef<HTMLDivElement | null>(null)
   const drawing = useRef(false)
   const erasing = useRef<Set<string>>(new Set())
-  const mine = useRef<string[]>([])
+  /** What this person has added, newest last — what Undo takes back. State, not a ref, so the
+      button knows whether there is anything to undo. */
+  const [mine, setMine] = useState<string[]>([])
   const palm = useRef(palmGuard())
 
   // ---- what is on the pad ----------------------------------------------------------------
@@ -127,7 +129,7 @@ export function NotePad({ pad, onChanged, onTrouble }: {
           width: kind === 'highlight' ? 0.022 : WIDTHS[width],
         },
       })
-      mine.current.push(saved.id)
+      setMine((m) => [...m, saved.id])
       setMarks((all) => (all.some((x) => x.id === saved.id) ? all : [...all, saved]))
     } catch (e) { onTrouble(message(e)) }
   }
@@ -152,15 +154,16 @@ export function NotePad({ pad, onChanged, onTrouble }: {
         style: { colour },
         body: '',
       })
-      mine.current.push(saved.id)
+      setMine((m) => [...m, saved.id])
       setMarks((all) => [...all, saved])
       setEditing(saved.id)
     } catch (e) { onTrouble(message(e)) }
   }
 
   async function undo() {
-    const id = mine.current.pop()
+    const id = mine[mine.length - 1]
     if (!id) return
+    setMine((m) => m.slice(0, -1))
     setMarks((all) => all.filter((m) => m.id !== id))
     try { await removeMarks([id]) } catch (e) { onTrouble(message(e)); load() }
   }
@@ -211,7 +214,7 @@ export function NotePad({ pad, onChanged, onTrouble }: {
         )}
 
         <div className="pad-tool-group pad-tools-end">
-          <button className="link" onClick={() => void undo()} disabled={!mine.current.length}>Undo</button>
+          <button className="link" onClick={() => void undo()} disabled={!mine.length}>Undo</button>
           <label className="check small" title="Off, a finger scrolls the page and only a pen draws">
             <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
             Draw with a finger
