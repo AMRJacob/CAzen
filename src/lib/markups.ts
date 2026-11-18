@@ -14,7 +14,7 @@ import { queue, unsentIds } from './offline/outbox'
  * That survives zooming, and it survives a sheet being reissued at another paper size.
  */
 
-export type MarkupKind = 'ink' | 'line' | 'arrow' | 'rect' | 'cloud' | 'text' | 'dimension'
+export type MarkupKind = 'ink' | 'line' | 'arrow' | 'rect' | 'cloud' | 'text' | 'dimension' | 'area'
 
 export interface Point { x: number; y: number }
 
@@ -87,28 +87,39 @@ export async function listMarkups(sheetId: string): Promise<Markup[]> {
   }
 }
 
-export async function addMarkup(m: {
-  sheetId: string
-  projectId: string
-  revisionId: string
-  kind: MarkupKind
-  geometry: Geometry
-  style: { colour?: string; width?: number }
-  body?: string | null
-}): Promise<Markup> {
-  const { data: u } = await db().auth.getUser().catch(() => ({ data: { user: null } }))
-  // The id is made here, not by the server. That is what lets a markup be drawn with no signal
-  // and lets the queue be replayed without drawing it twice.
-  const row = {
+/**
+ * The row for a markup, made here rather than by the server.
+ *
+ * Pure and synchronous on purpose: the shape goes on screen from this, before anything is
+ * written anywhere. A device that won't keep it and a server that won't take it are both things
+ * to report, never reasons for the line you just drew to vanish.
+ */
+export function buildMarkup(m: {
+  sheetId: string; projectId: string; revisionId: string
+  kind: MarkupKind; geometry: Geometry; style: Markup['style']; body?: string | null
+  by?: string | null
+}): Markup {
+  return {
     id: crypto.randomUUID(),
     sheet_id: m.sheetId, project_id: m.projectId, revision_id: m.revisionId,
     kind: m.kind, geometry: m.geometry, style: m.style, body: m.body ?? null,
-    created_by: u.user?.id ?? null,
-    created_at: new Date().toISOString(),
-  }
-  await localPut('markups', row).catch(() => { /* a device that won't keep it can still send it */ })
-  await queue(m.projectId, { kind: 'markup.add', row })
-  return row as Markup
+    created_by: m.by ?? null, created_at: new Date().toISOString(),
+  } as Markup
+}
+
+/** Keep a markup: on this device, and in the queue for the server. */
+export async function saveMarkup(row: Markup): Promise<void> {
+  const { data: u } = await db().auth.getUser().catch(() => ({ data: { user: null } }))
+  const withAuthor = { ...row, created_by: row.created_by ?? u.user?.id ?? null }
+  await localPut('markups', withAuthor).catch(() => { /* a device that won't keep it can still send it */ })
+  await queue(row.project_id, { kind: 'markup.add', row: withAuthor as unknown as Record<string, unknown> })
+}
+
+/** Build and keep in one step, for callers that don't need them apart. */
+export async function addMarkup(m: Parameters<typeof buildMarkup>[0]): Promise<Markup> {
+  const row = buildMarkup(m)
+  await saveMarkup(row)
+  return row
 }
 
 export async function editMarkup(id: string, patch: { body?: string | null; geometry?: Geometry; style?: Markup['style'] }) {
@@ -190,4 +201,38 @@ export function measure(
   const reference = span(scale.from, scale.to)
   if (!reference) return null
   return feetAndInches((span(from, to) / reference) * scale.inches)
+}
+
+
+/**
+ * The area inside a closed polyline, in square feet.
+ *
+ * The shoelace formula on the points, then out of page fractions into feet using the same scale
+ * the dimension tool uses. The page is wider than it is tall in fractions, so x is weighted by
+ * the aspect before the arithmetic, exactly as a length is.
+ */
+export function areaOf(
+  points: [number, number][],
+  scale: { from: Point; to: Point; inches: number } | null,
+  aspect: number,
+): number | null {
+  if (!scale || points.length < 3) return null
+  const span = (a: Point, b: Point) => Math.hypot((b.x - a.x) * aspect, b.y - a.y)
+  const reference = span(scale.from, scale.to)
+  if (!reference) return null
+  // Inches of real drawing per unit of page fraction, which squares for an area.
+  const perFraction = scale.inches / reference / 12
+  let twice = 0
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i]
+    const [x2, y2] = points[(i + 1) % points.length]
+    twice += (x1 * aspect) * y2 - (x2 * aspect) * y1
+  }
+  const inFractions = Math.abs(twice) / 2
+  return inFractions * perFraction * perFraction
+}
+
+/** Square feet, as a drawing would write them. */
+export function squareFeet(sqft: number): string {
+  return `${sqft < 100 ? sqft.toFixed(1) : Math.round(sqft).toLocaleString()} SF`
 }

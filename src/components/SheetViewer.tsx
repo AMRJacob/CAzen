@@ -12,6 +12,12 @@ import { PREFS, usePref } from '../lib/prefs'
 import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
 import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, type Markup, type Point } from '../lib/markups'
+import { listRevisions } from '../lib/sheets'
+import type { SheetRevision } from '../lib/types'
+
+/** What to call a revision in the toolbar: what it was labelled, else where it sits. */
+const revLabel = (r: SheetRevision) =>
+  r.revision_label || r.issuances?.number || (r.revision_index === 0 ? 'Original' : `Rev ${r.revision_index}`)
 import { MarkupLayer } from './MarkupLayer'
 
 /** A sheet the viewer can show: the current revision of a sheet, or a specific older one. */
@@ -95,6 +101,40 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
     setMore(false)
   }, [])
   const back = () => stack.length > 1 && setStack(stack.slice(0, -1))
+
+  /**
+   * The other revisions of the sheet on screen.
+   *
+   * Comparing what changed means going back a revision and forward again, and until now that
+   * meant closing the sheet, finding its row in the register, expanding its history and picking
+   * one — four steps to answer "what did this look like before?". Newest first, as the register
+   * lists them.
+   */
+  const [history, setHistory] = useState<SheetRevision[]>([])
+  useEffect(() => {
+    if (!sheet.sheetId) { setHistory([]); return }
+    let live = true
+    listRevisions(sheet.sheetId)
+      .then((r) => { if (live) setHistory(r) })
+      .catch(() => { if (live) setHistory([]) })
+    return () => { live = false }
+  }, [sheet.sheetId])
+
+  const revAt = history.findIndex((r) => r.id === sheet.revisionId)
+  const newest = history[0]
+  /** Step through the history of this sheet, keeping everything else about it the same. */
+  const goRevision = (to: number) => {
+    const r = history[to]
+    if (!r) return
+    setStack((st) => [...st.slice(0, -1), {
+      ...sheet,
+      revisionId: r.id,
+      revisionLabel: r.revision_label,
+      filePath: r.file_path,
+      title: r.title_at_rev ?? sheet.title,
+      superseded: to > 0,
+    }])
+  }
 
   // Load the PDF, its words and its hand-drawn links.
   useEffect(() => {
@@ -254,7 +294,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
       // Single letters pick a tool while marking up, as the palette's own labels say.
       if (tool !== null && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const pick = TOOL_KEYS[e.key.toLowerCase()]
-        if (pick && !(pick === 'dimension' && !scale && !settingScale)) { e.preventDefault(); setTool(pick); if (pick !== 'select') setSelected(null) }
+        if (pick && !((pick === 'dimension' || pick === 'area') && !scale && !settingScale)) { e.preventDefault(); setTool(pick); if (pick !== 'select') setSelected(null) }
         if (e.key === 'Delete' || e.key === 'Backspace') { /* handled by the layer's erase targets */ }
       }
       if (e.key === 'ArrowRight' && index >= 0 && index < sheets.length - 1) go(sheets[index + 1])
@@ -319,6 +359,27 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           <span className="sv-sep" />
           <button className="icon" disabled={index <= 0} onClick={() => stepTo(index - 1)} aria-label="Previous sheet">‹</button>
           <button className="icon" disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)} aria-label="Next sheet">›</button>
+          {history.length > 1 && (
+            <span className="sv-revs">
+              <span className="sv-sep" />
+              {/* Older is to the left, as it is on a register read top to bottom. */}
+              <button className="icon" disabled={revAt < 0 || revAt >= history.length - 1}
+                onClick={() => goRevision(revAt + 1)}
+                aria-label="Previous revision of this sheet"
+                title={history[revAt + 1] ? `Back to ${revLabel(history[revAt + 1])}` : 'This is the first revision'}>⟨</button>
+              <span className="sv-rev-at" title={`${revAt + 1} of ${history.length}`}>
+                {revAt >= 0 ? revLabel(history[revAt]) : '—'}
+              </span>
+              <button className="icon" disabled={revAt <= 0}
+                onClick={() => goRevision(revAt - 1)}
+                aria-label="Next revision of this sheet"
+                title={history[revAt - 1] ? `Forward to ${revLabel(history[revAt - 1])}` : 'This is the current revision'}>⟩</button>
+              {revAt > 0 && newest && (
+                <button className="link sv-rev-now" onClick={() => goRevision(0)}
+                  title={`Back to ${revLabel(newest)}`}>current</button>
+              )}
+            </span>
+          )}
           <span className="sv-sep" />
           <button className="icon" onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
           <button onClick={fit} title="Fit the sheet to the screen">{Math.round(zoom * 100)}%</button>
@@ -339,6 +400,18 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 <button disabled={index <= 0} onClick={() => stepTo(index - 1)}>‹ Previous</button>
                 <button disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)}>Next ›</button>
               </div>
+              {/* The toolbar is too narrow for the revision stepper below 900px, so it lives here. */}
+              {history.length > 1 && (
+                <div className="sv-more-row sv-revs-more">
+                  <button disabled={revAt < 0 || revAt >= history.length - 1}
+                    onClick={() => { setMore(false); goRevision(revAt + 1) }}>⟨ Older</button>
+                  <span className="muted small">
+                    {revAt >= 0 ? revLabel(history[revAt]) : '—'} · {revAt + 1} of {history.length}
+                  </span>
+                  <button disabled={revAt <= 0}
+                    onClick={() => { setMore(false); goRevision(revAt - 1) }}>Newer ⟩</button>
+                </div>
+              )}
               <div className="sv-more-row sv-narrow-only">
                 <button onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
                 <button onClick={fit}>Fit</button>
@@ -476,6 +549,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                 selected={selected}
                 onSelect={setSelected}
                 keep={keep}
+                onTrouble={setError}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
               />
             )}

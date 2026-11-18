@@ -25,6 +25,7 @@ const TOOLS: { key: Exclude<Tool, null>; name: string; key_: string; icon: React
   { key: 'cloud', name: 'Cloud', key_: 'C', icon: <path d="M7 18h10a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6-1.2A3.9 3.9 0 0 0 7 18Z" /> },
   { key: 'text', name: 'Note', key_: 'N', icon: <path d="M4 5h16v11H9l-5 4V5Z" /> },
   { key: 'dimension', name: 'Measure', key_: 'M', icon: <><rect x="2.5" y="8.5" width="19" height="7" rx="1" /><path d="M7 8.5v3M12 8.5v4M17 8.5v3" /></> },
+  { key: 'area', name: 'Area', key_: 'R', icon: <><path d="M4 7.5 10 3.5l10 4.5-3 9-9 3-4-12.5Z" /><circle cx="4" cy="7.5" r="1.4" /><circle cx="10" cy="3.5" r="1.4" /><circle cx="20" cy="8" r="1.4" /><circle cx="17" cy="17" r="1.4" /><circle cx="8" cy="20" r="1.4" /></> },
   { key: 'erase', name: 'Erase', key_: 'E', icon: <><path d="M8.5 20 3.6 15a1.8 1.8 0 0 1 0-2.6l8-8a1.8 1.8 0 0 1 2.6 0l5.8 5.8a1.8 1.8 0 0 1 0 2.6L13 20Z" /><path d="M8.5 20H20" /></> },
 ]
 
@@ -121,11 +122,11 @@ export function MarkupPalette({
 
       <div className="mk-grid">
         {TOOLS.map((t) => {
-          const off = t.key === 'dimension' && noScale
+          const off = (t.key === 'dimension' || t.key === 'area') && noScale
           return (
             <button key={t.key} className={tool === t.key ? 'on' : ''} disabled={off}
               onClick={() => setTool(t.key)} aria-label={t.name} aria-pressed={tool === t.key}
-              data-tip={off ? 'Measure — set the scale first' : `${t.name} (${t.key_})`}>
+              data-tip={off ? `${t.name} — set the scale first` : `${t.name} (${t.key_})`}>
               <Icon>{t.icon}</Icon>
             </button>
           )

@@ -1032,3 +1032,18 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 /* Widths set on a wide screen shouldn't trap a narrow one with no way to scroll. */
 .register.sizable.over-wide { table-layout: auto; }
 @media (max-width: 899px) { .col-grip { display: none; } .register.sizable { table-layout: auto; } }
+
+/* ---------- Stepping through a sheet's revisions ---------- */
+.sv-revs { display: inline-flex; align-items: center; gap: 2px; }
+.sv-rev-at {
+  min-width: 68px; max-width: 150px; padding: 0 6px;
+  font-size: 12px; color: var(--muted); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sv-rev-now { font-size: 12px; padding: 0 4px; }
+/* On a narrow screen the sheet stepper is the one that has to fit; revisions live in More. */
+@media (max-width: 899px) { .sv-revs { display: none; } }
+.sv-revs-more { display: none; }
+@media (max-width: 899px) { .sv-revs-more { display: flex; align-items: center; gap: 8px; } }
+.mk-area { font-variant-numeric: tabular-nums; }
+.sheet-edit .f-name { flex: 1 1 200px; }

@@ -535,23 +535,24 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
               {editing?.id === r.id && (
                 <tr className="confirm-row"><td colSpan={5}>
                   <div ref={setBox}>
+                  {/* Same order as the row it opens under: date, then what it was issued as. */}
                   <div className="sheet-edit">
-                    <label className="f-kind">Issued as
+                    <label className="f-date">Date
+                      <input type="date" value={editing.issuedOn} aria-label="Issued on"
+                        onChange={(e) => setEditing({ ...editing, issuedOn: e.target.value })} />
+                    </label>
+                    <label className="f-kind">Category
                       <select value={editing.kind} onChange={(e) => setEditing({ ...editing, kind: e.target.value as IssuanceKind })}>
                         {(Object.keys(ISSUANCE_LABELS) as IssuanceKind[]).map((k) => <option key={k} value={k}>{ISSUANCE_LABELS[k]}</option>)}
                       </select>
                     </label>
-                    <label className="f-number">Number
-                      <input value={editing.number} placeholder="1" aria-label="Set number"
+                    <label className="f-name">Set name
+                      <input value={editing.number} placeholder="Addendum 2" aria-label="Set name"
                         onChange={(e) => setEditing({ ...editing, number: e.target.value })} />
                     </label>
-                    <label className="f-title">Title (optional)
-                      <input value={editing.title} aria-label="Set title"
+                    <label className="f-title">Note (optional)
+                      <input value={editing.title} aria-label="Set note"
                         onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
-                    </label>
-                    <label className="f-date">Issued
-                      <input type="date" value={editing.issuedOn} aria-label="Issued on"
-                        onChange={(e) => setEditing({ ...editing, issuedOn: e.target.value })} />
                     </label>
                     <div className="sheet-edit-go">
                       <button className="primary-lite" disabled={saving} onClick={async () => {

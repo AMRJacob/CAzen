@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  addMarkup, cloudPath, editMarkup, measure, removeMarkup,
+  areaOf, buildMarkup, cloudPath, editMarkup, measure, removeMarkup, saveMarkup, squareFeet,
   type Geometry, type Markup, type MarkupKind, type Point,
 } from '../lib/markups'
+import { message } from '../lib/errors'
 
 /**
  * What people have drawn on a sheet, and the drawing of it.
@@ -11,7 +12,7 @@ import {
  * sheet at any zoom and never has to be recalculated. Strokes are told not to scale with it, or a
  * line drawn at fit-to-screen would become a stripe at 400%.
  */
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -27,6 +28,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   onPick?: (from: Point, to: Point) => void
   /** False while marks are scratch: drawn on screen, never written anywhere. */
   keep?: boolean
+  /** Something went wrong keeping a mark — worth saying, never worth losing the mark over. */
+  onTrouble?: (m: string) => void
   /** Which markup is picked up, with Select. The viewer holds it so the palette can recolour it. */
   selected?: string | null
   onSelect?: (id: string | null) => void
@@ -45,6 +48,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
    * is what the release reads; the state is what draws.
    */
   const live = useRef<{ kind: MarkupKind; geometry: Geometry } | null>(null)
+  /** The corners put down so far on an area, while it is still being clicked out. */
+  const poly = useRef<[number, number][] | null>(null)
   const layer = useRef<HTMLDivElement>(null)
   const setLive = (d: { kind: MarkupKind; geometry: Geometry } | null) => { live.current = d; setDrawing(d) }
   /** Which handle of the selected markup is being dragged, and where it started. */
@@ -90,6 +95,23 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   function down(e: React.PointerEvent) {
+    // An area is clicked corner by corner, and closed by coming back to where it started,
+    // by double-clicking, or by pressing Enter.
+    if (tool === 'area') {
+      const p = at(e)
+      const started = poly.current
+      if (!started) {
+        poly.current = [[p.x, p.y]]
+        setLive({ kind: 'area', geometry: { points: [[p.x, p.y], [p.x, p.y]] } })
+        return
+      }
+      const [fx, fy] = started[0]
+      if (started.length >= 3 && Math.hypot((p.x - fx) * aspect, p.y - fy) < 0.012) { closeArea(); return }
+      poly.current = [...started, [p.x, p.y]]
+      setLive({ kind: 'area', geometry: { points: [...poly.current, [p.x, p.y]] } })
+      return
+    }
+
     // A shape begun with a click is finished by the next one.
     if (waiting.current && live.current) {
       const from = waiting.current
@@ -98,7 +120,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       start.current = null
       const to = square(from, at(e), e.shiftKey)
       setLive(null)
-      void finish({ kind, geometry: { from, to } }, from)
+      finish({ kind, geometry: { from, to } }, from)
       return
     }
     if (tool === 'select') {
@@ -119,6 +141,11 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   }
 
   function move(e: React.PointerEvent) {
+    if (tool === 'area' && poly.current) {
+      const p = at(e)
+      setLive({ kind: 'area', geometry: { points: [...poly.current, [p.x, p.y]] } })
+      return
+    }
     // Waiting for a second click: the shape follows the pointer with nothing held down.
     if (waiting.current && live.current) {
       const from = waiting.current
@@ -145,32 +172,33 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
     })())
   }
 
-  /** A finished shape: kept, or handed to whoever is picking the scale line. */
-  async function finish(made: { kind: MarkupKind; geometry: Geometry }, from: Point) {
+  /**
+   * A finished shape.
+   *
+   * It goes on screen first and is written down second. The other way round — awaiting storage
+   * and then adding it — means any failure takes the line with it, silently, because the preview
+   * has already been cleared by then. Nothing you have just drawn should depend on a database
+   * being reachable.
+   */
+  function finish(made: { kind: MarkupKind; geometry: Geometry }, _from: Point) {
     waiting.current = null
     if (onPick && made.kind === 'dimension') {
       const g = made.geometry as { from: Point; to: Point }
       onPick(g.from, g.to)
       return
     }
-    // Scratch marks are the same thing on screen and nothing at all on disk: no row, no queue,
-    // no trip to the server. Closing the sheet is what gets rid of them.
-    const saved = keep
-      ? await addMarkup({
-          sheetId, projectId, revisionId, kind: made.kind, geometry: made.geometry,
-          style: { colour, width: 2 },
-          body: made.kind === 'text' ? '' : null,
-        })
-      : {
-          id: `scratch:${crypto.randomUUID()}`,
-          sheet_id: sheetId, project_id: projectId, revision_id: revisionId,
-          kind: made.kind, geometry: made.geometry, style: { colour, width: 2 },
-          body: made.kind === 'text' ? '' : null,
-          created_by: me, created_at: new Date().toISOString(),
-        } as Markup
+
+    const row = buildMarkup({
+      sheetId, projectId, revisionId, kind: made.kind, geometry: made.geometry,
+      style: { colour, width: 2 },
+      body: made.kind === 'text' ? '' : null,
+      by: me,
+    })
+    // Scratch marks are the same thing on screen and nothing at all on disk.
+    const saved = keep ? row : { ...row, id: `scratch:${row.id}` }
     onChange([...markups, saved])
     if (saved.kind === 'text') setEditing({ id: saved.id, body: '' })
-    void from
+    if (keep) void saveMarkup(row).catch((e: unknown) => onTrouble?.(message(e)))
   }
 
   async function up(e: React.PointerEvent) {
@@ -210,8 +238,35 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 
     setLive(null)
     if (!travelled) return
-    await finish(made, from)
+    finish(made, from)
   }
+
+  /** Three corners or more is an area; anything less is abandoned. */
+  function closeArea() {
+    const pts = poly.current
+    poly.current = null
+    setLive(null)
+    if (!pts || pts.length < 3) return
+    finish({ kind: 'area', geometry: { points: pts } }, { x: pts[0][0], y: pts[0][1] })
+  }
+
+  useEffect(() => {
+    if (tool !== 'area') { poly.current = null; return }
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest('input, textarea')) return
+      if (e.key === 'Enter') { e.preventDefault(); closeArea() }
+      if (e.key === 'Escape' && poly.current) { e.preventDefault(); poly.current = null; setLive(null) }
+      // Backspace takes back the last corner rather than the whole thing.
+      if (e.key === 'Backspace' && poly.current && poly.current.length > 1) {
+        e.preventDefault()
+        poly.current = poly.current.slice(0, -1)
+        setLive({ kind: 'area', geometry: { points: [...poly.current, poly.current[poly.current.length - 1]] } })
+      }
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool])
 
   const isScratch = (id: string) => id.startsWith('scratch:')
 
@@ -244,6 +299,12 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
       case 'ink': {
         const g = m.geometry as { points: [number, number][] }
         return <path key={key} {...common} d={g.points.map((p, i) => `${i ? 'L' : 'M'} ${p[0]} ${p[1]}`).join(' ')} />
+      }
+      case 'area': {
+        const g = m.geometry as { points: [number, number][] }
+        if (g.points.length < 2) return null
+        const d = `M ${g.points.map(([x, y]) => `${x} ${y}`).join(' L ')} Z`
+        return <path key={key} {...common} d={d} fill={(m.style?.colour ?? colour)} fillOpacity={0.12} />
       }
       case 'line': {
         const g = m.geometry as { from: Point; to: Point }
@@ -285,7 +346,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 
   return (
     <div ref={layer} className={`mk-layer${tool ? ' on' : ''}${tool === 'select' ? ' picking' : ''}`}
-      onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+      onPointerDown={down} onPointerMove={move} onPointerUp={up}
+      onDoubleClick={(e) => { if (tool === 'area' && poly.current) { e.preventDefault(); closeArea() } }}>
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="mk-svg">
         {markups.filter((m) => m.kind !== 'text').map((m) => shape(dragGeom?.id === m.id ? { ...m, geometry: dragGeom.geometry } : m, m.id))}
         {drawing && shape({ ...drawing, style: { colour, width: 2 } }, 'live', true)}
@@ -299,6 +361,19 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
         return (
           <span key={`d${m.id}`} className="mk-dim" style={{ left: `${((g.from.x + g.to.x) / 2) * 100}%`, top: `${((g.from.y + g.to.y) / 2) * 100}%`, color: stroke(m) }}>
             {label}
+          </span>
+        )
+      })}
+
+      {/* What an area comes to, once there's a scale to work it out from. */}
+      {[...markups.filter((m) => m.kind === 'area'), ...(drawing?.kind === 'area' ? [{ ...drawing, id: 'live', style: { colour } } as unknown as Markup] : [])].map((m) => {
+        const pts = (m.geometry as { points: [number, number][] }).points
+        const sqft = areaOf(pts, scale, aspect)
+        if (sqft == null) return null
+        const mid = pts.reduce((a, [x, y]) => ({ x: a.x + x / pts.length, y: a.y + y / pts.length }), { x: 0, y: 0 })
+        return (
+          <span key={`a${m.id}`} className="mk-dim mk-area" style={{ left: `${mid.x * 100}%`, top: `${mid.y * 100}%`, color: stroke(m) }}>
+            {squareFeet(sqft)}
           </span>
         )
       })}
