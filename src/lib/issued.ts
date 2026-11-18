@@ -11,6 +11,8 @@ export interface IssuedForm {
   title: string | null
   values: Record<string, string>
   file_path: string | null
+  /** The upload that brought the sheets this document issued, where it came from one. */
+  issuance_id?: string | null
   issued_by: string | null
   issued_at: string
 }

@@ -4,12 +4,13 @@ import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import { today, usDate } from '../lib/dates'
-import { figure, standings, type Billed, type Figures, type SovLine } from '../lib/payapps'
+import { figure, standings, type Billed, type Figures, type RetainageStep, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
-  addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setSovLine,
+  addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setContract,
+  setSovLine, setSteps,
   type LoadedContract,
 } from '../lib/payappsDb'
 
@@ -122,7 +123,9 @@ export default function PayApps() {
             ))}
           </div>
 
-          {tab === 'summary' && latest && <Summary data={data} figures={latest} all={figured} />}
+          {tab === 'summary' && latest && (
+            <Summary data={data} figures={latest} all={figured} onChanged={load} onTrouble={setError} />
+          )}
           {tab !== 'summary' && (() => {
             const i = data.applications.findIndex((a) => a.id === tab)
             if (i < 0 || !figured[i]) return null
@@ -144,7 +147,13 @@ export default function PayApps() {
 
 // ---------- Summary ----------
 
-function Summary({ data, figures, all }: { data: LoadedContract; figures: Figures; all: Figures[] }) {
+function Summary({ data, figures, all, onChanged, onTrouble }: {
+  data: LoadedContract
+  figures: Figures
+  all: Figures[]
+  onChanged: () => void
+  onTrouble: (m: string) => void
+}) {
   const g = figures.g702
   const paid = g.earnedLessRetainage
   const rows = standings(figures)
@@ -202,8 +211,102 @@ function Summary({ data, figures, all }: { data: LoadedContract; figures: Figure
         </table>
       </div>
 
+      <Retainage data={data} figures={figures} onChanged={onChanged} onTrouble={onTrouble} />
+
       <AgainstTheSchedule data={data} figures={figures} />
     </>
+  )
+}
+
+/**
+ * How much is held back, and when that changes.
+ *
+ * Retainage is almost never one rate for the life of a job. It is ten percent until the job
+ * is half done and five after, or it drops again at substantial completion — and the amount
+ * held is the single biggest lever on whether a subcontractor stays interested in finishing.
+ * The arithmetic has always read these steps; this is where they are written.
+ */
+function Retainage({ data, figures, onChanged, onTrouble }: {
+  data: LoadedContract
+  figures: Figures
+  onChanged: () => void
+  onTrouble: (m: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [work, setWork] = useState(String(data.contract.retainage_work))
+  const [stored, setStored] = useState(String(data.contract.retainage_stored))
+  const [steps, setLocalSteps] = useState<RetainageStep[]>(data.steps)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    if (busy) return
+    setBusy(true)
+    try {
+      await setContract(data.contract.id, {
+        retainage_work: Number(work) || 0,
+        retainage_stored: Number(stored) || 0,
+      })
+      await setSteps(data.contract.id, steps
+        .filter((s) => Number.isFinite(s.at_percent) && Number.isFinite(s.rate))
+        .sort((a, b) => a.at_percent - b.at_percent))
+      setOpen(false)
+      onChanged()
+    } catch (e) { onTrouble(message(e)) } finally { setBusy(false) }
+  }
+
+  const inForce = figures.rates
+
+  return (
+    <div className="card">
+      <div className="pad-head">
+        <h3>Retainage</h3>
+        <button className="link" onClick={() => setOpen(!open)}>{open ? 'Done' : 'Change'}</button>
+      </div>
+      <p className="muted small">
+        Holding {percent(inForce.work)} of completed work and {percent(inForce.stored)} of stored
+        material{inForce.steppedTo != null ? `, having stepped down once the job passed ${percent(inForce.steppedTo)} complete` : ''}.
+        {data.steps.length === 0 && ' One rate for the whole job.'}
+      </p>
+
+      {open && (
+        <div className="retainage-edit">
+          <div className="pay-add-fields">
+            <label className="stack">On completed work
+              <input className="mono" inputMode="decimal" value={work} onChange={(e) => setWork(e.target.value)} />
+            </label>
+            <label className="stack">On stored material
+              <input className="mono" inputMode="decimal" value={stored} onChange={(e) => setStored(e.target.value)} />
+            </label>
+          </div>
+
+          <p className="small"><strong>Milestones</strong> — from this much of the job complete, hold this much instead.</p>
+          {steps.map((step, i) => (
+            <div key={i} className="retainage-step">
+              <span className="muted small">From</span>
+              <input className="mono" inputMode="decimal" value={step.at_percent} aria-label="Percent complete"
+                onChange={(e) => setLocalSteps((all) => all.map((x, j) => (j === i ? { ...x, at_percent: Number(e.target.value) || 0 } : x)))} />
+              <span className="muted small">% complete, hold</span>
+              <input className="mono" inputMode="decimal" value={step.rate} aria-label="Rate from then on"
+                onChange={(e) => setLocalSteps((all) => all.map((x, j) => (j === i ? { ...x, rate: Number(e.target.value) || 0 } : x)))} />
+              <span className="muted small">%</span>
+              <button className="link danger-link" onClick={() => setLocalSteps((all) => all.filter((_, j) => j !== i))}>Remove</button>
+            </div>
+          ))}
+          <div className="folder-actions">
+            <button className="link" onClick={() => setLocalSteps((all) => [...all, { at_percent: 50, rate: 5 }])}>
+              Add a milestone
+            </button>
+            <button className="primary-lite" disabled={busy} onClick={() => void save()}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <p className="muted small">
+            A milestone is judged on the job as a whole, not line by line, and the highest one the
+            job has passed is the rate in force. A line held at its own rate ignores them.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

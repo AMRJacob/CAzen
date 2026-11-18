@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
 import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, uncover, type MissingChangeDocument, type RegisterRow } from '../lib/issued'
-import { openFile } from '../lib/files'
+import { openFile, type ProjectStore } from '../lib/files'
+import { listIssuanceSheets } from '../lib/sheets'
+import type { BundleSheet } from '../lib/pdf/bundle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import type { FormKind } from '../lib/templates/types'
@@ -180,6 +182,7 @@ function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
   onError: (m: string) => void
 }) {
   const [picked, setPicked] = useState<string[]>([])
+  const [showing, setShowing] = useState(false)
   const subject = row.title ?? row.values?.[`${row.kind.split('_')[0]}.title`] ?? ''
 
   return (
@@ -203,9 +206,20 @@ function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
         </td>
         <td className="col-date">{usDate(new Date(row.issued_at))}</td>
         <td className="right nowrap">
+          {row.issuance_id && (
+            <button className="link" onClick={(e) => { e.stopPropagation(); setShowing(!showing) }}>
+              {showing ? 'Hide sheets' : 'Sheets'}
+            </button>
+          )}
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
         </td>
       </tr>
+
+      {showing && row.issuance_id && (
+        <tr className="confirm-row"><td colSpan={5}>
+          <IssuedSheets issuanceId={row.issuance_id} project={project} onError={onError} />
+        </td></tr>
+      )}
 
       {attaching && (
         <tr className="confirm-row"><td colSpan={5}>
@@ -246,5 +260,51 @@ function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
         </td></tr>
       )}
     </>
+  )
+}
+
+/**
+ * The sheets a change document issued.
+ *
+ * The question months later is never only "what did ASI 3 say" but "which sheets came with
+ * it", and until now that meant going to the drawings and working backwards. The two rows
+ * already point at each other; this is the register's side of it.
+ */
+function IssuedSheets({ issuanceId, project, onError }: {
+  issuanceId: string
+  project: { id: string; name: string } | null
+  onError: (m: string) => void
+}) {
+  const [sheets, setSheets] = useState<BundleSheet[] | null>(null)
+
+  useEffect(() => {
+    let gone = false
+    listIssuanceSheets(issuanceId)
+      .then((s) => { if (!gone) setSheets(s) })
+      .catch((e) => { if (!gone) onError(message(e)) })
+    return () => { gone = true }
+  }, [issuanceId, onError])
+
+  if (!sheets) return <p className="muted small">Loading…</p>
+  if (!sheets.length) return <p className="muted small">No sheets came with this one.</p>
+
+  const sorted = [...sheets].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+  return (
+    <div className="issued-sheets">
+      <p className="small"><strong>{sheets.length} {sheets.length === 1 ? 'sheet' : 'sheets'} issued with this</strong></p>
+      <div className="issued-sheet-list">
+        {sorted.map((s) => (
+          <button key={s.filePath} className="issued-sheet"
+            onClick={() => {
+              if (!project) return
+              openFile(project as ProjectStore, s.filePath).catch((e) => onError(message(e)))
+            }}>
+            <span className="mono">{s.number}</span>
+            <span className="issued-sheet-title">{s.title ?? ''}</span>
+            {s.revisionLabel && <span className="tag">{s.revisionLabel}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }

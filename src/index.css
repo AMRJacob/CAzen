@@ -1638,3 +1638,18 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .sched-compare { font-variant-numeric: tabular-nums; }
 .sched-apart td { background: #fbf2ef; }
 .sched-covers { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.retainage-edit { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.retainage-step { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.retainage-step input { width: 5em; text-align: right; font-size: 13px; padding: 3px 6px; }
+
+/* The sheets a change document issued, opened from the register. */
+.issued-sheets { padding: 4px 0; }
+.issued-sheet-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.issued-sheet {
+  display: flex; gap: 12px; align-items: baseline; text-align: left;
+  font: inherit; font-size: 13px; padding: 5px 8px; border: none; border-radius: 6px;
+  background: none; color: var(--ink); cursor: pointer; width: 100%;
+}
+.issued-sheet:hover { background: var(--wash); }
+.issued-sheet .mono { min-width: 5.5em; color: var(--muted); }
+.issued-sheet-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
