@@ -1605,3 +1605,36 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 }
 .mk-leader-grip.on { background: var(--moss-soft); border-color: var(--moss); }
 .mk-leader-grip.on::after { border-color: var(--moss); }
+
+/* ---------- Construction schedule ---------- */
+.gantt { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.gantt-scale { position: relative; height: 16px; margin-left: 180px; }
+.gantt-month { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.gantt-rows { position: relative; }
+.gantt-rule { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); margin-left: 180px; }
+/* Today, which is the line every bar is read against. */
+.gantt-today { position: absolute; top: 0; bottom: 0; width: 1.5px; background: var(--danger); margin-left: 180px; z-index: 2; }
+.gantt-row { position: relative; display: flex; align-items: center; height: 26px; }
+.gantt-name { width: 180px; flex: 0 0 180px; padding-right: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-heading .gantt-name { font-weight: 500; }
+.gantt-undated { position: absolute; left: 186px; }
+.gantt-bar {
+  position: absolute; height: 15px; border-radius: 3px; background: var(--wash);
+  border: 1px solid var(--line); margin-left: 180px; overflow: visible;
+}
+.gantt-bar .gantt-done { display: block; height: 100%; background: var(--moss); border-radius: 2px; }
+.gantt-bar.behind .gantt-done { background: var(--danger); }
+.gantt-pc { position: absolute; left: calc(100% + 6px); top: -1px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
+.sched-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sched-table th { text-align: left; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 4px 7px; }
+.sched-table td { padding: 3px 7px; border-top: 1px solid var(--line); }
+.sched-table .right { text-align: right; }
+.sched-table input { font: inherit; font-size: 13px; padding: 3px 6px; width: 100%; }
+.sched-table input[type="date"] { width: 9.5em; }
+.sched-pc { width: 4.5em; text-align: right; }
+.sched-heading td { background: var(--wash); }
+.sched-heading input { font-weight: 500; }
+.sched-compare { font-variant-numeric: tabular-nums; }
+.sched-apart td { background: #fbf2ef; }
+.sched-covers { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }

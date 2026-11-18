@@ -7,6 +7,7 @@ import { today, usDate } from '../lib/dates'
 import { figure, standings, type Billed, type Figures, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
+import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
   addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setSovLine,
   type LoadedContract,
@@ -201,13 +202,81 @@ function Summary({ data, figures, all }: { data: LoadedContract; figures: Figure
         </table>
       </div>
 
-      <div className="card muted pay-schedule-slot">
-        <strong>Against the schedule</strong> — not built yet. Comparing percent complete here against
-        a construction schedule needs the schedule in the app and each activity mapped to a line
-        above, since a schedule's activities and a schedule of values rarely line up one to one.
-        {void data}
-      </div>
+      <AgainstTheSchedule data={data} figures={figures} />
     </>
+  )
+}
+
+/**
+ * The schedule's opinion of this application.
+ *
+ * Only the activities that say which lines they cover can be compared, and only the ones that
+ * disagree are worth the space — a row saying the schedule and the application agree is a row
+ * nobody reads. The link goes to where the rest of it is.
+ */
+function AgainstTheSchedule({ data, figures }: { data: LoadedContract; figures: Figures }) {
+  const [rows, setRows] = useState<Comparison[] | null>(null)
+  const [absent, setAbsent] = useState(false)
+
+  // The activities belong to the project, which the contract row carries.
+  useEffect(() => {
+    let gone = false
+    const pid = (data.contract as unknown as { project_id?: string }).project_id
+    if (!pid) { setRows([]); return }
+    listActivities(pid)
+      .then((acts) => {
+        if (gone) return
+        const value = new Map(data.lines.map((l) => [l.id, l.scheduled_value]))
+        const billed = new Map(figures.lines.map((f) => [f.line.id, f.toDate]))
+        setRows(compare(acts, (id) => value.get(id) ?? 0, (id) => billed.get(id) ?? 0))
+      })
+      .catch((e) => { if (!gone) { if (e instanceof ScheduleNotSetUp) setAbsent(true); setRows([]) } })
+    return () => { gone = true }
+  }, [data, figures])
+
+  const apart = (rows ?? []).filter((r) => Math.abs(r.gap) >= 5)
+
+  return (
+    <div className="card">
+      <h3>Against the schedule</h3>
+      {absent ? (
+        <p className="muted small">The construction schedule is not set up on this project yet.</p>
+      ) : !rows ? <p className="muted small">Loading…</p>
+        : !rows.length ? (
+          <p className="muted small">
+            Nothing to compare yet. An activity is compared once it says which lines of the schedule
+            of values it covers — <Link to="/schedule">the schedule</Link> is where that is set.
+          </p>
+        ) : !apart.length ? (
+          <p className="muted small">
+            Every activity that is mapped agrees with this application to within five points.
+          </p>
+        ) : (
+          <>
+            <p className="muted small">
+              Where the schedule and this application are five points or more apart.
+            </p>
+            <table className="pay-trades">
+              <thead><tr>
+                <th>Activity</th><th className="right">Schedule says</th>
+                <th className="right">Billed</th><th className="right">Difference</th>
+              </tr></thead>
+              <tbody>
+                {apart.map((r) => (
+                  <tr key={r.activity.id}>
+                    <td>{r.activity.name}</td>
+                    <td className="right mono">{percent(r.planned)}</td>
+                    <td className="right mono">{percent(r.billed)}</td>
+                    <td className="right mono">
+                      {r.gap > 0 ? `+${percent(r.gap)} billed` : `${percent(Math.abs(r.gap))} behind`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+    </div>
   )
 }
 

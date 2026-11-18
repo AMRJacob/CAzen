@@ -17,6 +17,7 @@ import Contracts from './pages/Contracts'
 import Settings from './pages/Settings'
 import Templates from './pages/Templates'
 import FieldNotes from './pages/FieldNotes'
+import Schedule from './pages/Schedule'
 import { useFullscreen } from './lib/fullscreen'
 
 /**
@@ -36,6 +37,7 @@ const nav: { label: string; items: { to: string; label: string }[] }[] = [
       { to: '/submittals', label: 'Submittals' },
       { to: '/ca-logs', label: 'Change documents' },
       { to: '/pay', label: 'Pay applications' },
+      { to: '/schedule', label: 'Construction schedule' },
       { to: '/contracts', label: 'Contracts' },
     ],
   },
@@ -125,6 +127,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <Route path="/field-notes" element={<FieldNotes />} />
           <Route path="/field-notes/:area" element={<FieldNotes />} />
           <Route path="/pay" element={offline ? <p className="muted">Pay applications need the backend.</p> : <PayApps />} />
+          <Route path="/schedule" element={offline ? <p className="muted">The schedule needs the backend.</p> : <Schedule />} />
           <Route path="/contracts" element={<Contracts />} />
           {!offline && <Route path="/settings" element={<Settings />} />}
           {!offline && <Route path="/templates" element={<Templates />} />}
