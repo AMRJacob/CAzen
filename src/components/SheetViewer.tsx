@@ -7,6 +7,9 @@ import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
+import { effectiveOrder, groupByDiscipline, type Discipline } from '../lib/disciplines'
+import { PREFS, usePref } from '../lib/prefs'
+import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
 import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, type Markup, type Point } from '../lib/markups'
 import { MarkupLayer } from './MarkupLayer'
@@ -269,6 +272,28 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const listed = q
     ? sheets.filter((s) => norm(s.number).includes(norm(q)) || (s.title ?? '').toUpperCase().includes(q))
     : sheets
+
+  // The sheet list by trade, with headings that fold away. On a set of ninety-odd sheets,
+  // scrolling past three disciplines to reach the fourth is most of the work of finding a sheet.
+  const [grouped] = usePref(PREFS.groupSheetList, true)
+  const { firm } = useFirm()
+  const order = useMemo(
+    () => effectiveOrder(firm?.discipline_order, (project as { discipline_order?: Discipline[] | null }).discipline_order),
+    [firm?.discipline_order, project],
+  )
+  const bands = useMemo(
+    () => (grouped ? groupByDiscipline(listed, (s) => s.number, order) : []),
+    [grouped, listed, order],
+  )
+  const [shut, setShut] = useState<Record<string, boolean>>({})
+  const fold = (key: string) => setShut((v) => ({ ...v, [key]: !v[key] }))
+  // Filtering is itself a way of narrowing, so a search opens everything it matched; and the
+  // band holding the sheet on screen is never folded away under you.
+  const here = useMemo(
+    () => bands.find((g) => g.items.some((s) => norm(s.number) === norm(sheet.number)))?.key,
+    [bands, sheet.number],
+  )
+  const isShut = (key: string) => !q && key !== here && !!shut[key]
   const stepTo = (i: number) => go(sheets[i])
 
   return (
@@ -398,12 +423,28 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           </div>
           <div className="sv-index-list">
             {listed.length === 0 && <p className="sv-index-empty">No sheet matches “{filter.trim()}”.</p>}
-            {listed.map((s) => (
-              <button key={s.number} className={norm(s.number) === norm(sheet.number) ? 'on' : ''} onClick={() => go(s)}>
-                <span className="sv-ix-number">{s.number}</span>
-                {s.title && <span className="sv-ix-title">{s.title}</span>}
-              </button>
-            ))}
+            {grouped
+              ? bands.map((g) => (
+                <div key={g.key} className="sv-band">
+                  <button className="sv-band-head" onClick={() => fold(g.key)} aria-expanded={!isShut(g.key)}>
+                    <span className={`sv-caret${isShut(g.key) ? ' shut' : ''}`} aria-hidden="true">›</span>
+                    <span className="sv-band-name">{g.label}</span>
+                    <span className="sv-band-count">{g.items.length}</span>
+                  </button>
+                  {!isShut(g.key) && g.items.map((s) => (
+                    <button key={s.number} className={norm(s.number) === norm(sheet.number) ? 'on' : ''} onClick={() => go(s)}>
+                      <span className="sv-ix-number">{s.number}</span>
+                      {s.title && <span className="sv-ix-title">{s.title}</span>}
+                    </button>
+                  ))}
+                </div>
+              ))
+              : listed.map((s) => (
+                <button key={s.number} className={norm(s.number) === norm(sheet.number) ? 'on' : ''} onClick={() => go(s)}>
+                  <span className="sv-ix-number">{s.number}</span>
+                  {s.title && <span className="sv-ix-title">{s.title}</span>}
+                </button>
+              ))}
           </div>
         </aside>
         {indexOpen && <button className="sv-scrim" aria-label="Close the sheet list" onClick={() => setIndexOpen(false)} />}

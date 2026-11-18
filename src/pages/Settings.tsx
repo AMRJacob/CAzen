@@ -17,6 +17,7 @@ import { deleteTemplate, listTemplates, saveTemplate, type TitleblockTemplate } 
 import { r2Ready, storageUsage, type StorageUsage } from '../lib/files'
 import { useProject } from '../lib/project'
 import { FeedbackList } from '../components/Feedback'
+import { PREFS, usePref } from '../lib/prefs'
 
 const SWATCHES = ['#5f7a61', '#4a6b82', '#8a6f4e', '#6b5b73', '#2f3a34', '#c8323a']
 
@@ -198,10 +199,45 @@ export default function Settings() {
           />
         </div>
         <TitleblockList firmId={firm.id} isAdmin={isAdmin} />
+        <ViewPreferences />
       </div>
       <StorageCard firm={firm} isAdmin={isAdmin} onSaved={reload} />
       <FeedbackList />
     </section>
+  )
+}
+
+/**
+ * How this person likes CAzen to look, on this computer.
+ *
+ * Separate from everything else on this page, which is the firm's and the same for everyone.
+ * These are not saved to the database and nobody else sees them, which is why they are not
+ * behind the admin check.
+ */
+function ViewPreferences() {
+  const [grouped, setGrouped] = usePref(PREFS.groupSheetList, true)
+  const [widths, setWidths] = usePref<Record<string, number>>(PREFS.registerWidths, {})
+  const sized = Object.keys(widths).length
+
+  return (
+    <div className="card">
+      <h2>Your view</h2>
+      <p className="muted small">Just for you, on this computer. Nobody else sees these and they aren’t saved to the project.</p>
+      <label className="check">
+        <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
+        Group the sheet list by trade, with headings that fold away
+      </label>
+      <p className="muted small">
+        In the sheet viewer, the list down the side is split into trades you can collapse, rather than one run of
+        ninety sheets. Turn it off for a plain list in sheet order.
+      </p>
+      {sized > 0 && (
+        <p className="small">
+          Drawings columns have been resized.{' '}
+          <button className="link" onClick={() => setWidths({})}>Reset column widths</button>
+        </p>
+      )}
+    </div>
   )
 }
 

@@ -992,3 +992,43 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-palette .mk-keep:hover { background: var(--wash); }
 .mk-palette .mk-keep.off { color: var(--danger, #c0392b); border-color: currentColor; }
 @media (pointer: coarse) { .mk-palette .mk-keep { width: 40px; height: 40px; } }
+
+/* ---------- Trades in the sheet list ---------- */
+.sv-index-list .sv-band-head {
+  /* The sheet buttons in this list stack their number over their title; a band heading is one
+     row, so it says so rather than inheriting that. */
+  display: flex; flex-direction: row; align-items: center; gap: 7px; width: 100%; border-radius: 0;
+  padding: 7px 10px; font: inherit; font-size: 11.5px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+  background: var(--wash); border: none; border-top: 1px solid var(--line);
+  cursor: pointer; text-align: left; position: sticky; top: 0; z-index: 1;
+}
+.sv-index-list .sv-band-head:hover { color: var(--ink); background: #e8e4da; }
+.sv-band:first-child .sv-band-head { border-top: none; }
+.sv-index-list .sv-band button { padding-left: 16px; }
+.sv-band-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-band-count { font-variant-numeric: tabular-nums; opacity: 0.75; }
+.sv-caret { display: inline-block; transition: transform 0.15s; transform: rotate(90deg); }
+.sv-caret.shut { transform: rotate(0deg); }
+@media (pointer: coarse) { .sv-band-head { padding: 11px 12px; font-size: 12.5px; } }
+
+/* ---------- Columns you can set the width of ---------- */
+.register.sizable { table-layout: fixed; width: 100%; }
+.register.sizable th { position: relative; }
+.register.sizable td { overflow: hidden; text-overflow: ellipsis; }
+.register.sizable td.col-title { white-space: nowrap; }
+.register.sizable tr.editing td, .register.sizable tr.confirm-row td { overflow: visible; white-space: normal; }
+.col-grip {
+  position: absolute; top: 0; right: -4px; width: 9px; height: 100%;
+  cursor: col-resize; touch-action: none; z-index: 2;
+}
+.col-grip::after {
+  content: ''; position: absolute; top: 20%; bottom: 20%; left: 4px; width: 1px;
+  background: var(--line); transition: background 0.15s;
+}
+.col-grip:hover::after { background: var(--moss); width: 2px; }
+body.col-resizing { cursor: col-resize; user-select: none; }
+body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
+/* Widths set on a wide screen shouldn't trap a narrow one with no way to scroll. */
+.register.sizable.over-wide { table-layout: auto; }
+@media (max-width: 899px) { .col-grip { display: none; } .register.sizable { table-layout: auto; } }

@@ -21,6 +21,13 @@ import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, ty
 import { openFile } from '../lib/files'
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import { useClickAway } from '../lib/clickAway'
+import { useColumnWidths } from '../components/ResizableColumns'
+
+/** The drawings register's columns, in order, for the widths a person can set by hand. */
+const REGISTER_COLUMNS = [
+  { key: 'sheet' }, { key: 'title' }, { key: 'rev' },
+  { key: 'from' }, { key: 'date' }, { key: 'history' }, { key: 'actions' },
+]
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
@@ -89,6 +96,7 @@ export default function Documents() {
     return q ? ordered.filter((s) => s.number.includes(q) || s.number.replace(/-/g, '').includes(q.replace(/-/g, '')) || (s.title ?? '').toUpperCase().includes(q)) : ordered
   }, [ordered, query])
   const groups = useMemo(() => groupByDiscipline(visible, (s) => s.number, order), [visible, order])
+  const cols = useColumnWidths(REGISTER_COLUMNS)
 
   if (!current) {
     return (
@@ -218,10 +226,20 @@ export default function Documents() {
           ) : sheets.length === 0 ? (
             <div className="card muted">No drawings yet. Upload the bid or permit set to start.</div>
           ) : (
-            <table className="register">
+            <table className="register sizable" ref={cols.table}>
+              {cols.cols}
               <thead>
-                {/* col-* classes set which columns give way first on a small screen (index.css). */}
-                <tr><th>Sheet</th><th className="col-title">Title</th><th>Rev.</th><th className="col-from">From</th><th className="col-date">Date</th><th className="col-history">History</th><th /></tr>
+                {/* col-* classes set which columns give way first on a small screen (index.css).
+                    The grips let a width be set by hand; double-clicking one gives it back. */}
+                <tr>
+                  <th>Sheet{cols.grip('sheet', 64)}</th>
+                  <th className="col-title">Title{cols.grip('title', 100)}</th>
+                  <th>Rev.{cols.grip('rev', 48)}</th>
+                  <th className="col-from">From{cols.grip('from', 72)}</th>
+                  <th className="col-date">Date{cols.grip('date', 72)}</th>
+                  <th className="col-history">History{cols.grip('history', 72)}</th>
+                  <th />
+                </tr>
               </thead>
               <tbody>
                 {groups.map((g) => (
