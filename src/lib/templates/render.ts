@@ -5,7 +5,10 @@ import {
   type Align, type ChoicesEl, type ColorRole, type El, type FieldEl, type Layout, type TableEl, type TextEl,
 } from './types'
 
-interface Fonts { sans: PDFFont; sansBold: PDFFont; serif: PDFFont; serifBold: PDFFont }
+interface Fonts {
+  sans: PDFFont; sansBold: PDFFont; sansItalic: PDFFont
+  serif: PDFFont; serifBold: PDFFont; serifItalic: PDFFont
+}
 
 interface Ctx {
   page: PDFPage
@@ -47,8 +50,10 @@ function safe(s: string) {
     .replace(/[^\x20-\x7E\xA0-\xFF‘’“”–—…•\n]/g, '?')
 }
 
-const fontFor = (f: Fonts, serif?: boolean, bold?: boolean) =>
-  serif ? (bold ? f.serifBold : f.serif) : (bold ? f.sansBold : f.sans)
+const fontFor = (f: Fonts, serif?: boolean, bold?: boolean, italic?: boolean) =>
+  serif
+    ? (bold ? f.serifBold : italic ? f.serifItalic : f.serif)
+    : (bold ? f.sansBold : italic ? f.sansItalic : f.sans)
 
 /** Word-wrap one paragraph-set of text to a width. */
 export function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
@@ -70,7 +75,7 @@ export function wrap(text: string, font: PDFFont, size: number, width: number): 
 
 // ---------- Rich (outline) text: numbered / bulleted lists with nesting and headings ----------
 
-export interface RichLine { text: string; bold: boolean; indent: number; marker?: string; markerX?: number }
+export interface RichLine { text: string; bold: boolean; italic?: boolean; underline?: boolean; indent: number; marker?: string; markerX?: number }
 
 /* Markers an outline line can start with. Roman numerals come before the single-letter case so
    "ii." and "iv." are read whole rather than leaving a stray letter to be drawn as text. */
@@ -94,6 +99,8 @@ export function richLines(text: string, fonts: Fonts, size: number, width: numbe
     lastLevel = level
     let body = raw.trim()
     let isBold = false
+    let isItalic = false
+    let isUnderline = false
     if (headings === 'bold' && level === 0 && body && !/^\*\*.*\*\*$/.test(body) && !body.startsWith('# ')) {
       isBold = true
     }
@@ -101,12 +108,45 @@ export function richLines(text: string, fonts: Fonts, size: number, width: numbe
       body = body.slice(2)
       isBold = true
       if (out.length && out[out.length - 1].text !== '') out.push({ text: '', bold: false, indent: 0 })
-    } else if (/^\*\*.*\*\*$/.test(body)) {
-      body = body.slice(2, -2)
-      isBold = true
     }
+
+    /**
+     * How a line says it is bold, italic or underlined.
+     *
+     * Around the whole line, or around whatever follows its list marker — "1. **Site**" sets
+     * the word bold and leaves the number alone. Read twice for that reason, and the longer
+     * wrappers are tried first so "**" is never read as two italics.
+     */
+    const emphasis = (t: string) => {
+      let text = t.trim()
+      let bold = false, italic = false, underline = false
+      for (let i = 0; i < 3; i++) {
+        if (/^\*\*.+\*\*$/.test(text)) { text = text.slice(2, -2); bold = true }
+        else if (/^__.+__$/.test(text)) { text = text.slice(2, -2); underline = true }
+        else if (/^_.+_$/.test(text)) { text = text.slice(1, -1); underline = true }
+        else if (/^\*.+\*$/.test(text)) { text = text.slice(1, -1); italic = true }
+        else break
+      }
+      return { text, bold, italic, underline }
+    }
+
+    const whole = emphasis(body)
+    body = whole.text
+    isBold = isBold || whole.bold
+    isItalic = isItalic || whole.italic
+    isUnderline = isUnderline || whole.underline
+
+    const lead = body.match(MARKER)
+    if (lead) {
+      const after = emphasis(body.slice(lead[0].length))
+      isBold = isBold || after.bold
+      isItalic = isItalic || after.italic
+      isUnderline = isUnderline || after.underline
+      body = lead[0] + after.text
+    }
+
     const m = body.match(MARKER)
-    const font = isBold ? bold : regular
+    const font = isBold ? bold : isItalic ? fontFor(fonts, serif, false, true) : regular
     const base = level * step
     let marker: string | undefined
     let textIndent = base
@@ -116,7 +156,10 @@ export function richLines(text: string, fonts: Fonts, size: number, width: numbe
       textIndent = base + Math.max(step, font.widthOfTextAtSize(marker, size) + size * 0.6)
     }
     const lines = wrap(body, font, size, Math.max(40, width - textIndent))
-    lines.forEach((t, i) => out.push({ text: t, bold: isBold, indent: textIndent, ...(i === 0 && marker ? { marker, markerX: base } : {}) }))
+    lines.forEach((t, i) => out.push({
+      text: t, bold: isBold, italic: isItalic, underline: isUnderline, indent: textIndent,
+      ...(i === 0 && marker ? { marker, markerX: base } : {}),
+    }))
   }
   return out
 }
@@ -194,9 +237,21 @@ function drawRich(c: Ctx, lines: RichLine[], x: number, y: number, el: FieldEl) 
   const lh = el.size * LINE_HEIGHT
   lines.forEach((l, i) => {
     const baseline = pdfY(y + el.size * 0.9 + i * lh)
-    const font = fontFor(c.fonts, el.serif, l.bold || el.bold)
-    if (l.marker) c.page.drawText(l.marker, { x: x + (l.markerX ?? 0), y: baseline, size: el.size, font, color: c.colors[el.color] })
-    if (l.text) c.page.drawText(l.text, { x: x + l.indent, y: baseline, size: el.size, font, color: c.colors[el.color] })
+    const font = fontFor(c.fonts, el.serif, l.bold || el.bold, l.italic)
+    const color = c.colors[el.color]
+    if (l.marker) c.page.drawText(l.marker, { x: x + (l.markerX ?? 0), y: baseline, size: el.size, font, color })
+    if (l.text) {
+      c.page.drawText(l.text, { x: x + l.indent, y: baseline, size: el.size, font, color })
+      // Underline is drawn rather than set, because the standard fonts have no underlined cut.
+      if (l.underline) {
+        c.page.drawLine({
+          start: { x: x + l.indent, y: baseline - el.size * 0.14 },
+          end: { x: x + l.indent + font.widthOfTextAtSize(l.text, el.size), y: baseline - el.size * 0.14 },
+          thickness: Math.max(0.4, el.size * 0.05),
+          color,
+        })
+      }
+    }
   })
 }
 
@@ -302,8 +357,10 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
   const fonts: Fonts = {
     sans: await doc.embedFont(StandardFonts.Helvetica),
     sansBold: await doc.embedFont(StandardFonts.HelveticaBold),
+    sansItalic: await doc.embedFont(StandardFonts.HelveticaOblique),
     serif: await doc.embedFont(StandardFonts.TimesRoman),
     serifBold: await doc.embedFont(StandardFonts.TimesRomanBold),
+    serifItalic: await doc.embedFont(StandardFonts.TimesRomanItalic),
   }
   const accent = hexToRgb(brand.accent)
   const colors = { ink: rgb(0.13, 0.14, 0.15), muted: rgb(0.4, 0.42, 0.44), accent }

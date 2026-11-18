@@ -1682,3 +1682,12 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   box-shadow: 0 10px 40px rgba(43, 45, 44, 0.3); border-radius: var(--radius);
 }
 .obs-pin-sheet .card { margin: 0; }
+
+/* The toolbar over an outline field. Icons, because eight words is a sentence, not a toolbar. */
+.outline-tools { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
+.outline-tools button {
+  display: grid; place-items: center; width: 28px; height: 26px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px;
+  background: none; color: var(--muted); cursor: pointer;
+}
+.outline-tools button:hover { background: var(--wash); color: var(--ink); border-color: var(--line); }

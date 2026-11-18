@@ -66,6 +66,8 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
   const kind = KIND[area]
   const { current } = useProject()
   const [writing, setWriting] = useState(false)
+  /** The pad this document is being written from, kept open beside the form. */
+  const [from, setFrom] = useState<Pad | null>(null)
   const [rows, setRows] = useState<RegisterRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -92,8 +94,21 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
             <PageTitle>New {FORM_LABELS[kind].toLowerCase()}</PageTitle>
             <p className="lead">On your firm’s template. It fills itself in, numbers itself and is kept with the project.</p>
           </div>
-          <button onClick={() => { setWriting(false); load() }}>Back to the list</button>
+          <button onClick={() => { setWriting(false); setFrom(null); load() }}>Back to the list</button>
         </div>
+        {/* The pad it is being written from, kept open beside the form: typing it up means
+            reading what was written in the room, and closing the pad to type is the one thing
+            that makes people not bother. */}
+        {from && (
+          <div className="card pad-card">
+            <div className="pad-head">
+              <h3>{from.title || (kind === 'meeting_notes' ? 'Meeting notes' : 'Site visit')}</h3>
+              <span className="muted small">{usDate(from.noted_on)}</span>
+              <button className="link" onClick={() => setFrom(null)}>Put it away</button>
+            </div>
+            <NotePad pad={from} onChanged={setFrom} onTrouble={setError} />
+          </div>
+        )}
         <IssueForm key={kind} kind={kind} />
       </section>
     )
@@ -117,7 +132,8 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
       {error && <div className="notice error">{error}</div>}
 
       <Pads kind={kind === 'meeting_notes' ? 'meeting_notes' : 'field_report'}
-        projectId={projectId} onTrouble={setError} />
+        projectId={projectId} onTrouble={setError}
+        onWriteUp={(pad) => { setFrom(pad); setWriting(true) }} />
 
       <h2 className="field-notes-written">Written up</h2>
       {!rows ? <p className="muted">Loading…</p>
@@ -154,10 +170,12 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
  * here. A pad is not a draft of the document — it goes on existing after the document is
  * written, and the two are linked rather than merged.
  */
-function Pads({ kind, projectId, onTrouble }: {
+function Pads({ kind, projectId, onTrouble, onWriteUp }: {
   kind: PadKind
   projectId: string | undefined
   onTrouble: (m: string) => void
+  /** Open the document form with this pad beside it. */
+  onWriteUp?: (pad: Pad) => void
 }) {
   const [pads, setPads] = useState<Pad[] | null>(null)
   const [open, setOpen] = useState<Pad | null>(null)
@@ -202,6 +220,7 @@ function Pads({ kind, projectId, onTrouble }: {
               setPads((all) => (all ?? []).map((p) => (p.id === open.id ? { ...p, noted_on } : p)))
               setPad(open.id, { noted_on }).catch((err) => onTrouble(message(err)))
             }} />
+          {onWriteUp && <button className="primary-lite" onClick={() => onWriteUp(open)}>Type it up</button>}
           <button onClick={() => { setOpen(null); load() }}>Done</button>
         </div>
         <NotePad pad={open} onChanged={(p) => {
@@ -230,6 +249,7 @@ function Pads({ kind, projectId, onTrouble }: {
                 <button className="link" onClick={() => setOpen(p)}>{p.title || untitled(kind)}</button>
                 <span className="muted small nowrap">{usDate(p.noted_on)}</span>
                 <span className="muted small nowrap">{p.pages} {p.pages === 1 ? 'page' : 'pages'}</span>
+                {onWriteUp && <button className="link" onClick={() => onWriteUp(p)}>Type it up</button>}
                 <button className="link danger-link" onClick={() => void discard(p)}>Delete</button>
               </div>
             ))}

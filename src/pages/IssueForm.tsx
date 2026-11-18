@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { OutlineTools } from '../components/OutlineTools'
 import { Link } from 'react-router-dom'
 import { PLACEHOLDER_BRAND, loadBrand, type Brand } from '../lib/brand'
 import { isConfigured } from '../lib/supabase'
@@ -283,6 +284,7 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
   /** Headings offered under the box, to add rather than type. */
   chips?: string[]
 }) {
+  const box = useRef<HTMLTextAreaElement | null>(null)
   const tag = overridden && value !== autoValue
     ? <button type="button" className="auto-reset" onClick={onReset} title={`Back to: ${autoValue}`}>↺ reset</button>
     : autoValue ? <span className="auto-tag">auto</span> : null
@@ -308,7 +310,9 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
     const table = layout.elements.some((e) => e.type === 'table' && e.field === f.key)
     return (
       <label className="wide">{label}
+        {rich && <OutlineTools textarea={box} value={value} onChange={onChange} />}
         <textarea
+          ref={box}
           rows={rich ? 12 : table ? 5 : 3}
           value={value}
           placeholder={table ? 'One per line: Name | Company | Email' : ''}
