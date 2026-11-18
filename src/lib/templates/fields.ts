@@ -30,6 +30,7 @@ export const FORM_LABELS: Record<TemplateKind, string> = {
   pr: 'Proposal request',
   ccd: 'CCD',
   field_report: 'Field report',
+  meeting_notes: 'Meeting notes',
 }
 
 /** Dates print as MM/DD/YYYY, as on US construction forms. */
@@ -127,6 +128,22 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'ccd.amount', label: 'Proposed amount', sample: '$12,400' },
     { key: 'ccd.time', label: 'Change in contract time', sample: '3 days' },
     { key: 'ccd.issued_by', auto: 'user', label: 'Issued by', sample: 'J. Smith, AIA' },
+  ],
+  // An OAC meeting with no site walk: the same record of who was there and what was agreed,
+  // without the observations, the weather, or a report number in the field report's sequence.
+  meeting_notes: [
+    { key: 'mn.number', auto: 'next', label: 'Meeting no.', sample: 'MN-004' },
+    { key: 'mn.title', auto: 'carry', label: 'Meeting', sample: 'OAC Progress Meeting' },
+    { key: 'mn.date', auto: 'today', label: 'Date', sample: '10/19/2026' },
+    { key: 'mn.time', label: 'Time', sample: '10:00 AM' },
+    { key: 'mn.location', auto: 'carry', label: 'Location', sample: 'AMR Architects\nLittle Rock, AR', multiline: true },
+    { key: 'mn.participants', auto: 'carry', label: 'Participants (Name | Company | Email per line)', multiline: true,
+      sample: 'Pat Owner | Owner | pat@owner.org\nSam Super | Sample Builders | sam@builders.com\nJ. Smith | Your Firm | jsmith@yourfirm.com' },
+    { key: 'mn.notes', auto: 'outline', label: 'Meeting notes', multiline: true,
+      hint: 'Two spaces indent a level; **bold** marks a heading.',
+      starter: '**1. Job Progress (Scheduled Progress / Revisions)**\n  a. \n**2. Status of Submittals**\n  a. \n**3. Payment Requests**\n  a. \n**4. Additional Notes**\n  a. ',
+      sample: '1. Job Progress\n  1. Rain garden basins to be delivered by the end of the week.\n2. Status of Submittals\n  1. Resinous flooring submittal received this week.' },
+    { key: 'mn.recorded_by', auto: 'user', label: 'Recorded by', sample: 'J. Smith, AIA' },
   ],
   field_report: [
     { key: 'fr.number', auto: 'next', label: 'Report no.', sample: 'FR-007' },

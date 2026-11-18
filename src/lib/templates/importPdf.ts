@@ -113,7 +113,7 @@ function matchField(kind: FormKind, label: string, taken: Set<string>): string |
   const l = norm(label).replace(/#$/, ' #').replace(/\s+/g, ' ').trim()
   const keys = fieldsFor(kind).map((f) => f.key).filter((k) => !k.startsWith('firm.'))
   // Kind-specific keys first, then project/doc keys.
-  const prefix = { submittal_cover: 'sub.', asi: 'asi.', rfi_response: 'rfi.', pr: 'pr.', ccd: 'ccd.', field_report: 'fr.' }[kind]
+  const prefix = { submittal_cover: 'sub.', asi: 'asi.', rfi_response: 'rfi.', pr: 'pr.', ccd: 'ccd.', field_report: 'fr.', meeting_notes: 'mn.' }[kind]
   const ordered = [...keys.filter((k) => k.startsWith(prefix)), ...keys.filter((k) => !k.startsWith(prefix))]
   let best: { key: string; score: number } | null = null
   for (const key of ordered) {

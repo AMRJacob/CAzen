@@ -3,7 +3,7 @@ import IssueForm from './IssueForm'
 import { FORM_LABELS } from '../lib/templates/fields'
 import type { FormKind } from '../lib/templates/types'
 
-const KINDS: FormKind[] = ['field_report', 'asi', 'rfi_response', 'pr', 'ccd']
+const KINDS: FormKind[] = ['field_report', 'meeting_notes', 'asi', 'rfi_response', 'pr', 'ccd']
 
 export default function CaLogs() {
   const [kind, setKind] = useState<FormKind>('field_report')

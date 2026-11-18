@@ -111,6 +111,30 @@ const FIELD_REPORT = (): Layout => ({
   ],
 })
 
+/* The field report's header without the site: who was there, when and where, then the notes. */
+const MEETING_NOTES = (): Layout => ({
+  useLetterhead: true,
+  continuation: DEFAULT_CONTINUATION,
+  elements: [
+    text(118, 30, 320, 18, 'Meeting Minutes', { size: 13.5, bold: true, color: 'accent', caps: true, repeat: true }),
+    field(118, 54, 320, 14, 'project.name', { size: 10, bold: true, repeat: true }),
+    field(118, 72, 320, 14, 'project.owner', { size: 10, bold: true, repeat: true }),
+    labeled(36, 126, 180, 'mn.title', 'MEETING:', 62, { labelAlign: 'left', size: 8.5 }),
+    labeled(36, 152, 180, 'mn.date', 'DATE:', 62, { labelAlign: 'left', size: 8.5 }),
+    labeled(36, 178, 180, 'mn.time', 'TIME:', 62, { labelAlign: 'left', size: 8.5 }),
+    field(36, 204, 180, 26, 'mn.location', { label: 'LOCATION:', labelMode: 'left', labelWidth: 62, labelAlign: 'left', size: 8.5 }),
+    heading(226, 122, 'Participants:'),
+    { id: newId(), type: 'table', x: 226, y: 136, w: 350, h: 104, field: 'mn.participants', size: 8, header: false,
+      columns: [{ label: 'Name', width: 110 }, { label: 'Company', width: 90 }, { label: 'Email', width: 150 }] },
+    hline(36, 250, 540),
+    text(36, 256, 540, 34,
+      'This confirms and records our interpretation of the discussions which occurred and our understanding reached during this meeting. Unless notified in writing within seven days of receipt, we will assume that the following interpretation or description is complete and accurate.',
+      { size: 7.5, color: 'muted' }),
+    hline(36, 294, 540),
+    field(54, 306, 514, 438, 'mn.notes', { size: 9.5, rich: true, flow: true }),
+  ],
+})
+
 function simpleForm(title: string, prefix: string, numberLabel: string, body: El[]): Layout {
   return {
     useLetterhead: true,
@@ -193,6 +217,7 @@ export function defaultLayout(kind: TemplateKind): Layout {
     case 'general': return LETTERHEAD()
     case 'submittal_cover': return SUBMITTAL()
     case 'field_report': return FIELD_REPORT()
+    case 'meeting_notes': return MEETING_NOTES()
     case 'asi': return ASI()
     case 'rfi_response': return RFI()
     case 'pr': return PR()

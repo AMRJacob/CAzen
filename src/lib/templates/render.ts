@@ -72,7 +72,9 @@ export function wrap(text: string, font: PDFFont, size: number, width: number): 
 
 export interface RichLine { text: string; bold: boolean; indent: number; marker?: string; markerX?: number }
 
-const MARKER = /^(\d+[.)]|[a-zA-Z][.)]|[-•*])\s+/
+/* Markers an outline line can start with. Roman numerals come before the single-letter case so
+   "ii." and "iv." are read whole rather than leaving a stray letter to be drawn as text. */
+const MARKER = /^((?:\d+|[ivxlcIVXLC]{1,6}|[a-zA-Z])[.)]|[-•*])\s+/
 
 export function richLines(text: string, fonts: Fonts, size: number, width: number, serif?: boolean, spaced?: boolean): RichLine[] {
   const regular = fontFor(fonts, serif, false)

@@ -26,6 +26,7 @@ export async function listIssued(projectId: string, kind: FormKind): Promise<Iss
 const SECTION_FOR: Record<FormKind, string> = {
   submittal_cover: SECTIONS.submittals, asi: SECTIONS.asis, rfi_response: SECTIONS.rfis,
   pr: SECTIONS.prs, ccd: SECTIONS.ccds, field_report: SECTIONS.fieldReports,
+  meeting_notes: SECTIONS.meetings,
 }
 
 export async function saveIssued(project: ProjectStore, kind: FormKind, values: Record<string, string>, pdf: Uint8Array) {
@@ -48,6 +49,7 @@ export const openIssued = (project: ProjectStore, path: string) => openFile(proj
 
 const PREFIX: Record<FormKind, string> = {
   submittal_cover: '', asi: 'ASI-', rfi_response: 'RFI-', pr: 'PR-', ccd: 'CCD-', field_report: 'FR-',
+  meeting_notes: 'MN-',
 }
 
 /** Next number after the last one used: "ASI-003" → "ASI-004", "09 30 00 - 001" → "09 30 00 - 002". */
