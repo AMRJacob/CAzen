@@ -389,6 +389,11 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 }
 .sv-index-foot button { font-size: 12px; }
 
+/* Whether this device is still holding the job's drawings. */
+.field-sync { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.field-sync button { flex: none; }
+
+
 .sv-scroll { flex: 1; overflow: auto; padding: 16px; position: relative; }
 .sv-msg { position: absolute; top: 20px; left: 20px; }
 .sv-page { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); touch-action: none; }

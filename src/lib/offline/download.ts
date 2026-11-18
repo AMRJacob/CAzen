@@ -1,6 +1,6 @@
 import { db as sb } from '../supabase'
 import { readFile, storageUsage, type ProjectStore } from '../files'
-import { cacheFile, fileFromCache, put, release, replace, space, askToKeep, type Held } from './store'
+import { all, cacheFile, fileFromCache, held, put, release, remove, replace, space, askToKeep, type CachedFile, type Held } from './store'
 
 /**
  * Taking a project to the field.
@@ -34,7 +34,7 @@ export interface Progress {
   what: string
 }
 
-interface RevisionRow {
+export interface RevisionRow {
   id: string
   sheet_id: string
   revision_index: number
@@ -48,7 +48,7 @@ interface RevisionRow {
  * `bytes` arrived with migration 0017, so a database that hasn't had it yet answers without the
  * column rather than failing — the sizes are then all estimated, which is what the caller says.
  */
-async function revisions(projectId: string): Promise<RevisionRow[]> {
+export async function revisions(projectId: string): Promise<RevisionRow[]> {
   const ask = (columns: string) =>
     sb().from('sheet_revisions').select(columns).eq('sheets.project_id', projectId)
 
@@ -60,7 +60,7 @@ async function revisions(projectId: string): Promise<RevisionRow[]> {
   return (data ?? []).map((r) => ({ bytes: null, ...(r as object) })) as unknown as RevisionRow[]
 }
 
-const currentOnly = (rows: RevisionRow[]): RevisionRow[] => {
+export const currentOnly = (rows: RevisionRow[]): RevisionRow[] => {
   const best = new Map<string, RevisionRow>()
   for (const r of rows) {
     const had = best.get(r.sheet_id)
@@ -121,7 +121,7 @@ async function rows(projectId: string) {
     revisions: await bySheet('sheet_revisions'),
     sheetText: await one('sheet_text'),
     markups: await one('sheet_markups'),
-    punch: await one('punch_items'),
+    observations: await one('observations'),
   }
 }
 
@@ -148,11 +148,13 @@ export async function takeToField(
   await replace('revisions', project.id, data.revisions)
   await replace('sheetText', project.id, data.sheetText)
   await replace('markups', project.id, data.markups)
-  await replace('punch', project.id, data.punch)
+  await replace('observations', project.id, data.observations)
   await put('projects', { ...project, id: project.id, project_id: project.id })
 
-  const { data: cats } = await sb().from('punch_categories').select('*')
-  if (cats?.length) await replace('punchCategories', project.id, cats.map((c) => ({ ...c, project_id: project.id })))
+  // Observation types belong to the firm, not the project, so they are fetched whole and stored
+  // against this project — a device holding two projects keeps a copy for each, which is cheap.
+  const { data: types } = await sb().from('observation_types').select('*')
+  if (types?.length) await replace('observationTypes', project.id, types.map((c) => ({ ...c, project_id: project.id })))
 
   const all = (data.revisions as unknown as RevisionRow[])
   const wanted = scope === 'current' ? currentOnly(all) : all
@@ -175,6 +177,16 @@ export async function takeToField(
     } catch { /* one sheet that won't come down shouldn't lose the other ninety-three */ }
     done++
   }
+  // Taking the current set means the current set: a revision that has since been superseded is
+  // dead weight on a phone, and the whole point of the choice was to save the space.
+  //
+  // Never on an empty list. A query that comes back with nothing — a dropped connection, a
+  // permission that lapsed — looks exactly like a project with no sheets, and acting on it would
+  // clear the drawings off a device that is about to go somewhere with no signal.
+  if (scope === 'current' && !signal?.aborted && wanted.length > 0) {
+    const keep = new Set(wanted.map((r) => r.file_path))
+    bytes -= await prune(project.id, keep)
+  }
   onProgress({ done, total: wanted.length, bytes, what: '' })
 
   const note: Held = {
@@ -183,6 +195,57 @@ export async function takeToField(
   }
   await put('meta', note)
   return note
+}
+
+/** Drop held files that aren't in `keep`. Returns the bytes given back. */
+async function prune(projectId: string, keep: Set<string>): Promise<number> {
+  let freed = 0
+  for (const f of await all<CachedFile>('files', projectId)) {
+    if (keep.has(f.path)) continue
+    freed += f.bytes.size
+    await remove('files', f.path)
+  }
+  return freed
+}
+
+/**
+ * Whether this device is holding drawings the job has moved past.
+ *
+ * Marking up a superseded sheet is worse than having no drawings at all: the markup is real, the
+ * drawing under it isn't, and nothing on screen says so. So a device that holds a project is
+ * asked this every time it finds the internet, and the answer names the sheets rather than
+ * saying "updates available", because which sheets changed is the thing that decides whether it
+ * matters this afternoon.
+ */
+export interface Behind {
+  /** Sheets whose current revision this device hasn't got. */
+  sheets: { number: string; title: string | null }[]
+  /** How many files that is, which is what a sync would fetch. */
+  files: number
+  at: number
+}
+
+export async function behind(projectId: string): Promise<Behind | null> {
+  const note = await held(projectId)
+  if (!note) return null
+  const rows = await revisions(projectId)
+  const wanted = note.scope === 'current' ? currentOnly(rows) : rows
+  const have = new Set((await all<CachedFile>('files', projectId)).map((f) => f.path))
+  const short = wanted.filter((r) => !have.has(r.file_path))
+  if (!short.length) return { sheets: [], files: 0, at: Date.now() }
+
+  const { data } = await sb().from('sheets').select('id, number, title').eq('project_id', projectId)
+  const byId = new Map(((data ?? []) as { id: string; number: string; title: string | null }[]).map((s) => [s.id, s]))
+  const seen = new Set<string>()
+  const sheets: { number: string; title: string | null }[] = []
+  for (const r of short) {
+    if (seen.has(r.sheet_id)) continue
+    seen.add(r.sheet_id)
+    const s = byId.get(r.sheet_id)
+    sheets.push({ number: s?.number ?? '—', title: s?.title ?? null })
+  }
+  sheets.sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+  return { sheets, files: short.length, at: Date.now() }
 }
 
 export { release, space }

@@ -10,6 +10,7 @@ import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { PageThumb } from '../components/PageThumb'
 import { PdfPreview } from '../components/PdfPreview'
+import { FieldSync } from '../components/FieldSync'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
   deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
@@ -158,6 +159,9 @@ export default function Documents() {
             loudest control on a phone screen; it lives under More in the corner menu instead. */}
         {!uploading && <button className="primary desk-only" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
       </div>
+
+      {/* Whether the copy on this device is still the job. Silent unless it isn't. */}
+      <FieldSync project={current} onSynced={load} />
 
       {uploading && firm && (
         <UploadIssuance

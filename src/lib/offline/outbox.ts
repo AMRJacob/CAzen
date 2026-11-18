@@ -20,8 +20,8 @@ export type Job =
   | { kind: 'markup.add'; row: Record<string, unknown> }
   | { kind: 'markup.edit'; id: string; patch: Record<string, unknown> }
   | { kind: 'markup.remove'; id: string }
-  | { kind: 'punch.add'; row: Record<string, unknown> }
-  | { kind: 'punch.edit'; id: string; patch: Record<string, unknown> }
+  | { kind: 'observation.add'; row: Record<string, unknown> }
+  | { kind: 'observation.edit'; id: string; patch: Record<string, unknown> }
   | { kind: 'sheet.scale'; id: string; scale: unknown }
 
 export interface Queued { id: string; project_id: string; at: number; tries: number; last_error?: string; job: Job }
@@ -55,8 +55,25 @@ export async function unsentIds(): Promise<Set<string>> {
   return out
 }
 
+/**
+ * Jobs queued before the punch list became observations are still sitting in outboxes on devices
+ * that went to site before the change. They are the same two requests under another name, so they
+ * are renamed on the way out rather than stranded in a queue that can never empty.
+ */
+type AnyJob =
+  | Job
+  | { kind: 'punch.add'; row: Record<string, unknown> }
+  | { kind: 'punch.edit'; id: string; patch: Record<string, unknown> }
+
+function current(job: AnyJob): Job {
+  if (job.kind === 'punch.add') return { kind: 'observation.add', row: job.row }
+  if (job.kind === 'punch.edit') return { kind: 'observation.edit', id: job.id, patch: job.patch }
+  return job
+}
+
 /** Each job, as the one request that carries it out. Errors bubble so drain can decide. */
-async function send(job: Job): Promise<void> {
+async function send(raw: AnyJob): Promise<void> {
+  const job = current(raw)
   if (job.kind === 'markup.add') {
     // The row carries the id this device made, so a second attempt lands on the same row.
     const { error } = await sb().from('sheet_markups').upsert(job.row, { onConflict: 'id' })
@@ -73,18 +90,18 @@ async function send(job: Job): Promise<void> {
     if (error) throw error
     return
   }
-  if (job.kind === 'punch.add') {
-    const { error } = await sb().from('punch_items').upsert(job.row, { onConflict: 'id' })
+  if (job.kind === 'observation.add') {
+    const { error } = await sb().from('observations').upsert(job.row, { onConflict: 'id' })
     if (error) throw error
-    // Numbering is a second step on purpose: the item exists even if this half fails, and asking
-    // again for an item that already has a number gives back the number it already has. A
-    // database without the function yet leaves the item un-numbered rather than losing it.
-    const { error: numberError } = await sb().rpc('number_punch_item', { p_item: job.row.id })
-    if (numberError && !/number_punch_item|schema cache|does not exist/i.test(numberError.message ?? '')) throw numberError
+    // Numbering is a second step on purpose: the observation exists even if this half fails, and
+    // asking again for one that already has a number gives back the number it already has. A
+    // database without the function yet leaves it un-numbered rather than losing it.
+    const { error: numberError } = await sb().rpc('number_observation', { p_item: job.row.id })
+    if (numberError && !/number_observation|schema cache|does not exist/i.test(numberError.message ?? '')) throw numberError
     return
   }
-  if (job.kind === 'punch.edit') {
-    const { error } = await sb().from('punch_items').update(job.patch).eq('id', job.id)
+  if (job.kind === 'observation.edit') {
+    const { error } = await sb().from('observations').update(job.patch).eq('id', job.id)
     if (error) throw error
     return
   }

@@ -16,16 +16,19 @@
  */
 
 const DB = 'cazen'
-const VERSION = 1
+const VERSION = 2
 
 /** What a device can hold for a project. Rows mirror the server; files are the drawings. */
 export type Store =
-  | 'projects' | 'sheets' | 'revisions' | 'issuances' | 'markups' | 'punch' | 'punchCategories'
+  | 'projects' | 'sheets' | 'revisions' | 'issuances' | 'markups' | 'observations' | 'observationTypes'
   | 'sheetText' | 'files' | 'outbox' | 'meta'
 
 const ROW_STORES: Store[] = [
-  'projects', 'sheets', 'revisions', 'issuances', 'markups', 'punch', 'punchCategories', 'sheetText',
+  'projects', 'sheets', 'revisions', 'issuances', 'markups', 'observations', 'observationTypes', 'sheetText',
 ]
+
+/** Stores from an earlier shape of the app, dropped on the way past. */
+const GONE = ['punch', 'punchCategories']
 
 let open: Promise<IDBDatabase> | null = null
 
@@ -35,6 +38,7 @@ export function db(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB, VERSION)
     req.onupgradeneeded = () => {
       const d = req.result
+      for (const name of GONE) if (d.objectStoreNames.contains(name)) d.deleteObjectStore(name)
       for (const name of ROW_STORES) {
         if (d.objectStoreNames.contains(name)) continue
         const s = d.createObjectStore(name, { keyPath: 'id' })
