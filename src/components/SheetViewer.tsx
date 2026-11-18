@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { niceTitle } from '../lib/titles'
 import type { PDFPageProxy } from 'pdfjs-dist'
 import { db } from '../lib/supabase'
 import { readFile, type ProjectStore } from '../lib/files'
@@ -432,7 +433,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
         </div>
         <div className="sv-title">
           <span className="mono">{sheet.number}</span>
-          <span>{sheet.title ?? ''}</span>
+          <span>{niceTitle(sheet.title)}</span>
           {sheet.revisionLabel && <span className="tag">Rev {sheet.revisionLabel}</span>}
           {sheet.superseded && <span className="tag muted">superseded</span>}
         </div>
@@ -514,7 +515,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 onClick={() => {
                   setMore(false)
                   setDetailsProblem(null)
-                  setDetails({ number: sheet.number, title: sheet.title ?? '', filedUnder: sheet.filedUnder ?? '' })
+                  setDetails({ number: sheet.number, title: niceTitle(sheet.title), filedUnder: sheet.filedUnder ?? '' })
                 }}>
                 Sheet details…
               </button>
@@ -647,7 +648,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                     return (
                       <button key={s.number} ref={on ? hereEl : undefined} className={on ? 'on' : ''} onClick={() => go(s)}>
                         <span className="sv-ix-number">{s.number}</span>
-                        {s.title && <span className="sv-ix-title">{s.title}</span>}
+                        {s.title && <span className="sv-ix-title">{niceTitle(s.title)}</span>}
                       </button>
                     )
                   })}
@@ -658,7 +659,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 return (
                   <button key={s.number} ref={on ? hereEl : undefined} className={on ? 'on' : ''} onClick={() => go(s)}>
                     <span className="sv-ix-number">{s.number}</span>
-                    {s.title && <span className="sv-ix-title">{s.title}</span>}
+                    {s.title && <span className="sv-ix-title">{niceTitle(s.title)}</span>}
                   </button>
                 )
               })}
@@ -721,7 +722,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 <div className="sv-pop" style={{ left: `${pending.x * 100}%`, top: `${(pending.y + pending.h) * 100}%` }}>
                   <select autoFocus value={target} onChange={(e) => setTarget(e.target.value)}>
                     <option value="">Opens sheet…</option>
-                    {sheets.filter((s) => norm(s.number) !== norm(sheet.number)).map((s) => <option key={s.number} value={s.number}>{s.number} {s.title ?? ''}</option>)}
+                    {sheets.filter((s) => norm(s.number) !== norm(sheet.number)).map((s) => <option key={s.number} value={s.number}>{s.number} {niceTitle(s.title)}</option>)}
                   </select>
                   <button className="primary" disabled={!target} onClick={saveLink}>Save link</button>
                   <button onClick={() => setPending(null)}>Cancel</button>

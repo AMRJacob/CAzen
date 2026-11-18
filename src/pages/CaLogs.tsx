@@ -2,7 +2,7 @@ import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
-import { CHANGE_KINDS, coverWith, listRegister, uncover, type RegisterRow } from '../lib/issued'
+import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, uncover, type MissingChangeDocument, type RegisterRow } from '../lib/issued'
 import { openFile } from '../lib/files'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
@@ -34,6 +34,9 @@ export default function CaLogs() {
   const [sort, setSort] = useState<SortBy>('date')
   const [only, setOnly] = useState<'changes' | 'all' | FormKind>('changes')
   const [attaching, setAttaching] = useState<string | null>(null)
+  // Uploads that were issued as change documents before CAzen filed them here.
+  const [missing, setMissing] = useState<MissingChangeDocument[]>([])
+  const [filing, setFiling] = useState(false)
 
   // Keyed on the project's id rather than the project, so a context that hands back a new object
   // each render can't turn this into a loop.
@@ -44,6 +47,27 @@ export default function CaLogs() {
     listRegister(projectId, want).then(setRows).catch((e) => setError(message(e)))
   }, [projectId, only])
   useEffect(() => { load() }, [load])
+
+  const lookForMissing = useCallback(() => {
+    if (!projectId) { setMissing([]); return }
+    missingChangeDocuments(projectId).then(setMissing).catch(() => setMissing([]))
+  }, [projectId])
+  useEffect(() => { lookForMissing() }, [lookForMissing])
+
+  async function fileMissing() {
+    if (!projectId || filing) return
+    setFiling(true)
+    setError(null)
+    try {
+      await fileMissingChangeDocuments(projectId)
+      lookForMissing()
+      load()
+    } catch (e) {
+      setError(message(e))
+    } finally {
+      setFiling(false)
+    }
+  }
 
   const listed = useMemo(() => {
     const r = [...(rows ?? [])]
@@ -113,6 +137,19 @@ export default function CaLogs() {
         </label>
       </div>
 
+      {/* Uploads that were issued as change documents but never filed as one. */}
+      {missing.length > 0 && (
+        <div className="notice warn field-sync">
+          <span>
+            <strong>{missing.length} {missing.length === 1 ? 'upload was' : 'uploads were'} issued as {missing.length === 1 ? 'a change document' : 'change documents'} but {missing.length === 1 ? 'is' : 'are'} not in this register</strong>
+            {' — '}{missing.slice(0, 6).map((m) => m.name).join(', ')}{missing.length > 6 ? ` and ${missing.length - 6} more` : ''}.
+            {' '}They went in before CAzen filed them here. Filing them keeps the sheets attached to each one.
+          </span>
+          <button className="primary-lite" onClick={() => void fileMissing()} disabled={filing}>
+            {filing ? 'Filing…' : `File ${missing.length === 1 ? 'it' : 'them'}`}
+          </button>
+        </div>
+      )}
       {error && <div className="notice error">{error}</div>}
       {!rows ? <p className="muted">Loading…</p>
         : !listed.length ? <div className="card muted">Nothing issued yet.</div> : (

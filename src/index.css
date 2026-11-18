@@ -433,11 +433,6 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .manual-hit-snippet { font-size: 13px; color: var(--muted); }
 .manual-hit-snippet mark { background: #f3e7a6; color: inherit; }
 
-.manual-review { width: 100%; border-collapse: collapse; margin-top: 10px; }
-.manual-review th { text-align: left; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; }
-.manual-review td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
-.manual-review tr.skipped td { opacity: 0.5; }
-
 
 
 .sv-scroll { flex: 1; overflow: auto; padding: 16px; position: relative; }

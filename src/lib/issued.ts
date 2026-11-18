@@ -139,6 +139,77 @@ export const DOCUMENT_FOR: Partial<Record<IssuanceKind, FormKind>> = {
 }
 
 /**
+ * Uploads that should be in the register and aren't.
+ *
+ * An ASI uploaded as drawings is an ASI that was issued, but until CAzen filed it here that
+ * only happened when a page in the upload had been ticked as the cover — so a job loaded
+ * retroactively, which is most of them, came out with ten ASIs in the drawings and an empty
+ * register. Rather than leave that to be typed back in by hand, the uploads are matched against
+ * the register and the gap is offered as one action.
+ */
+export interface MissingChangeDocument {
+  issuanceId: string
+  kind: IssuanceKind
+  name: string
+  issuedOn: string
+  coverPath: string | null
+  sheets: number
+}
+
+export async function missingChangeDocuments(projectId: string): Promise<MissingChangeDocument[]> {
+  const client = db()
+  const kinds = Object.keys(DOCUMENT_FOR) as IssuanceKind[]
+  const { data: issuances, error } = await client
+    .from('issuances').select('id, kind, number, issued_on, cover_path')
+    .eq('project_id', projectId).in('kind', kinds)
+  if (error) throw error
+  if (!issuances?.length) return []
+
+  const { data: filed, error: filedError } = await client
+    .from('issued_forms').select('issuance_id').eq('project_id', projectId).not('issuance_id', 'is', null)
+  if (filedError) throw filedError
+  const already = new Set((filed ?? []).map((f) => (f as { issuance_id: string }).issuance_id))
+
+  type Row = { id: string; kind: IssuanceKind; number: string | null; issued_on: string; cover_path: string | null }
+  const want = (issuances as unknown as Row[]).filter((i) => !already.has(i.id))
+  if (!want.length) return []
+
+  // How many sheets came with each, which is what makes the offer worth reading.
+  const counts = new Map<string, number>()
+  const { data: revs } = await client
+    .from('sheet_revisions').select('issuance_id').in('issuance_id', want.map((i) => i.id))
+  for (const r of (revs ?? []) as { issuance_id: string }[]) {
+    counts.set(r.issuance_id, (counts.get(r.issuance_id) ?? 0) + 1)
+  }
+
+  return want
+    .map((i) => ({
+      issuanceId: i.id, kind: i.kind, name: i.number || ISSUANCE_WORD[i.kind],
+      issuedOn: i.issued_on, coverPath: i.cover_path, sheets: counts.get(i.id) ?? 0,
+    }))
+    .sort((a, b) => a.issuedOn.localeCompare(b.issuedOn))
+}
+
+/** File every upload that should be in the register. Returns how many entries were made. */
+export async function fileMissingChangeDocuments(projectId: string): Promise<number> {
+  const missing = await missingChangeDocuments(projectId)
+  let made = 0
+  for (const m of missing) {
+    await documentForIssuance({
+      projectId, issuanceId: m.issuanceId, kind: m.kind,
+      name: m.name, issuedOn: m.issuedOn, filePath: m.coverPath,
+    })
+    made++
+  }
+  return made
+}
+
+const ISSUANCE_WORD: Record<IssuanceKind, string> = {
+  bid_set: 'Bid set', conformed_set: 'Conformed set', addendum: 'Addendum', asi: 'ASI',
+  bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', pr: 'PR', other: 'Revision',
+}
+
+/**
  * File the change document an upload came with.
  *
  * Uploading sheets as an ASI or a PR *is* issuing that ASI or PR, so the entry in the change

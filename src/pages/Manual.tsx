@@ -5,6 +5,7 @@ import { PdfPreview } from '../components/PdfPreview'
 import { PageThumb } from '../components/PageThumb'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
+import { niceTitle } from '../lib/titles'
 import { readFile } from '../lib/files'
 import { ISSUANCE_LABELS, type IssuanceKind, type Project } from '../lib/types'
 import {
@@ -127,10 +128,10 @@ export default function Manual() {
         <div className="card manual-hits">
           <p className="muted small">{hits.length === 0 ? `Nothing in the manual matches “${query.trim()}”.` : `${hits.length} ${hits.length === 1 ? 'match' : 'matches'}`}</p>
           {hits.map((h) => (
-            <button key={h.revision_id} className="manual-hit" onClick={() => show(h.file_path, `${h.number} ${h.title ?? ''}`)}>
+            <button key={h.revision_id} className="manual-hit" onClick={() => show(h.file_path, `${h.number} ${niceTitle(h.title)}`)}>
               <span className="manual-hit-head">
                 <span className="mono">{h.number}</span>
-                <span>{h.title ?? ''}</span>
+                <span>{niceTitle(h.title)}</span>
                 {!h.is_current && <span className="tag muted">superseded</span>}
               </span>
               <span className="manual-hit-snippet">{snippet(h.snippet)}</span>
@@ -142,10 +143,7 @@ export default function Manual() {
       {!uploading && !hits && (
         loading ? <p className="muted">Reading the manual…</p>
         : sections.length === 0 ? (
-          <div className="card muted">
-            No manual yet. Upload the book and CAzen cuts it into sections, so an addendum can
-            replace 09 91 00 without replacing anything else.
-          </div>
+          <div className="card muted">No manual uploaded yet.</div>
         ) : (
           <div className="card">
             {groups.map((g) => (
@@ -161,7 +159,7 @@ export default function Manual() {
                     <tbody>
                       {g.items.map((s) => (
                         <SectionRow key={s.section_id} section={s} project={current}
-                          onOpen={() => show(s.file_path, `${s.number} ${s.title ?? ''}`)}
+                          onOpen={() => show(s.file_path, `${s.number} ${niceTitle(s.title)}`)}
                           onOpenPath={show} onChanged={load} />
                       ))}
                     </tbody>
@@ -217,10 +215,10 @@ function SectionRow({ section, project, onOpen, onOpenPath, onChanged }: {
     <>
       <tr className="opens" tabIndex={0} role="button" aria-label={`Open ${section.number}`}
         onClick={(e) => { if (!editing && !(e.target as HTMLElement).closest('button')) onOpen() }}
-        onContextMenu={(e) => { e.preventDefault(); setEditing({ number: section.number, title: section.title ?? '' }) }}
+        onContextMenu={(e) => { e.preventDefault(); setEditing({ number: section.number, title: niceTitle(section.title) }) }}
         onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen() } }}>
         <td className="mono manual-number">{section.number === FRONT ? '' : section.number}</td>
-        <td className="manual-title">{section.title ?? (section.number === FRONT ? 'Front matter' : '')}</td>
+        <td className="manual-title">{niceTitle(section.title) || (section.number === FRONT ? 'Front matter' : '')}</td>
         <td className="manual-pages muted small">{section.pages ? `${section.pages} ${section.pages === 1 ? 'page' : 'pages'}` : ''}</td>
         <td className="manual-from">{issuanceText(section.issuance_kind, section.issuance_number)}</td>
         <td className="col-date">{usDate(section.issued_on)}</td>
@@ -258,7 +256,7 @@ function SectionRow({ section, project, onOpen, onOpenPath, onChanged }: {
           onClick={() => onOpenPath(r.file_path, `${section.number} ${r.title_at_rev ?? section.title ?? ''}`)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPath(r.file_path, section.number) } }}>
           <td />
-          <td className="manual-title">{r.title_at_rev ?? ''}</td>
+          <td className="manual-title">{niceTitle(r.title_at_rev)}</td>
           <td className="manual-pages muted small">{r.pages ? `${r.pages} ${r.pages === 1 ? 'page' : 'pages'}` : ''}</td>
           <td className="manual-from">{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
           <td className="col-date">{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
@@ -306,6 +304,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
   const [namedByHand, setNamedByHand] = useState(false)
   const [sets, setSets] = useState<SetName[]>([])
   const [issuedOn, setIssuedOn] = useState(today())
+  const [mark, setMark] = useState('')
   useEffect(() => { existingSets(project.id).then(setSets).catch(() => setSets([])) }, [project.id])
   useEffect(() => { if (!namedByHand) setNumber(suggestSetName(kind, sets)) }, [kind, sets, namedByHand])
 
@@ -400,7 +399,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
         out.push({
           number: d.number.trim(),
           title: d.title.trim(),
-          revisionLabel: number,
+          revisionLabel: mark || number,
           pages: d.pages.length,
           bytes: await cutSection(file, d.pages),
           body: bodyOf(d.pages.map((p) => pages[p]).filter(Boolean)),
@@ -416,47 +415,55 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
   }
 
   return (
-    <div className="card upload">
-      <h3>{existing.length ? 'Issue revised sections' : 'Upload the project manual'}</h3>
-      <p className="muted small">
-        {existing.length
-          ? 'Sections in this upload replace the ones with the same number; the earlier issue stays in that section’s history.'
-          : 'The book is cut into sections so an addendum can replace one without replacing the rest. Every cut is shown before anything is saved.'}
-      </p>
-
-      <div className="upload-head">
+    <div className="card upload-panel">
+      <h2>{existing.length ? 'Issue revised sections' : 'Upload the project manual'}</h2>
+      <div className="form four">
         <label>Issued as
           <select value={kind} onChange={(e) => setKind(e.target.value as IssuanceKind)}>
-            {(Object.keys(ISSUANCE_LABELS) as IssuanceKind[]).map((k) => <option key={k} value={k}>{ISSUANCE_LABELS[k]}</option>)}
+            {(Object.entries(ISSUANCE_LABELS) as [IssuanceKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
         <label>Set name
-          <input value={number} placeholder="Addendum 2, ASI-003…"
+          <input value={number} placeholder="Addendum 2, ASI-003, Rev 1…"
             onChange={(e) => { setNamedByHand(true); setNumber(e.target.value) }} />
         </label>
         <label>Issue date<input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} /></label>
+        <label>Revision mark<input value={mark} onChange={(e) => setMark(e.target.value)} placeholder={number || '1, A, Δ2…'} />
+          <span className="hint">For every section in this upload.</span>
+        </label>
       </div>
 
       {step === 'pick' && (
-        <div className={`drop${dragOver ? ' over' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setDragOver(false); onFiles([...e.dataTransfer.files]) }}>
-          <p>Drop the manual here, or <label className="link">choose a file
-            <input type="file" accept="application/pdf" hidden onChange={(e) => onFiles([...(e.target.files ?? [])])} />
-          </label>.</p>
-        </div>
+        <>
+          <label
+            className={`dropzone ${dragOver ? 'over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); onFiles([...e.dataTransfer.files]) }}
+          >
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => onFiles([...(e.target.files ?? [])])} />
+            <span className="dz-icon" aria-hidden="true">⇪</span>
+            <strong>Drop the manual here</strong>
+            <span className="muted small">or click to choose: the whole book, or the sections an addendum reissues.</span>
+          </label>
+          <button className="link" onClick={onCancel}>Cancel</button>
+        </>
       )}
 
       {step === 'reading' && <p className="muted">Reading the manual… {progress}</p>}
 
       {(step === 'review' || step === 'saving') && (
         <>
-          <p className="muted small">
-            {drafts.length} {drafts.length === 1 ? 'section' : 'sections'} across {pages.length} pages.
-            {drafts.some((d) => d.guessed) && ' Sections marked “check” ran on past a page that didn’t say which section it was.'}
-          </p>
-          <table className="manual-review">
+          <div className="tb-bar">
+            <div>
+              <strong>{drafts.length}</strong> {drafts.length === 1 ? 'section' : 'sections'} across {pages.length} pages.{' '}
+              {drafts.some((d) => d.guessed)
+                ? <span className="muted small">Sections marked “check” ran on past a page that didn’t say which section it was.</span>
+                : <span className="muted small">Every page said which section it belongs to.</span>}
+            </div>
+          </div>
+
+          <table>
             <thead><tr>
               <th>
                 <input type="checkbox" aria-label="Include every section"
@@ -464,7 +471,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>View</th><th>Section</th><th>Title</th><th>Pages</th><th>Result</th><th />
+              <th>Pages</th><th>View</th><th>Section</th><th>Title</th><th>Result</th><th />
             </tr></thead>
             <tbody>
               {drafts.map((d, i) => {
@@ -476,6 +483,11 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                       <input type="checkbox" checked={d.include} aria-label={`Include ${n || 'this section'}`}
                         onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} />
                     </td>
+                    <td className="small nowrap">
+                      {d.pages[0] + 1}–{d.pages[d.pages.length - 1] + 1}
+                      <span className="muted"> ({d.pages.length})</span>
+                      {d.guessed && <span className="unsure-note">check</span>}
+                    </td>
                     <td className="thumb-cell">
                       {first
                         ? <PageThumb bytes={first} label={n || `page ${d.pages[0] + 1}`} onOpen={() => setPeek(i)} />
@@ -484,10 +496,6 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                     <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
                       placeholder="09 91 00" onChange={(e) => edit(i, { number: e.target.value })} /></td>
                     <td><input className="cell" value={d.title} onChange={(e) => edit(i, { title: e.target.value })} /></td>
-                    <td className="small nowrap">
-                      {d.pages.length} ({d.pages[0] + 1}–{d.pages[d.pages.length - 1] + 1})
-                      {d.guessed && <span className="unsure-note">check</span>}
-                    </td>
                     <td className="small">
                       {!d.include ? 'skip' : !n ? <span className="bad-text">needs a number</span>
                         : duplicates.has(n) ? <span className="bad-text">twice in this upload</span>

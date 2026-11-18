@@ -1,4 +1,5 @@
 import { PageTitle } from '../components/PageTitle'
+import { niceTitle } from '../lib/titles'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from '../lib/project'
@@ -222,7 +223,7 @@ export default function Documents() {
               {sortSheets(hits, (h) => h.number, order).map((h) => (
                 <button key={h.revision_id} className="hit" onClick={() => openHit(h)}>
                   <span className="mono">{h.number}</span>
-                  <span className="hit-title">{h.title ?? ''}{!h.is_current && <span className="tag muted">rev {h.revision_index}, superseded</span>}</span>
+                  <span className="hit-title">{niceTitle(h.title)}{!h.is_current && <span className="tag muted">rev {h.revision_index}, superseded</span>}</span>
                   <span className="hit-snip">{snippet(h.snippet)}</span>
                 </button>
               ))}
@@ -384,7 +385,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
-  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: sheet.title ?? '', filedUnder: sheet.filed_under ?? '' }) }
+  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: niceTitle(sheet.title), filedUnder: sheet.filed_under ?? '' }) }
 
   const onEditKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
@@ -434,7 +435,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
           {sheet.number}
           {movedAway(sheet, order) && <span className="filed-tag" title={`Filed under ${sheet.filed_under}, not where its number puts it`}>filed {sheet.filed_under}</span>}
         </td>
-        <td className="col-title">{sheet.title ?? ''}</td>
+        <td className="col-title">{niceTitle(sheet.title)}</td>
         <td>{sheet.revision_label || sheet.revision_index}</td>
         <td className="col-from">{issuanceText(sheet.issuance_kind, sheet.issuance_number)}</td>
         <td className="col-date">{usDate(sheet.issued_on)}</td>
@@ -493,7 +494,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
             onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) openRevision(r) }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRevision(r) } }}>
             <td />
-            <td className="col-title">{r.title_at_rev ?? ''}</td>
+            <td className="col-title">{niceTitle(r.title_at_rev)}</td>
             <td>{r.revision_label || r.revision_index}</td>
             <td className="col-from">{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
             <td className="col-date">
@@ -651,7 +652,7 @@ function AsOfTable({ rows, date, order, onOpen }: { rows: Awaited<ReturnType<typ
           {sorted.map((r) => (
             <tr key={r.sheet_number}>
               <td className="mono">{r.sheet_number}</td>
-              <td>{r.sheet_title ?? ''}</td>
+              <td>{niceTitle(r.sheet_title)}</td>
               <td>{r.revision_index}</td>
               <td>{usDate(r.issued_on)}</td>
               <td className="right"><button onClick={() => onOpen(r.file_path)}>Open</button></td>
@@ -735,7 +736,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       templateId: r.templateId,
       unsure: !pinnedTpl && !!r.unsure,
       number: d.touched.number ? d.number : r.number,
-      title: d.touched.title ? d.title : r.title,
+      title: d.touched.title ? d.title : niceTitle(r.title),
       revision: d.touched.revision ? d.revision : r.revision,
       date: d.touched.date ? d.date : r.date,
     }
