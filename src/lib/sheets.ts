@@ -45,19 +45,24 @@ export const disciplineOf = (number: string) => (number.trim().match(/^[A-Za-z]+
  * The number and title live on the sheet, and each revision also keeps the title it carried when
  * it was issued. A correction here fixes the sheet and the revision on screen, and leaves the
  * other revisions' titles alone: those are a record of what that issue actually said.
+ *
+ * filedUnder moves the sheet to another discipline without touching its number, for sheets whose
+ * numbers don't say their trade. Empty or absent files it by its number again.
  */
 export async function renameSheet(
   sheetId: string,
-  next: { number: string; title: string },
+  next: { number: string; title: string; filedUnder?: string | null },
   revisionId?: string,
 ): Promise<void> {
   const number = next.number.trim()
   const title = next.title.trim()
   if (!number) throw new Error('A sheet needs a number.')
+  // Filing is separate from numbering: a sheet can sit under M while still being called Q-101.
+  const filedUnder = (next.filedUnder ?? '').trim().toUpperCase() || null
 
   const { error } = await db()
     .from('sheets')
-    .update({ number, title: title || null, discipline: disciplineOf(number) })
+    .update({ number, title: title || null, discipline: disciplineOf(number), filed_under: filedUnder })
     .eq('id', sheetId)
   if (error) {
     // unique (project_id, number)
@@ -257,15 +262,16 @@ export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
 export async function listIssuanceSheets(issuanceId: string): Promise<BundleSheet[]> {
   const { data, error } = await db()
     .from('sheet_revisions')
-    .select('revision_label, title_at_rev, file_path, sheets(number, title)')
+    .select('revision_label, title_at_rev, file_path, sheets(number, title, filed_under)')
     .eq('issuance_id', issuanceId)
   if (error) throw error
-  type Raw = { revision_label: string | null; title_at_rev: string | null; file_path: string; sheets: { number: string; title: string | null } | null }
+  type Raw = { revision_label: string | null; title_at_rev: string | null; file_path: string; sheets: { number: string; title: string | null; filed_under: string | null } | null }
   return ((data ?? []) as unknown as Raw[]).map((r) => ({
     number: r.sheets?.number ?? '',
     title: r.title_at_rev ?? r.sheets?.title ?? null,
     revisionLabel: r.revision_label,
     filePath: r.file_path,
+    filedUnder: r.sheets?.filed_under ?? null,
   }))
 }
 
@@ -350,29 +356,101 @@ const KIND_WORD: Record<IssuanceKind, string> = {
  *
  * A set left unnamed shows up as its category and nothing else — two addenda a year apart both
  * reading "Addendum", with no way to tell from the register which is which. So the name is
- * suggested rather than asked for: the category plus how many of that category the project has
- * had. The second addendum is "Addendum 2", and it is editable before it is saved and after.
+ * suggested rather than asked for.
+ *
+ * The suggestion copies how this project already writes them rather than imposing one house
+ * style, because the names are read off the drawings and the transmittals, not invented here: a
+ * project whose last set was "Addendum #2" gets "Addendum #3", one whose last was "ASI-004" gets
+ * "ASI-005", padding and all. The style carries across categories too — a project writing
+ * "Addendum #2" gets "ASI #1" for its first ASI — since the punctuation is a habit of the person
+ * typing, not of the category.
  *
  * Categories that only happen once on a job don't get a number; a bid set is the bid set.
  */
-export function suggestSetName(kind: IssuanceKind, existing: { kind: IssuanceKind; number: string | null }[]): string {
+export function suggestSetName(kind: IssuanceKind, existing: SetName[]): string {
   const word = KIND_WORD[kind]
   if (kind === 'bid_set' || kind === 'conformed_set') return word
+
   const used = existing.filter((i) => i.kind === kind)
   // Follow on from the highest number already in use, so deleting the second of three doesn't
   // hand the next upload a name somebody is already holding.
-  const highest = used.reduce((n, i) => {
-    const found = /(\d+)\s*$/.exec(i.number ?? '')
-    return found ? Math.max(n, Number(found[1])) : n
-  }, 0)
-  return `${word} ${Math.max(highest, used.length) + 1}`
+  const highest = used.reduce((n, i) => Math.max(n, numberIn(i.number) ?? 0), 0)
+  const next = Math.max(highest, used.length) + 1
+
+  // This category's own last numbered set is the format to copy, wording and all. Failing that,
+  // the last numbered set of any category, with its own word swapped for this one's.
+  const sameKind = newest(used.filter((i) => numberIn(i.number) !== null))
+  if (sameKind) return inFormatOf(sameKind.number ?? '', null, next)
+  const anyKind = newest(existing.filter((i) => numberIn(i.number) !== null))
+  return anyKind ? inFormatOf(anyKind.number ?? '', word, next) : `${word} ${next}`
 }
 
-/** The sets already on a project, for working out what to call the next one. */
-export async function existingSets(projectId: string): Promise<{ kind: IssuanceKind; number: string | null }[]> {
-  const { data, error } = await db().from('issuances').select('kind, number').eq('project_id', projectId)
+export interface SetName {
+  kind: IssuanceKind
+  number: string | null
+  issued_on?: string
+  created_at?: string | null
+}
+
+/**
+ * The counter at the end of a set's name, and how it is written.
+ *
+ * Sets are numbered two ways on real jobs — "Addendum 2" and "Addendum B" — so both count as a
+ * sequence. A lone trailing letter only counts when something non-alphabetic comes before it,
+ * which is what keeps the "m" of a bare "Addendum" from reading as number 13.
+ */
+function seqIn(name: string | null): { value: number; digits: number; letter: boolean } | null {
+  const text = (name ?? '').trim()
+  const num = /(\d+)\s*$/.exec(text)
+  if (num) return { value: Number(num[1]), digits: num[1].length, letter: false }
+  const alpha = /[^A-Za-z]([A-Za-z])$/.exec(text)
+  if (alpha) return { value: alpha[1].toUpperCase().charCodeAt(0) - 64, digits: 1, letter: true }
+  return null
+}
+
+const numberIn = (name: string | null) => seqIn(name)?.value ?? null
+
+/** The set most recently issued; the later-created one breaks a tie on the same date. */
+function newest(list: SetName[]): SetName | null {
+  return list.reduce<SetName | null>((best, i) => {
+    if (!best) return i
+    const a = `${i.issued_on ?? ''}${i.created_at ?? ''}`
+    const b = `${best.issued_on ?? ''}${best.created_at ?? ''}`
+    return a > b ? i : best
+  }, null)
+}
+
+/**
+ * `next`, written the way `previous` was written: the same wording in front of it, the same
+ * separator, the same zero padding, and letters where the project uses letters. "ASI-004" and 5
+ * gives "ASI-005"; "Addendum No. 2" and 3 gives "Addendum No. 3"; "Addendum B" and 3 gives
+ * "Addendum C"; a project numbering its sets plainly "2" gets "3".
+ *
+ * `word` swaps the leading category word, for borrowing one category's format for another —
+ * "Addendum #2" with word "ASI" gives "ASI #1". Pass null to keep the wording as it stands,
+ * which is what a set of the same category wants.
+ */
+export function inFormatOf(previous: string, word: string | null, next: number): string {
+  const text = previous.trim()
+  const seq = seqIn(text)
+  if (!seq) return word ? `${word} ${next}` : String(next)
+  const head = text.slice(0, text.length - (seq.letter ? 1 : seq.digits) - trailingSpace(text))
+  const front = word === null ? head : head.replace(/^[A-Za-z]+/, word)
+  // Letters run out at Z; past that it is a number, which is what a 27th addendum should be anyway.
+  const counter = seq.letter && next <= 26
+    ? String.fromCharCode(64 + next)
+    : String(next).padStart(seq.letter ? 1 : seq.digits, '0')
+  return `${front}${counter}`
+}
+
+/** Trailing blanks after the counter, which "Addendum 2 " has and most names don't. */
+const trailingSpace = (text: string) => (/\s+$/.exec(text)?.[0].length ?? 0)
+
+/** The sets already on a project, for working out what to call the next one and how to write it. */
+export async function existingSets(projectId: string): Promise<SetName[]> {
+  const { data, error } = await db().from('issuances').select('kind, number, issued_on, created_at').eq('project_id', projectId)
   if (error) throw error
-  return (data ?? []) as { kind: IssuanceKind; number: string | null }[]
+  return (data ?? []) as SetName[]
 }
 
 /** Keep the cover that came up with a set, so it isn't filed as a drawing. */

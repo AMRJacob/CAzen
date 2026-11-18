@@ -30,6 +30,8 @@ export interface ViewSheet {
   revisionLabel: string | null
   filePath: string
   superseded?: boolean
+  /** Discipline it is filed under, where that isn't the one its number implies. */
+  filedUnder?: string | null
 }
 
 interface Box { x: number; y: number; w: number; h: number }
@@ -322,7 +324,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
     [firm?.discipline_order, project],
   )
   const bands = useMemo(
-    () => (grouped ? groupByDiscipline(listed, (s) => s.number, order) : []),
+    () => (grouped ? groupByDiscipline(listed, (s) => s.number, order, (s) => s.filedUnder) : []),
     [grouped, listed, order],
   )
   const [shut, setShut] = useState<Record<string, boolean>>({})

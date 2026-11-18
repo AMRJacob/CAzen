@@ -41,6 +41,8 @@ export interface CurrentSheet {
   number: string
   title: string | null
   discipline: string | null
+  /** A discipline code this sheet is filed under, instead of the one its number implies. */
+  filed_under: string | null
   is_void: boolean
   revision_id: string
   revision_index: number

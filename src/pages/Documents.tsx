@@ -38,9 +38,22 @@ import { DisciplineOrderEditor } from '../components/DisciplineOrder'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+/** True when a sheet has been filed somewhere other than where its number would put it. */
+function movedAway(s: CurrentSheet, order: Discipline[]): boolean {
+  if (!s.filed_under) return false
+  return disciplineFor(s.number, order).discipline?.code !== s.filed_under.toUpperCase()
+}
+
+/** What the "leave it where its number puts it" option reads as, for the number being typed. */
+function byNumber(number: string, order: Discipline[]): string {
+  const d = disciplineFor(number, order).discipline
+  return d ? `By its number — ${d.code} · ${d.name}` : 'By its number'
+}
+
 const toView = (s: CurrentSheet): ViewSheet => ({
   sheetId: s.sheet_id,
   number: s.number, title: s.title, revisionId: s.revision_id, revisionLabel: s.revision_label, filePath: s.file_path,
+  filedUnder: s.filed_under,
 })
 
 export default function Documents() {
@@ -102,13 +115,13 @@ export default function Documents() {
     return () => window.clearTimeout(t)
   }, [current, query, allRevs])
 
-  const ordered = useMemo(() => sortSheets(sheets, (s) => s.number, order), [sheets, order])
+  const ordered = useMemo(() => sortSheets(sheets, (s) => s.number, order, (s) => s.filed_under), [sheets, order])
   const viewSheets = useMemo(() => ordered.map(toView), [ordered])
   const visible = useMemo(() => {
     const q = query.trim().toUpperCase()
     return q ? ordered.filter((s) => s.number.includes(q) || s.number.replace(/-/g, '').includes(q.replace(/-/g, '')) || (s.title ?? '').toUpperCase().includes(q)) : ordered
   }, [ordered, query])
-  const groups = useMemo(() => groupByDiscipline(visible, (s) => s.number, order), [visible, order])
+  const groups = useMemo(() => groupByDiscipline(visible, (s) => s.number, order, (s) => s.filed_under), [visible, order])
   const cols = useColumnWidths(REGISTER_COLUMNS)
 
   if (!current) {
@@ -229,7 +242,7 @@ export default function Documents() {
                 label={asOfRows ? `Set as of ${usDate(asOf).replace(/\//g, '-')}` : 'Record set'}
                 gather={async () => (asOfRows
                   ? asOfRows.map((r) => ({ number: r.sheet_number, title: r.sheet_title, revisionLabel: null, filePath: r.file_path }))
-                  : sheets.map((s) => ({ number: s.number, title: s.title, revisionLabel: s.revision_label, filePath: s.file_path })))}
+                  : sheets.map((s) => ({ number: s.number, title: s.title, revisionLabel: s.revision_label, filePath: s.file_path, filedUnder: s.filed_under })))}
               />
             </div>
           )}
@@ -260,7 +273,7 @@ export default function Documents() {
                 {groups.map((g) => (
                   <Fragment key={g.key}>
                     <tr className="group"><td colSpan={7}>{g.label}</td></tr>
-                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })} />)}
+                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} order={order} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })} />)}
                   </Fragment>
                 ))}
               </tbody>
@@ -363,15 +376,15 @@ function DownloadSet({ project, order, label, date, gather, className }: {
   )
 }
 
-function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: CurrentSheet; project: Project; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void }) {
+function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet: CurrentSheet; project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void }) {
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [editing, setEditing] = useState<{ number: string; title: string } | null>(null)
+  const [editing, setEditing] = useState<{ number: string; title: string; filedUnder: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
-  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: sheet.title ?? '' }) }
+  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: sheet.title ?? '', filedUnder: sheet.filed_under ?? '' }) }
 
   const onEditKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
@@ -417,7 +430,10 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
         onClick={(e) => { if (!editing && !(e.target as HTMLElement).closest('button, a')) onOpen(toView(sheet)) }}
         onContextMenu={(e) => { e.preventDefault(); startEdit() }}
         onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(toView(sheet)) } }}>
-        <td className="mono">{sheet.number}</td>
+        <td className="mono">
+          {sheet.number}
+          {movedAway(sheet, order) && <span className="filed-tag" title={`Filed under ${sheet.filed_under}, not where its number puts it`}>filed {sheet.filed_under}</span>}
+        </td>
         <td className="col-title">{sheet.title ?? ''}</td>
         <td>{sheet.revision_label || sheet.revision_index}</td>
         <td className="col-from">{issuanceText(sheet.issuance_kind, sheet.issuance_number)}</td>
@@ -446,6 +462,15 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
               <input value={editing.title} aria-label="Sheet title"
                 onChange={(e) => setEditing({ ...editing, title: e.target.value })} onKeyDown={onEditKey} />
             </label>
+            {/* Where the sheet is filed, for the sheets whose numbers don't say their trade. The
+                number stays as printed; only the list it appears in changes. */}
+            <label className="f-filed">Filed under
+              <select value={editing.filedUnder} aria-label="Filed under which discipline"
+                onChange={(e) => setEditing({ ...editing, filedUnder: e.target.value })} onKeyDown={onEditKey}>
+                <option value="">{byNumber(editing.number, order)}</option>
+                {order.map((d) => <option key={d.code} value={d.code}>{d.code} · {d.name}</option>)}
+              </select>
+            </label>
             <div className="sheet-edit-go">
               <button className="primary-lite" onClick={saveEdit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
               <button onClick={() => setEditing(null)} disabled={saving}>Cancel</button>
@@ -454,7 +479,9 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
           <p className="muted small">
             {problem
               ? <span className="bad-text">{problem}</span>
-              : <>Fixes the sheet and this revision’s title. Earlier revisions keep the title they were issued with, and the stored file keeps its own name.</>}
+              : editing.filedUnder
+                ? <>Filed under {editing.filedUnder} whatever its number says, so it appears there in the drawing list, the sheet index and a downloaded set. The number stays {editing.number.trim() || 'as it is'}.</>
+                : <>Fixes the sheet and this revision’s title. Earlier revisions keep the title they were issued with, and the stored file keeps its own name.</>}
           </p>
           </div>
         </td></tr>

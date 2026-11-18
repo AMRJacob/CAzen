@@ -15,6 +15,8 @@ export interface BundleSheet {
   title: string | null
   revisionLabel: string | null
   filePath: string
+  /** Discipline it is filed under, where that isn't the one its number implies. */
+  filedUnder?: string | null
 }
 
 export interface Bundle {
@@ -36,7 +38,7 @@ export async function bundleSheets(
   order: Discipline[],
   onProgress?: (done: number, total: number, sheet: string) => void,
 ): Promise<Bundle> {
-  const ordered = sortSheets(sheets, (s) => s.number, order)
+  const ordered = sortSheets(sheets, (s) => s.number, order, (s) => s.filedUnder)
   const out = await PDFDocument.create()
   const missing: string[] = []
 

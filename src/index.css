@@ -747,6 +747,12 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 .chip:hover { border-color: var(--moss); background: var(--moss-soft); }
 @media (pointer: coarse) { .chip { padding: 8px 14px; font-size: 14px; } }
 
+.sheet-edit .f-filed { flex: 0 1 220px; }
+/* A sheet filed somewhere its number doesn't say: marked, so the list doesn't read as a bug. */
+.filed-tag {
+  margin-left: 6px; padding: 1px 5px; font-size: 10.5px; font-family: inherit; letter-spacing: 0.02em;
+  border: 1px solid var(--line); border-radius: 4px; color: var(--muted); vertical-align: 1px;
+}
 .sheet-edit .f-kind { flex: 0 1 170px; }
 .sheet-edit .f-date { flex: 0 1 170px; }
 .sheet-edit select {

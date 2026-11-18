@@ -59,8 +59,18 @@ export function cleanOrder(list: Discipline[]): Discipline[] {
 /**
  * The discipline a sheet belongs to: the longest code that its leading letters start with,
  * so "FP-101" matches FP when FP is listed and F when it isn't.
+ *
+ * `filedUnder` overrides the number. A sheet numbered by something other than trade — a
+ * consultant's own series, a detail book — can be filed where it belongs without changing the
+ * number printed on it. An override naming a code the order doesn't list is ignored, so dropping
+ * a discipline from the order doesn't hide the sheets somebody filed under it.
  */
-export function disciplineFor(sheetNumber: string, order: Discipline[]): { index: number; discipline: Discipline | null } {
+export function disciplineFor(sheetNumber: string, order: Discipline[], filedUnder?: string | null): { index: number; discipline: Discipline | null } {
+  if (filedUnder) {
+    const code = filedUnder.toUpperCase()
+    const at = order.findIndex((d) => d.code === code)
+    if (at >= 0) return { index: at, discipline: order[at] }
+  }
   // A cover sheet with no number of its own (see titleblocks.COVER) comes before everything.
   if (sheetNumber.toUpperCase() === 'COVER') return { index: -1, discipline: { code: 'COVER', name: 'Cover' } }
   const letters = sheetNumber.toUpperCase().match(/^[A-Z]+/)?.[0] ?? ''
@@ -74,20 +84,23 @@ export function disciplineFor(sheetNumber: string, order: Discipline[]): { index
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
-/** Sort by discipline order, then by sheet number within a discipline (A-101 before A-102 before A-201). */
-export function sortSheets<T>(items: T[], numberOf: (t: T) => string, order: Discipline[]): T[] {
+/**
+ * Sort by discipline order, then by sheet number within a discipline (A-101 before A-102 before
+ * A-201). `filedUnderOf` reads a sheet's filing override, where the list has one.
+ */
+export function sortSheets<T>(items: T[], numberOf: (t: T) => string, order: Discipline[], filedUnderOf?: (t: T) => string | null | undefined): T[] {
   return items
-    .map((t) => ({ t, n: numberOf(t), d: disciplineFor(numberOf(t), order).index }))
+    .map((t) => ({ t, n: numberOf(t), d: disciplineFor(numberOf(t), order, filedUnderOf?.(t)).index }))
     .sort((a, b) => a.d - b.d || collator.compare(a.n, b.n))
     .map((x) => x.t)
 }
 
 /** Group sorted items under their discipline, for headed lists. Unlisted letters come last, under their letters. */
-export function groupByDiscipline<T>(items: T[], numberOf: (t: T) => string, order: Discipline[]) {
+export function groupByDiscipline<T>(items: T[], numberOf: (t: T) => string, order: Discipline[], filedUnderOf?: (t: T) => string | null | undefined) {
   const groups: { key: string; label: string; items: T[] }[] = []
-  for (const t of sortSheets(items, numberOf, order)) {
+  for (const t of sortSheets(items, numberOf, order, filedUnderOf)) {
     const n = numberOf(t)
-    const { discipline } = disciplineFor(n, order)
+    const { discipline } = disciplineFor(n, order, filedUnderOf?.(t))
     const key = discipline?.code ?? (n.toUpperCase().match(/^[A-Z]+/)?.[0] || '#')
     const label = discipline?.code === 'COVER' ? 'Cover' : discipline ? `${discipline.code} · ${discipline.name}` : key === '#' ? 'Other' : `${key} · Not in sheet order`
     const last = groups[groups.length - 1]
