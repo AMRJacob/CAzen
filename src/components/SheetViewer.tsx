@@ -7,12 +7,12 @@ import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
-import { effectiveOrder, groupByDiscipline, type Discipline } from '../lib/disciplines'
+import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } from '../lib/disciplines'
 import { PREFS, usePref } from '../lib/prefs'
 import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
 import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, type Markup, type Point } from '../lib/markups'
-import { listRevisions } from '../lib/sheets'
+import { listRevisions, renameSheet } from '../lib/sheets'
 import type { SheetRevision } from '../lib/types'
 
 /** What to call a revision in the toolbar: what it was labelled, else where it sits. */
@@ -50,13 +50,15 @@ const norm = (s: string) => s.toUpperCase().replace(/[\s-]/g, '')
  * through any change of size, so unfolding the phone — which re-lays out the page with no reload —
  * keeps the same detail in view instead of jumping back to the corner of the sheet.
  */
-export function SheetViewer({ project, sheets, start, highlight, onClose }: {
+export function SheetViewer({ project, sheets, start, highlight, onClose, onSheetChanged }: {
   project: ProjectStore
   /** Current sheets in set order, for links and next/previous. */
   sheets: ViewSheet[]
   start: ViewSheet
   highlight?: string
   onClose: () => void
+  /** A sheet's number, title or filing changed here; the register behind needs re-reading. */
+  onSheetChanged?: () => void
 }) {
   const [stack, setStack] = useState<ViewSheet[]>([start])
   const sheet = stack[stack.length - 1]
@@ -71,6 +73,10 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const [hl, setHl] = useState(highlight ?? '')
   const [indexOpen, setIndexOpen] = useState(false)
   const [more, setMore] = useState(false)
+  // Correcting what a sheet is called without leaving the sheet.
+  const [details, setDetails] = useState<{ number: string; title: string; filedUnder: string } | null>(null)
+  const [detailsBusy, setDetailsBusy] = useState(false)
+  const [detailsProblem, setDetailsProblem] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [markups, setMarkups] = useState<Markup[]>([])
   const [tool, setTool] = useState<Tool>(null)
@@ -338,6 +344,52 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
   const isShut = (key: string) => !q && key !== here && !!shut[key]
   const stepTo = (i: number) => go(sheets[i])
 
+  // Collapsing one band at a time to get back to a short list is most of the work it saves.
+  const allShut = bands.length > 1 && bands.every((g) => shut[g.key])
+  const foldAll = () => setShut(allShut ? {} : Object.fromEntries(bands.map((g) => [g.key, true])))
+
+  // Follow the sheet on screen. Browsing to a drawing through a callout, a search or the arrow
+  // keys can land anywhere in a ninety-sheet list, and an index still sitting where it was is no
+  // help in working out where that is.
+  const indexList = useRef<HTMLDivElement>(null)
+  const hereEl = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const btn = hereEl.current
+    const box = indexList.current
+    if (!btn || !box) return
+    const b = btn.getBoundingClientRect()
+    const r = box.getBoundingClientRect()
+    // The list runs down the side on most screens and across the bottom on an unfolded phone,
+    // so centre it on whichever axis actually scrolls.
+    if (box.scrollHeight > box.clientHeight + 1 && (b.top < r.top + 4 || b.bottom > r.bottom - 4)) {
+      box.scrollTop += b.top - r.top - (r.height - b.height) / 2
+    }
+    if (box.scrollWidth > box.clientWidth + 1 && (b.left < r.left + 4 || b.right > r.right - 4)) {
+      box.scrollLeft += b.left - r.left - (r.width - b.width) / 2
+    }
+  }, [sheet.number, indexOpen, grouped, bands, shut, q])
+
+  async function saveDetails() {
+    if (!details || !sheet.sheetId || detailsBusy) return
+    setDetailsBusy(true)
+    setDetailsProblem(null)
+    try {
+      await renameSheet(sheet.sheetId, details, sheet.revisionId)
+      const number = details.number.trim()
+      const title = details.title.trim() || null
+      const filedUnder = details.filedUnder.trim().toUpperCase() || null
+      // The register behind re-reads itself, but the sheet on screen says the old name until it
+      // does, so the open stack is corrected here too.
+      setStack((st) => st.map((v) => (v.sheetId === sheet.sheetId ? { ...v, number, title, filedUnder } : v)))
+      setDetails(null)
+      onSheetChanged?.()
+    } catch (e) {
+      setDetailsProblem(message(e))
+    } finally {
+      setDetailsBusy(false)
+    }
+  }
+
   return (
     <div className="sheet-viewer" role="dialog" aria-label={`Sheet ${sheet.number}`}>
       <div className="sv-bar">
@@ -426,6 +478,15 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
               <button className={linkMode ? 'on' : ''} onClick={() => { setLinkMode(!linkMode); setPending(null); setMore(false) }}>
                 {linkMode ? 'Done linking' : 'Add link'}
               </button>
+              <button disabled={!sheet.sheetId}
+                title={sheet.sheetId ? 'Correct this sheet’s number, title or filing' : 'Open this sheet from the register to change it'}
+                onClick={() => {
+                  setMore(false)
+                  setDetailsProblem(null)
+                  setDetails({ number: sheet.number, title: sheet.title ?? '', filedUnder: sheet.filedUnder ?? '' })
+                }}>
+                Sheet details…
+              </button>
               <button onClick={() => { setMore(false); openStoredPdf(project, sheet.filePath).catch((e) => setError(message(e))) }}>
                 Open PDF
               </button>
@@ -436,6 +497,32 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           <button onClick={onClose} aria-label="Close">Close</button>
         </div>
       </div>
+      {details && (
+        <div className="sv-hint sv-details">
+          <label>Sheet
+            <input className="mono" value={details.number} autoFocus aria-label="Sheet number"
+              onChange={(e) => setDetails({ ...details, number: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveDetails(); if (e.key === 'Escape') setDetails(null) }} />
+          </label>
+          <label className="sv-details-title">Title
+            <input value={details.title} aria-label="Sheet title"
+              onChange={(e) => setDetails({ ...details, title: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveDetails(); if (e.key === 'Escape') setDetails(null) }} />
+          </label>
+          <label>Filed under
+            <select value={details.filedUnder} aria-label="Filed under which discipline"
+              onChange={(e) => setDetails({ ...details, filedUnder: e.target.value })}>
+              <option value="">{byNumberLabel(details.number, order)}</option>
+              {order.map((d) => <option key={d.code} value={d.code}>{d.code} · {d.name}</option>)}
+            </select>
+          </label>
+          <button className="primary" onClick={() => void saveDetails()} disabled={detailsBusy || !details.number.trim()}>
+            {detailsBusy ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={() => setDetails(null)} disabled={detailsBusy}>Cancel</button>
+          {detailsProblem && <span className="bad-text">{detailsProblem}</span>}
+        </div>
+      )}
       {markupsOff && tool !== null && <div className="sv-hint">{markupsOff}</div>}
       {settingScale && !pendingScale && (
         <div className="sv-hint">Draw a line along something you know the length of — a grid bay, a room, a wall.</div>
@@ -496,7 +583,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
           <div className="sv-jump">
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={`Jump to a sheet (${sheets.length})`} aria-label="Filter sheets" />
           </div>
-          <div className="sv-index-list">
+          <div className="sv-index-list" ref={indexList}>
             {listed.length === 0 && <p className="sv-index-empty">No sheet matches “{filter.trim()}”.</p>}
             {grouped
               ? bands.map((g) => (
@@ -506,21 +593,32 @@ export function SheetViewer({ project, sheets, start, highlight, onClose }: {
                     <span className="sv-band-name">{g.label}</span>
                     <span className="sv-band-count">{g.items.length}</span>
                   </button>
-                  {!isShut(g.key) && g.items.map((s) => (
-                    <button key={s.number} className={norm(s.number) === norm(sheet.number) ? 'on' : ''} onClick={() => go(s)}>
-                      <span className="sv-ix-number">{s.number}</span>
-                      {s.title && <span className="sv-ix-title">{s.title}</span>}
-                    </button>
-                  ))}
+                  {!isShut(g.key) && g.items.map((s) => {
+                    const on = norm(s.number) === norm(sheet.number)
+                    return (
+                      <button key={s.number} ref={on ? hereEl : undefined} className={on ? 'on' : ''} onClick={() => go(s)}>
+                        <span className="sv-ix-number">{s.number}</span>
+                        {s.title && <span className="sv-ix-title">{s.title}</span>}
+                      </button>
+                    )
+                  })}
                 </div>
               ))
-              : listed.map((s) => (
-                <button key={s.number} className={norm(s.number) === norm(sheet.number) ? 'on' : ''} onClick={() => go(s)}>
-                  <span className="sv-ix-number">{s.number}</span>
-                  {s.title && <span className="sv-ix-title">{s.title}</span>}
-                </button>
-              ))}
+              : listed.map((s) => {
+                const on = norm(s.number) === norm(sheet.number)
+                return (
+                  <button key={s.number} ref={on ? hereEl : undefined} className={on ? 'on' : ''} onClick={() => go(s)}>
+                    <span className="sv-ix-number">{s.number}</span>
+                    {s.title && <span className="sv-ix-title">{s.title}</span>}
+                  </button>
+                )
+              })}
           </div>
+          {grouped && bands.length > 1 && (
+            <div className="sv-index-foot">
+              <button className="link" onClick={foldAll}>{allShut ? 'Expand all' : 'Collapse all'}</button>
+            </div>
+          )}
         </aside>
         {indexOpen && <button className="sv-scrim" aria-label="Close the sheet list" onClick={() => setIndexOpen(false)} />}
         <div className="sv-scroll" ref={scroller}>

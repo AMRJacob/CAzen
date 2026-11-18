@@ -17,7 +17,7 @@ import {
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
 import { listIssuanceSheets } from '../lib/sheets'
-import { disciplineFor } from '../lib/disciplines'
+import { byNumberLabel, disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
@@ -44,12 +44,6 @@ const today = () => new Date().toISOString().slice(0, 10)
 function movedAway(s: CurrentSheet, order: Discipline[]): boolean {
   if (!s.filed_under) return false
   return disciplineFor(s.number, order).discipline?.code !== s.filed_under.toUpperCase()
-}
-
-/** What the "leave it where its number puts it" option reads as, for the number being typed. */
-function byNumber(number: string, order: Discipline[]): string {
-  const d = disciplineFor(number, order).discipline
-  return d ? `By its number — ${d.code} · ${d.name}` : 'By its number'
 }
 
 const toView = (s: CurrentSheet): ViewSheet => ({
@@ -285,7 +279,7 @@ export default function Documents() {
       )}
 
       {viewing && (
-        <SheetViewer project={current} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} />
+        <SheetViewer project={current} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} onSheetChanged={load} />
       )}
     </section>
   )
@@ -469,7 +463,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
             <label className="f-filed">Filed under
               <select value={editing.filedUnder} aria-label="Filed under which discipline"
                 onChange={(e) => setEditing({ ...editing, filedUnder: e.target.value })} onKeyDown={onEditKey}>
-                <option value="">{byNumber(editing.number, order)}</option>
+                <option value="">{byNumberLabel(editing.number, order)}</option>
                 {order.map((d) => <option key={d.code} value={d.code}>{d.code} · {d.name}</option>)}
               </select>
             </label>

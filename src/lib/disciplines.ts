@@ -109,3 +109,9 @@ export function groupByDiscipline<T>(items: T[], numberOf: (t: T) => string, ord
   }
   return groups
 }
+
+/** What the "file it where its number says" choice reads as, for a number being typed. */
+export function byNumberLabel(sheetNumber: string, order: Discipline[]): string {
+  const d = disciplineFor(sheetNumber, order).discipline
+  return d ? `By its number — ${d.code} · ${d.name}` : 'By its number'
+}
