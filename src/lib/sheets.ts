@@ -36,6 +36,44 @@ export async function listSheetsAsOf(projectId: string, date: string) {
   return (data ?? []) as { sheet_number: string; sheet_title: string | null; revision_index: number; file_path: string; issued_on: string }[]
 }
 
+/** The discipline CAzen files a sheet under, from the characters before the first digit or dash. */
+export const disciplineOf = (number: string) => (number.trim().match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase() || null
+
+/**
+ * Correct a sheet's number or title after the fact — a typo at upload, a titleblock read wrong.
+ *
+ * The number and title live on the sheet, and each revision also keeps the title it carried when
+ * it was issued. A correction here fixes the sheet and the revision on screen, and leaves the
+ * other revisions' titles alone: those are a record of what that issue actually said.
+ */
+export async function renameSheet(
+  sheetId: string,
+  next: { number: string; title: string },
+  revisionId?: string,
+): Promise<void> {
+  const number = next.number.trim()
+  const title = next.title.trim()
+  if (!number) throw new Error('A sheet needs a number.')
+
+  const { error } = await db()
+    .from('sheets')
+    .update({ number, title: title || null, discipline: disciplineOf(number) })
+    .eq('id', sheetId)
+  if (error) {
+    // unique (project_id, number)
+    if (error.code === '23505') throw new Error(`${number} is already used by another sheet in this project.`)
+    throw error
+  }
+
+  if (revisionId) {
+    const { error: revError } = await db()
+      .from('sheet_revisions')
+      .update({ title_at_rev: title || null })
+      .eq('id', revisionId)
+    if (revError) throw revError
+  }
+}
+
 export async function listRevisions(sheetId: string): Promise<SheetRevision[]> {
   const { data, error } = await db()
     .from('sheet_revisions')

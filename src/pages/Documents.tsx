@@ -9,7 +9,7 @@ import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
-  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, saveIssuance, searchSheets,
+  deleteIssuance, deleteRevision, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameSheet, saveIssuance, searchSheets,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
@@ -18,7 +18,6 @@ import { disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
 import { openFile } from '../lib/files'
-import { ProjectFolder } from '../components/ProjectFolder'
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { TitleblockEditor } from '../components/TitleblockEditor'
@@ -125,8 +124,6 @@ export default function Documents() {
         </div>
         {!uploading && <button className="primary" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
       </div>
-
-      <ProjectFolder project={current} />
 
       {uploading && firm && (
         <UploadIssuance
@@ -335,6 +332,32 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ number: string; title: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: sheet.title ?? '' }) }
+
+  const onEditKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
+    if (e.key === 'Escape') { e.preventDefault(); setEditing(null) }
+  }
+
+  async function saveEdit() {
+    if (!editing || saving) return
+    setSaving(true)
+    setProblem(null)
+    try {
+      await renameSheet(sheet.sheet_id, editing, sheet.revision_id)
+      setEditing(null)
+      setHistory(null)
+      onChanged()
+    } catch (e) {
+      setProblem(message(e))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function toggle() {
     if (!open && !history) setHistory(await listRevisions(sheet.sheet_id))
@@ -351,9 +374,10 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
     <>
       {/* The row is the way in. Anything else on it — the revisions toggle — stops the click
           getting this far, so only the row's own space opens the sheet. */}
-      <tr className="opens" tabIndex={0} role="button" aria-label={`Open ${sheet.number}`}
-        onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) onOpen(toView(sheet)) }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(toView(sheet)) } }}>
+      <tr className={`opens${editing ? ' editing' : ''}`} tabIndex={0} role="button" aria-label={`Open ${sheet.number}`}
+        onClick={(e) => { if (!editing && !(e.target as HTMLElement).closest('button, a')) onOpen(toView(sheet)) }}
+        onContextMenu={(e) => { e.preventDefault(); startEdit() }}
+        onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(toView(sheet)) } }}>
         <td className="mono">{sheet.number}</td>
         <td className="col-title">{sheet.title ?? ''}</td>
         <td>{sheet.revision_label || sheet.revision_index}</td>
@@ -364,8 +388,36 @@ function SheetRow({ sheet, project, isAdmin, onChanged, onOpen }: { sheet: Curre
             ? <button className="link" onClick={toggle}>{open ? 'Hide' : sheet.revision_count > 1 ? `${sheet.revision_count} revisions` : 'original'}</button>
             : <span className="muted">original</span>}
         </td>
-        <td className="right" />
+        <td className="right nowrap">
+          {!editing && <button className="link row-edit" onClick={startEdit} title={`Rename ${sheet.number}`}>Rename</button>}
+        </td>
       </tr>
+
+      {/* Correcting a number or title read wrong off a titleblock. It opens under the row rather
+          than inside it, so the fields have room to be typed into on a phone. */}
+      {editing && (
+        <tr className="confirm-row"><td colSpan={7}>
+          <div className="sheet-edit">
+            <label className="f-number">Sheet
+              <input value={editing.number} autoFocus aria-label="Sheet number"
+                onChange={(e) => setEditing({ ...editing, number: e.target.value })} onKeyDown={onEditKey} />
+            </label>
+            <label className="f-title">Title
+              <input value={editing.title} aria-label="Sheet title"
+                onChange={(e) => setEditing({ ...editing, title: e.target.value })} onKeyDown={onEditKey} />
+            </label>
+            <div className="sheet-edit-go">
+              <button className="primary-lite" onClick={saveEdit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => setEditing(null)} disabled={saving}>Cancel</button>
+            </div>
+          </div>
+          <p className="muted small">
+            {problem
+              ? <span className="bad-text">{problem}</span>
+              : <>Fixes the sheet and this revision’s title. Earlier revisions keep the title they were issued with, and the stored file keeps its own name.</>}
+          </p>
+        </td></tr>
+      )}
       {open && history?.map((r) => (
         <Fragment key={r.id}>
           <tr className="history opens" tabIndex={0} role="button"

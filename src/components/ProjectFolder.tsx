@@ -82,21 +82,30 @@ export function ProjectFolder({ project, compact = false }: { project: Project; 
         : null
     }
     return (
-      <div className={`folder-bar ${r2 === false ? 'warn' : ''}`}>
+      <div className={`folder-bar stacked ${r2 === false ? 'warn' : ''}`}>
+        <h3>Where this project’s files are kept</h3>
         {r2 === false
           ? <span>CAzen file storage isn’t set up yet: the Cloudflare details still need adding in Supabase (see the setup guide).</span>
-          : <span>Files are saved in CAzen file storage, so they open on your phone too.</span>}
+          : <span>In CAzen file storage, which is what phones and anyone off the office network read from. That is the copy the app always uses.</span>}
         {folderSupported && (
           status === 'ready' ? (
             <>
-              <span className="muted">Copies also go to {folderName}\{ROOT} on this computer{backedUp ? '; project data backed up today' : ''}.</span>
-              <button onClick={backfill} disabled={busy}>Copy to project folder</button>
-              <button className="link" onClick={() => pick()} disabled={busy}>Change folder</button>
+              <span className="muted small">A second copy is also written to {folderName}\{ROOT} on this computer, so the files sit in the project’s own folder for anyone working off the shared drive{backedUp ? '. Project data backed up today' : ''}. CAzen never reads from there.</span>
+              <div className="folder-actions">
+                <button onClick={backfill} disabled={busy}>Copy to project folder</button>
+                <button className="link" onClick={() => pick()} disabled={busy}>Change folder</button>
+              </div>
             </>
           ) : status === 'ask' ? (
-            <button onClick={() => run(async () => { await reconnectFolder(project.id) })} disabled={busy}>Allow copies to {project.folder_name ?? 'the project folder'}</button>
+            <>
+              <span className="muted small">This computer also keeps a copy in the project folder, but the browser needs permission again after a restart.</span>
+              <div className="folder-actions"><button onClick={() => run(async () => { await reconnectFolder(project.id) })} disabled={busy}>Allow copies to {project.folder_name ?? 'the project folder'}</button></div>
+            </>
           ) : (
-            <button onClick={() => pick()} disabled={busy}>Keep copies in the project folder</button>
+            <>
+              <span className="muted small">Optional: also drop a copy of every file into the project’s folder on the shared drive, so they’re there for anyone who doesn’t use CAzen. Desktop Chrome or Edge only, and it’s remembered per computer.</span>
+              <div className="folder-actions"><button onClick={() => pick()} disabled={busy}>Keep copies in the project folder</button></div>
+            </>
           )
         )}
         {note && <span className="small">{note}</span>}

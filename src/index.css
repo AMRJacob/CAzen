@@ -391,6 +391,11 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .folder-bar.warn { background: #f8efd9; border-color: #ecdcb3; color: #5d4a1d; }
 .folder-bar button { padding: 5px 12px; font-size: 13px; }
 .folder-bar button.primary-lite { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+/* In project settings it's a card to read, not a strip to glance past. */
+.folder-bar.stacked { flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px 16px; }
+.folder-bar.stacked h3 { margin: 0; font-size: 14px; }
+.folder-bar.stacked .small { line-height: 1.5; }
+.folder-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 3px; }
 
 .storage-card { margin-top: 28px; max-width: 760px; }
 .storage-card h2 { margin-top: 0; }
@@ -706,6 +711,30 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 tr.opens { cursor: pointer; }
 tr.opens:hover td { background: var(--panel); }
 tr.opens:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }
+
+/* Correcting a number or title read wrong off a titleblock. Rename stays out of the way until
+   the row is under the pointer; right-clicking the row gets there too. */
+.row-edit { opacity: 0; }
+tr.opens:hover .row-edit,
+tr.opens:focus-within .row-edit,
+.row-edit:focus-visible { opacity: 1; }
+@media (hover: none) { .row-edit { opacity: 1; } }
+
+tr.opens.editing td { background: var(--moss-soft); cursor: default; }
+
+.sheet-edit { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.sheet-edit label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.sheet-edit input {
+  min-width: 0; box-sizing: border-box; padding: 8px 10px;
+  font: inherit; font-size: 16px; /* 16px keeps iOS from zooming the page in */
+  border: 1px solid var(--line); border-radius: 7px; background: var(--paper);
+}
+.sheet-edit input:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
+.sheet-edit .f-number { flex: 0 1 150px; }
+.sheet-edit .f-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.sheet-edit .f-title { flex: 1 1 260px; }
+.sheet-edit-go { display: flex; gap: 8px; flex: 0 0 auto; }
+.sheet-edit-go button { padding: 8px 14px; }
 .set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: 0 0 10px; }
 .notice.small { padding: 8px 10px; font-size: 13px; margin-top: 8px; }
 
@@ -755,6 +784,13 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
   /* The register: which sheet, what it is, which revision. The rest is desk reading. */
   .register td.col-history, .register th.col-history { display: none; }
   .register td, .register th { padding: 12px 8px; }
+
+  /* Typing a sheet title into a table cell this narrow is hopeless, so the edit row stops being
+     a row: number, then title, then the buttons, each with the full width to itself. */
+  .register tr.editing { display: block; padding: 10px 8px; }
+  .register tr.editing td { display: block; width: auto; border: none; padding: 4px 0; }
+  .register tr.editing td[colspan] { padding-top: 2px; }
+  .register tr.editing .cell-edit { font-size: 16px; padding: 9px 10px; } /* 16px keeps iOS from zooming in */
   .register td.col-title { font-size: 13.5px; }
 
   /* The sidebar is navigation, not a profile. */
