@@ -25,12 +25,13 @@ function formHeader(title: string, rows: [string, string][]): El[] {
   return els
 }
 
-function signature(y: number, key: string, label = 'By:'): El[] {
+function signature(y: number, key: string, label = 'By:', labelWidth = 30): El[] {
+  const line = 316 + labelWidth
   return [
-    labeled(316, y, 260, key, label, 30, { labelAlign: 'left' }),
-    hline(346, y + 13, 230, { stroke: 'ink', lineWidth: 0.5 }),
-    labeled(316, y + 20, 260, 'doc.date', 'Date:', 30, { labelAlign: 'left' }),
-    hline(346, y + 33, 230, { stroke: 'ink', lineWidth: 0.5 }),
+    labeled(316, y, 260, key, label, labelWidth, { labelAlign: 'left' }),
+    hline(line, y + 13, 576 - line, { stroke: 'ink', lineWidth: 0.5 }),
+    labeled(316, y + 20, 260, 'doc.date', 'Date:', labelWidth, { labelAlign: 'left' }),
+    hline(line, y + 33, 576 - line, { stroke: 'ink', lineWidth: 0.5 }),
   ]
 }
 
@@ -136,6 +137,39 @@ const MEETING_NOTES = (): Layout => ({
   ],
 })
 
+/* Where the contract total actually moves. The sums sit in a column so they read as the
+   arithmetic they are, and the signatures are the point of the page. */
+const CHANGE_ORDER = (): Layout => ({
+  useLetterhead: true,
+  continuation: DEFAULT_CONTINUATION,
+  elements: [
+    ...formHeader('Change Order', [['Project:', 'project.name'], ['Owner:', 'co.owner'], ['Contractor:', 'co.contractor'], ['Change Order #:', 'co.number']]),
+    labeled(36, 126, 540, 'co.title', 'Subject:', 70, { bold: true }),
+    labeled(36, 144, 540, 'doc.date', 'Date:', 70),
+    hline(36, 164, 540),
+
+    heading(36, 174, 'The Contract is changed as follows:'),
+    field(36, 190, 540, 230, 'co.description', { size: 9, rich: true, flow: true, headings: 'plain' }),
+
+    hline(36, 430, 540),
+    labeled(36, 440, 400, 'co.original_sum', 'Original contract sum:', 250, { labelAlign: 'left', align: 'right' }),
+    labeled(36, 458, 400, 'co.previous_sum', 'Net change by previously authorized change orders:', 250, { labelAlign: 'left', align: 'right' }),
+    labeled(36, 476, 400, 'co.before_sum', 'Contract sum before this change order:', 250, { labelAlign: 'left', align: 'right' }),
+    labeled(36, 494, 400, 'co.this_sum', 'Amount of this change order:', 250, { labelAlign: 'left', align: 'right', bold: true }),
+    labeled(36, 512, 400, 'co.new_sum', 'New contract sum:', 250, { labelAlign: 'left', align: 'right', bold: true }),
+    hline(36, 530, 400),
+    labeled(36, 540, 400, 'co.time_change', 'Change in contract time:', 250, { labelAlign: 'left', align: 'right' }),
+    labeled(36, 558, 400, 'co.completion', 'Substantial completion date:', 250, { labelAlign: 'left', align: 'right' }),
+
+    hline(36, 584, 540),
+    text(36, 592, 540, 22, 'This change order is subject to the terms of the Contract Documents. The Contract Sum and Contract Time stated above are the full compensation and time for the change described.', { size: 7.5, color: 'muted' }),
+    // Three signatures and their dates: 42pt each, finishing clear of the page number.
+    ...signature(620, 'co.architect', 'Architect:', 64),
+    ...signature(662, 'co.contractor', 'Contractor:', 64),
+    ...signature(704, 'co.owner', 'Owner:', 64),
+  ],
+})
+
 function simpleForm(title: string, prefix: string, numberLabel: string, body: El[]): Layout {
   return {
     useLetterhead: true,
@@ -219,6 +253,7 @@ export function defaultLayout(kind: TemplateKind): Layout {
     case 'submittal_cover': return SUBMITTAL()
     case 'field_report': return FIELD_REPORT()
     case 'meeting_notes': return MEETING_NOTES()
+    case 'change_order': return CHANGE_ORDER()
     case 'asi': return ASI()
     case 'rfi_response': return RFI()
     case 'pr': return PR()

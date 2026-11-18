@@ -27,6 +27,7 @@ const SECTION_FOR: Record<FormKind, string> = {
   submittal_cover: SECTIONS.submittals, asi: SECTIONS.asis, rfi_response: SECTIONS.rfis,
   pr: SECTIONS.prs, ccd: SECTIONS.ccds, field_report: SECTIONS.fieldReports,
   meeting_notes: SECTIONS.meetings,
+  change_order: SECTIONS.changeOrders,
 }
 
 export async function saveIssued(project: ProjectStore, kind: FormKind, values: Record<string, string>, pdf: Uint8Array) {
@@ -50,6 +51,7 @@ export const openIssued = (project: ProjectStore, path: string) => openFile(proj
 const PREFIX: Record<FormKind, string> = {
   submittal_cover: '', asi: 'ASI-', rfi_response: 'RFI-', pr: 'PR-', ccd: 'CCD-', field_report: 'FR-',
   meeting_notes: 'MN-',
+  change_order: 'CO-',
 }
 
 /** Next number after the last one used: "ASI-003" → "ASI-004", "09 30 00 - 001" → "09 30 00 - 002". */
@@ -59,4 +61,61 @@ export function nextNumber(kind: FormKind, last: string | null | undefined): str
   if (!m) return last
   const n = String(Number(m[2]) + 1).padStart(m[2].length, '0')
   return `${m[1]}${n}${m[3]}`
+}
+
+// ---------- The register of clarifications and changes ----------
+
+/** The documents that change or clarify the Contract, in the order the story happened. */
+export const CHANGE_KINDS: FormKind[] = ['asi', 'rfi_response', 'pr', 'ccd', 'change_order']
+
+export interface RegisterRow extends IssuedForm {
+  /** For a change order: the proposal requests it was issued with. */
+  covers?: IssuedForm[]
+  /** For a proposal request: the change order that took it up, if one has. */
+  rolledInto?: { id: string; number: string | null } | null
+}
+
+/** Everything issued on a project, newest first, with change orders and their PRs joined up. */
+export async function listRegister(projectId: string, kinds?: FormKind[]): Promise<RegisterRow[]> {
+  const client = db()
+  let q = client.from('issued_forms').select('*').eq('project_id', projectId)
+  if (kinds?.length) q = q.in('kind', kinds)
+  const { data, error } = await q.order('issued_at', { ascending: false }).limit(500)
+  if (error) throw error
+  const rows = (data ?? []) as RegisterRow[]
+
+  const { data: links, error: linkError } = await client
+    .from('issued_form_links').select('parent_id, child_id').eq('project_id', projectId)
+  // The links are an enrichment: a register that can't read them is still a register.
+  if (linkError) return rows
+
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  for (const l of links ?? []) {
+    const parent = byId.get(l.parent_id), child = byId.get(l.child_id)
+    if (parent) (parent.covers ??= []).push(child ?? ({ id: l.child_id } as IssuedForm))
+    if (child) child.rolledInto = parent ? { id: parent.id, number: parent.number } : { id: l.parent_id, number: null }
+  }
+  for (const r of rows) r.covers?.sort((a, b) => (a.number ?? '').localeCompare(b.number ?? ''))
+  return rows
+}
+
+/**
+ * Say that a change order covers a proposal request.
+ *
+ * A PR belongs to one change order — that is what makes the money add up — so attaching one that
+ * is already in another change order moves it rather than quietly doing nothing.
+ */
+export async function coverWith(projectId: string, changeOrderId: string, prIds: string[]): Promise<void> {
+  if (!prIds.length) return
+  const client = db()
+  await client.from('issued_form_links').delete().in('child_id', prIds)
+  const { error } = await client.from('issued_form_links')
+    .insert(prIds.map((child_id) => ({ parent_id: changeOrderId, child_id, project_id: projectId })))
+  if (error) throw error
+}
+
+export async function uncover(childIds: string[]): Promise<void> {
+  if (!childIds.length) return
+  const { error } = await db().from('issued_form_links').delete().in('child_id', childIds)
+  if (error) throw error
 }

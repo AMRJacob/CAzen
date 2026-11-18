@@ -20,7 +20,7 @@ import { useFullscreen } from './lib/fullscreen'
 const nav = [
   { to: '/documents', label: 'Drawings' },
   { to: '/submittals', label: 'Submittals' },
-  { to: '/ca-logs', label: 'Document creation' },
+  { to: '/ca-logs', label: 'Change documents' },
   { to: '/contracts', label: 'Contracts' },
 ]
 

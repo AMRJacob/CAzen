@@ -960,3 +960,17 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 }
 .mk-handle:active { cursor: grabbing; }
 @media (pointer: coarse) { .mk-handle { width: 20px; height: 20px; margin: -10px 0 0 -10px; } }
+
+/* ---------- Change documents ---------- */
+.new-doc { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.new-doc-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.inline-field { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.inline-field select {
+  font: inherit; font-size: 13.5px; padding: 6px 9px; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; background: var(--paper);
+}
+.covers { color: var(--muted); font-size: 12.5px; }
+.pr-pick { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+@media (max-width: 619px) {
+  .set-actions { flex-wrap: wrap; justify-content: flex-start; }
+}

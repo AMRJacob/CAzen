@@ -31,6 +31,7 @@ export const FORM_LABELS: Record<TemplateKind, string> = {
   ccd: 'CCD',
   field_report: 'Field report',
   meeting_notes: 'Meeting notes',
+  change_order: 'Change order',
 }
 
 /** Dates print as MM/DD/YYYY, as on US construction forms. */
@@ -128,6 +129,26 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'ccd.amount', label: 'Proposed amount', sample: '$12,400' },
     { key: 'ccd.time', label: 'Change in contract time', sample: '3 days' },
     { key: 'ccd.issued_by', auto: 'user', label: 'Issued by', sample: 'J. Smith, AIA' },
+  ],
+  // What was agreed and signed. The sums are the point: a change order is the document where
+  // the contract total actually moves, so it carries the arithmetic rather than describing it.
+  change_order: [
+    { key: 'co.number', auto: 'next', label: 'Change order no.', sample: 'CO-002' },
+    { key: 'co.title', label: 'Subject', sample: 'Site lighting and storefront revisions' },
+    { key: 'co.description', auto: 'outline', label: 'The Contract is changed as follows', multiline: true,
+      hint: 'Usually the proposal requests this change order covers, one per line.',
+      sample: 'PR-001 - Site lighting relocation\nPR-003 - Storefront head detail',
+      starter: '' },
+    { key: 'co.original_sum', label: 'Original contract sum', sample: '$4,218,000.00' },
+    { key: 'co.previous_sum', label: 'Net change by previous change orders', sample: '$36,420.00' },
+    { key: 'co.before_sum', auto: 'carry', label: 'Contract sum before this change order', sample: '$4,254,420.00' },
+    { key: 'co.this_sum', label: 'Amount of this change order', sample: '$18,750.00' },
+    { key: 'co.new_sum', label: 'New contract sum', sample: '$4,273,170.00' },
+    { key: 'co.time_change', label: 'Change in contract time', sample: '7 days' },
+    { key: 'co.completion', auto: 'carry', label: 'Substantial completion date', sample: '04/16/2027' },
+    { key: 'co.architect', auto: 'user', label: 'Architect', sample: 'J. Smith, AIA' },
+    { key: 'co.contractor', auto: 'contractor', label: 'Contractor', sample: 'Sample Builders, Inc.' },
+    { key: 'co.owner', label: 'Owner', sample: 'Central Arkansas Water' },
   ],
   // An OAC meeting with no site walk: the same record of who was there and what was agreed,
   // without the observations, the weather, or a report number in the field report's sequence.
