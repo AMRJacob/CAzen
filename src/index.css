@@ -400,6 +400,8 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .sv-page { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); touch-action: none; }
 .sv-page.linking { cursor: crosshair; }
 .sv-page canvas { display: block; }
+/* The visible part of the sheet, redrawn at full resolution over the stretched page. */
+.sv-page canvas.sv-detail { position: absolute; display: none; pointer-events: none; }
 .sv-hit { position: absolute; background: rgba(240, 200, 60, 0.38); outline: 1px solid rgba(200, 150, 20, 0.6); pointer-events: none; }
 .sv-link { position: absolute; }
 .sv-link.auto { border: none; padding: 0; margin: 0; background: rgba(95, 122, 97, 0.12); border-radius: 2px; cursor: pointer; outline: 1px solid rgba(95, 122, 97, 0.35); }

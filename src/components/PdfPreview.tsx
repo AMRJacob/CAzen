@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import { getDocument } from '../lib/pdf/pdfjs'
-import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
+import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 
 /**
  * Look at a document before issuing it, in the app.
@@ -32,8 +32,12 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra }: {
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const { zoom, width, height, fit, zoomAbout } = usePageZoom(scroller, pageEl, aspect)
+  const { zoom, width, height, fit, zoomAbout, view } = usePageZoom(scroller, pageEl, aspect)
   usePageRender(canvas, page, width, zoom, !busy)
+  // Past the point where one canvas can hold the whole sheet sharply, the part on screen is
+  // drawn again from the original vectors over the top of it.
+  const detail = useRef<HTMLCanvasElement>(null)
+  useDetailRender(detail, scroller, view, page, width, !busy)
 
   // pdf.js takes the buffer over, so it gets a copy: the caller still needs these bytes to save
   // and to download.
@@ -118,6 +122,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra }: {
           {error && <div className="notice error sv-msg">{error}</div>}
           <div ref={pageEl} className="sv-page" style={{ width, height, visibility: busy && !page ? 'hidden' : 'visible' }}>
             <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
+            <canvas ref={detail} className="sv-detail" />
           </div>
         </div>
       </div>

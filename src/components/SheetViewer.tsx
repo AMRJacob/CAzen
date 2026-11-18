@@ -4,7 +4,7 @@ import { db } from '../lib/supabase'
 import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
-import { usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
+import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
 import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } from '../lib/disciplines'
@@ -101,8 +101,12 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [aspect, setAspect] = useState(1.5)
 
   const pageEl = useRef<HTMLDivElement>(null)
-  const { zoom, width, height, fit, zoomAbout, showPoint } = usePageZoom(scroller, pageEl, aspect)
+  const { zoom, width, height, fit, zoomAbout, showPoint, view } = usePageZoom(scroller, pageEl, aspect)
   usePageRender(canvas, page, width, zoom, !busy)
+  // Past the point where one canvas can hold the whole sheet sharply, the part on screen is
+  // drawn again from the original vectors over the top of it.
+  const detail = useRef<HTMLCanvasElement>(null)
+  useDetailRender(detail, scroller, view, page, width, !busy)
 
   const byNumber = useMemo(() => new Map(sheets.map((s) => [norm(s.number), s])), [sheets])
   const index = sheets.findIndex((s) => norm(s.number) === norm(sheet.number))
@@ -642,6 +646,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
             style={{ width, height, visibility: busy ? 'hidden' : 'visible' }}
             onPointerDown={down} onPointerMove={move} onPointerUp={up}>
             <canvas ref={canvas} style={{ width: '100%', height: '100%' }} />
+            <canvas ref={detail} className="sv-detail" />
             {hits.map((b, i) => <span key={'h' + i} className="sv-hit" style={pct(b)} />)}
             {!linkMode && autoLinks.map((l, i) => (
               <button key={'a' + i} className="sv-link auto" style={pct(l)} title={`Open ${l.target}`} onClick={() => follow(l.target)} />

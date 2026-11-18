@@ -280,7 +280,8 @@ const MAX_CANVAS_PIXELS = 16_000_000
  *
  * The cap matters more than it looks: a D-size sheet at 400% on a 3x screen asks for something
  * near 80 megapixels, and rather than being slow, Safari returns a blank canvas. Holding the area
- * down trades a little sharpness at extreme zoom for a drawing that is actually there.
+ * down keeps the drawing on screen — at the cost of sharpness past the point where the cap bites,
+ * which is what the detail layer below exists to give back.
  */
 export function usePageRender(
   canvas: React.RefObject<HTMLCanvasElement | null>,
@@ -308,4 +309,111 @@ export function usePageRender(
     }, 140)
     return () => { window.clearTimeout(timer); task?.cancel() }
   }, [page, ready, cssWidth, zoom, canvas])
+}
+
+/**
+ * The part of the sheet you are actually looking at, drawn again at full resolution.
+ *
+ * A PDF is vector, but a browser shows it by rasterising it to a canvas, and a canvas has a
+ * pixel budget — past about sixteen megapixels Safari stops drawing altogether. A D-size sheet
+ * at 800% on a retina screen would want a quarter of a billion pixels, so the whole-page canvas
+ * is drawn at the cap and stretched, which is exactly what pixellation at high zoom is.
+ *
+ * The fix is not a bigger canvas but a smaller piece of paper: once the zoom passes what the
+ * whole page can be drawn at, the visible rectangle alone is re-rendered from the original
+ * vectors at the resolution of the screen, and laid over the stretched page. What is off screen
+ * costs nothing, so the budget is spent entirely on what is being read.
+ *
+ * It redraws after movement stops rather than during it, so panning stays on the compositor.
+ * The stretched page underneath means there is never a blank area while that happens.
+ */
+export function useDetailRender(
+  detail: React.RefObject<HTMLCanvasElement | null>,
+  box: React.RefObject<HTMLElement | null>,
+  view: React.RefObject<View>,
+  page: PDFPageProxy | null,
+  cssWidth: number,
+  ready: boolean,
+) {
+  useEffect(() => {
+    if (!page || !ready) return
+    let task: { cancel: () => void } | null = null
+    let drawnFor = ''
+    let settleAt = 0
+    let last = ''
+
+    const hide = () => {
+      const c = detail.current
+      if (c) c.style.display = 'none'
+      drawnFor = ''
+    }
+
+    const tick = () => {
+      const c = detail.current
+      const area = box.current
+      const v = view.current
+      if (!c || !area || !v) return
+
+      const base = page.getViewport({ scale: 1 })
+      const ratio = Math.min(window.devicePixelRatio || 1, 2)
+      const pageScale = cssWidth / base.width            // CSS px per PDF point at 100%
+      const wanted = pageScale * v.zoom * ratio          // device px per PDF point now
+      const budget = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height))
+      // Below the cap the whole page is already as sharp as the screen can show.
+      if (wanted <= budget * 1.02) { if (drawnFor) hide(); return }
+
+      const rect = area.getBoundingClientRect()
+      const height = cssWidth / (base.width / base.height)
+      // What of the page is on screen, in the page's own CSS pixels.
+      const x0 = Math.max(0, (0 - v.x) / v.zoom)
+      const y0 = Math.max(0, (0 - v.y) / v.zoom)
+      const x1 = Math.min(cssWidth, (rect.width - v.x) / v.zoom)
+      const y1 = Math.min(height, (rect.height - v.y) / v.zoom)
+      if (x1 - x0 < 1 || y1 - y0 < 1) { if (drawnFor) hide(); return }
+
+      // A margin, so a small pan doesn't fall off the edge of what was drawn.
+      const padX = Math.min((x1 - x0) * 0.15, cssWidth - (x1 - x0))
+      const padY = Math.min((y1 - y0) * 0.15, height - (y1 - y0))
+      const left = Math.max(0, x0 - padX)
+      const top = Math.max(0, y0 - padY)
+      const right = Math.min(cssWidth, x1 + padX)
+      const bottom = Math.min(height, y1 + padY)
+
+      // Rounded, so a pan of two pixels isn't a reason to redraw a megapixel.
+      const key = [Math.round(left), Math.round(top), Math.round(right), Math.round(bottom), v.zoom.toFixed(3)].join(',')
+      const now = Date.now()
+      if (key !== last) { last = key; settleAt = now; return }
+      if (key === drawnFor || now - settleAt < 150) return
+
+      const scale = Math.min(wanted, Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, ((right - left) / pageScale) * ((bottom - top) / pageScale))))
+      const vp = page.getViewport({ scale })
+      const sx = (left / pageScale) * scale
+      const sy = (top / pageScale) * scale
+      const w = Math.floor(((right - left) / pageScale) * scale)
+      const h = Math.floor(((bottom - top) / pageScale) * scale)
+      if (w < 1 || h < 1) return
+
+      task?.cancel()
+      c.width = w
+      c.height = h
+      c.style.display = 'block'
+      c.style.left = `${left}px`
+      c.style.top = `${top}px`
+      c.style.width = `${right - left}px`
+      c.style.height = `${bottom - top}px`
+      drawnFor = key
+      const t = page.render({
+        canvas: c,
+        canvasContext: c.getContext('2d')!,
+        viewport: vp,
+        // Slide the page under the canvas so only this rectangle lands on it.
+        transform: [1, 0, 0, 1, -sx, -sy],
+      })
+      task = t
+      t.promise.catch(() => { if (drawnFor === key) drawnFor = '' })
+    }
+
+    const timer = window.setInterval(tick, 120)
+    return () => { window.clearInterval(timer); task?.cancel(); hide() }
+  }, [page, ready, cssWidth, detail, box, view])
 }
