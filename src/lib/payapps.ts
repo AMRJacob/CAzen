@@ -280,8 +280,3 @@ export function standings(figures: Figures): TradeStanding[] {
     outstanding: round(f.balance + f.retainage),
   }))
 }
-
-export const money = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
-
-export const percent = (n: number) => `${n.toFixed(2)}%`

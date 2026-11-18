@@ -4,7 +4,9 @@ import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import { today } from '../lib/dates'
-import { figure, money, percent, standings, type Billed, type Figures } from '../lib/payapps'
+import { figure, standings, type Billed, type Figures } from '../lib/payapps'
+import { money, percent, roughPercent } from '../lib/money'
+import { Money } from '../components/Money'
 import {
   listContracts, loadContract, newApplication, setApplication, setBilled,
   type LoadedContract,
@@ -183,16 +185,16 @@ function Summary({ data, figures, all }: { data: LoadedContract; figures: Figure
           <tbody>
             {rows.map((s) => (
               <tr key={s.line.id}>
-                <td>{s.line.item_no ? <span className="mono pay-item">{s.line.item_no}</span> : null}{s.line.description}</td>
-                <td className="right mono">{money(s.scheduled)}</td>
-                <td className="right mono">{money(s.toDate)}</td>
-                <td className="pay-progress">
+                <td className="pay-trade-name">{s.line.item_no ? <span className="mono pay-item">{s.line.item_no}</span> : null}{s.line.description}</td>
+                <td className="right mono" data-label="Scheduled"><Money n={s.scheduled} /></td>
+                <td className="right mono" data-label="Done"><Money n={s.toDate} /></td>
+                <td className="pay-progress" data-label="Progress">
                   <span className="pay-bar small"><span style={{ width: `${Math.min(100, s.percent)}%` }} /></span>
-                  <span className="muted small">{s.percent.toFixed(0)}%</span>
+                  <span className="muted small">{roughPercent(s.percent)}</span>
                 </td>
-                <td className="right mono">{money(s.balance)}</td>
-                <td className="right mono">{money(s.retainageHeld)}</td>
-                <td className="right mono"><strong>{money(s.outstanding)}</strong></td>
+                <td className="right mono" data-label="Balance"><Money n={s.balance} /></td>
+                <td className="right mono" data-label="Retainage held"><Money n={s.retainageHeld} /></td>
+                <td className="right mono" data-label="Still owed"><Money n={s.outstanding} strong /></td>
               </tr>
             ))}
           </tbody>
@@ -310,41 +312,41 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
                 const v = valueOf(l.id)
                 return (
                   <tr key={l.id} className={l.change_order_id ? 'pay-703-co' : ''}>
-                    <td className="mono">{l.item_no ?? ''}</td>
-                    <td>{l.description}</td>
-                    <td className="right mono">{money(l.scheduled_value)}</td>
-                    <td className="right mono">{money(f.previous)}</td>
-                    <td className="right">
+                    <td className="mono pay-703-item">{l.item_no ?? ''}</td>
+                    <td className="pay-703-name">{l.description}</td>
+                    <td className="right mono" data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
+                    <td className="right mono" data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
+                    <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
                       {editable
                         ? <input className="cell mono right" inputMode="decimal" value={v.this_period || ''}
                             onChange={(e) => setEdits((x) => ({ ...x, [l.id]: { ...v, this_period: Number(e.target.value) || 0 } }))}
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`This period for ${l.description}`} />
-                        : <span className="mono">{money(f.thisPeriod)}</span>}
+                        : <span className="mono"><Money n={f.thisPeriod} /></span>}
                     </td>
-                    <td className="right">
+                    <td className="right" data-label="Stored" data-nothing={editable || f.stored ? undefined : ''}>
                       {editable
                         ? <input className="cell mono right" inputMode="decimal" value={v.stored || ''}
                             onChange={(e) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(e.target.value) || 0 } }))}
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`Stored for ${l.description}`} />
-                        : <span className="mono">{money(f.stored)}</span>}
+                        : <span className="mono"><Money n={f.stored} /></span>}
                     </td>
-                    <td className="right mono">{money(f.toDate)}</td>
-                    <td className="right mono">{f.percent.toFixed(2)}%</td>
-                    <td className="right mono">{money(f.balance)}</td>
-                    <td className="right mono">{money(f.retainage)}</td>
+                    <td className="right mono" data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
+                    <td className="right mono" data-label="Complete">{percent(f.percent)}</td>
+                    <td className="right mono" data-label="Balance"><Money n={f.balance} /></td>
+                    <td className="right mono" data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
                   </tr>
                 )
               })}
               <tr className="pay-703-total">
-                <td /><td><strong>Total</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.scheduled)}</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.previous)}</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.thisPeriod)}</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.stored)}</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.toDate)}</strong></td>
-                <td className="right mono"><strong>{figures.totals.percent.toFixed(2)}%</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.balance)}</strong></td>
-                <td className="right mono"><strong>{money(figures.totals.retainage)}</strong></td>
+                <td className="pay-703-item" /><td className="pay-703-name"><strong>Total</strong></td>
+                <td className="right mono" data-label="Scheduled value"><Money n={figures.totals.scheduled} strong /></td>
+                <td className="right mono" data-label="From previous"><Money n={figures.totals.previous} strong /></td>
+                <td className="right mono" data-label="This period"><Money n={figures.totals.thisPeriod} strong /></td>
+                <td className="right mono" data-label="Stored"><Money n={figures.totals.stored} strong /></td>
+                <td className="right mono" data-label="Completed and stored"><Money n={figures.totals.toDate} strong /></td>
+                <td className="right mono" data-label="Complete"><strong>{percent(figures.totals.percent)}</strong></td>
+                <td className="right mono" data-label="Balance"><Money n={figures.totals.balance} strong /></td>
+                <td className="right mono" data-label="Retainage"><Money n={figures.totals.retainage} strong /></td>
               </tr>
             </tbody>
           </table>
@@ -361,7 +363,7 @@ function Row({ n, label, value, strong, highlight }: {
     <tr className={highlight ? 'pay-702-due' : ''}>
       <td className="pay-702-n">{n}</td>
       <td>{label}</td>
-      <td className="right mono">{strong ? <strong>{money(value)}</strong> : money(value)}</td>
+      <td className="right mono"><Money n={value} strong={strong} /></td>
     </tr>
   )
 }

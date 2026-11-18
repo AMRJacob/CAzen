@@ -14,7 +14,8 @@
   --danger: #a2483d;
   --danger-soft: #f8ebe8;
   --radius: 10px;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--sans);
   font-size: 15px;
   line-height: 1.5;
   color: var(--ink);
@@ -34,7 +35,7 @@ a { color: var(--moss); }
 .wordmark { font-family: "Shippori Mincho", "Inter", serif; font-size: 1em; letter-spacing: 0.03em; font-weight: 500; color: var(--moss); }
 
 /* ---------- Layout ---------- */
-.shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; min-height: 100dvh; }
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
 .sidebar { background: var(--paper); border-right: 1px solid var(--line); padding: 28px 0 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; padding-left: env(safe-area-inset-left); }
 .sidebar-logo { padding: 0 24px 28px; }
 .context { padding: 0 12px 18px; position: relative; }
@@ -73,6 +74,12 @@ h2.flush { margin: 0; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13.5px; }
+
+/* A figure keeps its decimal point in the column even when it has no cents to show: the
+   padding is the same width as ".00" and simply isn't drawn. */
+.money { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.money-pad { visibility: hidden; }
+.money-nothing { color: var(--faint); }
 .right { text-align: right; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
@@ -1390,13 +1397,80 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pay-702-n { width: 1%; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .pay-702-due td { background: var(--moss-soft); }
 
-.pay-703-wrap { overflow-x: auto; }
-.pay-703 { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pay-703 th, .pay-703 td { padding: 4px 7px; border: 1px solid var(--line); }
+/* The sheet is wide by nature. It scrolls inside its card rather than widening the page, and
+   the fade at each edge says so without a scrollbar having to appear. */
+.pay-703-wrap {
+  overflow-x: auto;
+  min-width: 0;
+  background:
+    linear-gradient(to right, var(--panel) 40%, rgba(255, 254, 251, 0)) left center,
+    linear-gradient(to left, var(--panel) 40%, rgba(255, 254, 251, 0)) right center,
+    radial-gradient(farthest-side at 0 50%, rgba(43, 45, 44, 0.13), rgba(43, 45, 44, 0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(43, 45, 44, 0.13), rgba(43, 45, 44, 0)) right center;
+  background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 11px 100%, 11px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+.pay-703 { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pay-703 th, .pay-703 td { padding: 4px 6px; border: 1px solid var(--line); }
+/* Figures never wrap; the description does, and it is what gives the sheet a chance of
+   fitting the screen at all. */
+.pay-703 td.right, .pay-703-item { white-space: nowrap; }
+/* The column headings wrap onto a second line rather than setting the column's width — a
+   figure is narrower than the words that name it. */
+.pay-703-sub th { font-weight: 400; white-space: normal; line-height: 1.25; vertical-align: bottom; }
+.pay-703-name { min-width: 140px; }
+.pay-703-item { width: 1%; color: var(--muted); }
 .pay-703 thead th { font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); background: var(--panel); }
-.pay-703-sub th { font-weight: 400; }
 .pay-703-heading td { background: var(--wash); font-weight: 500; }
 .pay-703-co td { background: #fbf6ea; }
 .pay-703-total td { background: var(--panel); border-top: 2px solid var(--ink); }
 .pay-703 input.cell { width: 96px; padding: 3px 6px; font-size: 14px; }
 .pay-703 input.cell.right { text-align: right; }
+
+/* ---- Narrow screens ----
+   A ten-column sheet cannot be read sideways on a phone, so each line becomes a small card:
+   the description at the top, the figures labelled beneath it, and anything that amounts to
+   nothing left off entirely. */
+@media (max-width: 859px) {
+  .pay-703-wrap { overflow-x: visible; background: none; }
+  .pay-703, .pay-703 tbody, .pay-703 tr, .pay-703 td { display: block; }
+  .pay-703 thead { display: none; }
+  .pay-703 tr {
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 11px; margin-bottom: 8px;
+  }
+  .pay-703 td { border: 0; padding: 2px 0; display: flex; justify-content: space-between; gap: 14px; }
+  .pay-703 td::before {
+    content: attr(data-label);
+    color: var(--muted); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    font-family: var(--sans); align-self: center;
+  }
+  .pay-703 td[data-nothing] { display: none; }
+  .pay-703 .pay-703-item { display: none; }
+  .pay-703 td.pay-703-name {
+    display: block; text-align: left; font-weight: 500;
+    padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+  }
+  .pay-703-heading td { border-radius: 6px; padding: 6px 10px; }
+  .pay-703-total { border-width: 2px; border-color: var(--ink); }
+  .pay-703 input.cell { width: 110px; }
+  /* The padded cents are only there to hold a column in line, and there is no column here. */
+  .money-pad { display: none; }
+}
+
+/* The by-trade table stacks the same way, a little sooner — it carries a progress bar that
+   wants room of its own. */
+@media (max-width: 719px) {
+  .pay-trades, .pay-trades tbody, .pay-trades tr, .pay-trades td { display: block; }
+  .pay-trades thead { display: none; }
+  .pay-trades tr { border-top: 1px solid var(--line); padding: 10px 0; }
+  .pay-trades td { border: 0; padding: 2px 0; display: flex; justify-content: space-between; gap: 14px; }
+  .pay-trades td::before {
+    content: attr(data-label);
+    color: var(--muted); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    font-family: var(--sans); align-self: center;
+  }
+  .pay-trades td.pay-trade-name { display: block; text-align: left; font-weight: 500; padding-bottom: 4px; }
+  .pay-progress { justify-content: flex-end; }
+}
