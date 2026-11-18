@@ -58,6 +58,8 @@ export interface SheetRevision {
   id: string
   revision_index: number
   revision_label: string | null
+  /** The date printed on the sheet itself at this issue, where it carried one. */
+  sheet_date?: string | null
   title_at_rev: string | null
   file_path: string
   created_at: string

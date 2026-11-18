@@ -496,7 +496,12 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
             <td className="col-title">{r.title_at_rev ?? ''}</td>
             <td>{r.revision_label || r.revision_index}</td>
             <td className="col-from">{r.issuances ? issuanceText(r.issuances.kind, r.issuances.number) : ''}</td>
-            <td className="col-date">{r.issuances ? usDate(r.issuances.issued_on) : ''}</td>
+            <td className="col-date">
+              {r.issuances ? usDate(r.issuances.issued_on) : ''}
+              {/* The sheet's own date, where its title block carried one that isn't the set's. */}
+              {r.sheet_date && r.sheet_date !== r.issuances?.issued_on &&
+                <span className="muted small" title="The date printed on the sheet itself"> · sheet {usDate(r.sheet_date)}</span>}
+            </td>
             <td className="col-history">{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
             <td className="right nowrap">
               {isAdmin && <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete</button>}
@@ -671,13 +676,15 @@ interface Draft {
   number: string
   title: string
   revision: string
+  /** The date read from this sheet's own title block, where the template looks for one. */
+  date: string
   templateId: string | null
   /** A template chosen for this sheet by hand ('none' = type it in), instead of the best fit. */
   pinned?: string | null
   /** Best fit was close between two templates. */
   unsure?: boolean
   /** Fields typed by hand: kept when templates change. */
-  touched: { number?: boolean; title?: boolean; revision?: boolean }
+  touched: { number?: boolean; title?: boolean; revision?: boolean; date?: boolean }
 }
 
 export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
@@ -730,6 +737,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       number: d.touched.number ? d.number : r.number,
       title: d.touched.title ? d.title : r.title,
       revision: d.touched.revision ? d.revision : r.revision,
+      date: d.touched.date ? d.date : r.date,
     }
   }), [])
 
@@ -757,7 +765,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       }
       setSizeWarning(sizeCheck(bytesTotal, pages))
       setDrafts(reread(pages.map((p) => ({
-        pageIndex: p.pageIndex, page: p, include: true, number: '', title: '', revision: '', templateId: null, touched: {},
+        pageIndex: p.pageIndex, page: p, include: true, number: '', title: '', revision: '', date: '', templateId: null, touched: {},
       })), tplRef.current.templates, tplRef.current.preferred))
       setStep('review')
     } catch (err) {
@@ -768,7 +776,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => onFiles([...(e.target.files ?? [])])
   useEffect(() => { if (initialFiles?.length) onFiles(initialFiles) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const type = (i: number, k: 'number' | 'title' | 'revision', v: string) =>
+  const type = (i: number, k: 'number' | 'title' | 'revision' | 'date', v: string) =>
     setDrafts(drafts.map((d, j) => (j === i ? { ...d, [k]: v, touched: { ...d.touched, [k]: true } } : d)))
 
   // Choose a template for one sheet (or 'none' to type it in, or null for best fit) and re-read it.
@@ -896,6 +904,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
 
   // Cover pages are included in the upload but are not drawings, so every count about sheets
   // leaves them out: no sheet number to miss, no duplicate to clash with, no template to read.
+  // The date column only appears when a template is looking for one, since most sheets take
+  // the set's date and a column of empty boxes is a column in the way.
+  const datesRead = templates.some((t) => t.regions.date) || drafts.some((d) => d.date)
   const covers = drafts.filter((d) => d.include && d.cover)
   const chosen = drafts.filter((d) => d.include && !d.cover)
   const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
@@ -915,6 +926,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
         // a mark typed for the whole set, and failing both the set's own name — which is what an
         // architect would write there anyway ("Addendum 2"), and beats a row number nobody chose.
         number: d.number, title: d.title, revisionLabel: d.revision || setRev || number,
+        sheetDate: d.date || null,
         bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
       const saved = await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
@@ -1092,7 +1104,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>Page</th><th>View</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th><th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th>View</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Sheet date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -1119,6 +1131,10 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                     <td><input className="cell" value={d.title} disabled={!!d.cover} onChange={(e) => type(i, 'title', e.target.value)} /></td>
                     <td><input className="cell mono rev-cell" value={d.revision} disabled={!!d.cover}
                       onChange={(e) => type(i, 'revision', e.target.value)} aria-label={`Revision mark on page ${d.pageIndex + 1}`} /></td>
+                    {datesRead && (
+                      <td><input className="cell date-cell" type="date" value={d.date} disabled={!!d.cover}
+                        onChange={(e) => type(i, 'date', e.target.value)} aria-label={`Date on page ${d.pageIndex + 1}`} /></td>
+                    )}
                     <td className="small nowrap size-cell">
                       {d.full ? (
                         <>
@@ -1213,6 +1229,12 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                   <input value={d.revision} disabled={!!d.cover}
                     onChange={(e) => type(i, 'revision', e.target.value)} />
                 </label>
+                {datesRead && (
+                  <label className="pv-field pv-date">Sheet date
+                    <input type="date" value={d.date} disabled={!!d.cover}
+                      onChange={(e) => type(i, 'date', e.target.value)} />
+                  </label>
+                )}
               </>
             )
           })()}

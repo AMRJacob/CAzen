@@ -6,12 +6,13 @@ import { textInRegion, wordsInRegion, type PageText, type Region } from './pdf/p
  * and revision mark sit. Firms keep several (their own, each consultant's), and each page of
  * an upload uses whichever template reads a valid sheet number there.
  */
-export type RegionKey = 'number' | 'title' | 'revision'
+export type RegionKey = 'number' | 'title' | 'revision' | 'date'
 
 export const REGION_LABELS: Record<RegionKey, string> = {
   number: 'Sheet number',
   title: 'Sheet title',
   revision: 'Revision mark',
+  date: 'Issue date',
 }
 
 export interface TitleblockTemplate {
@@ -27,7 +28,25 @@ export interface TitleblockTemplate {
 }
 
 // A-201, A201, A2.01, S-101A, FP-1, M1.1, G0.00, AD-101 — common US sheet numbering.
+// Strict on purpose: this is what gets believed when nobody has said where the number sits, and
+// a loose pattern turned loose on a whole sheet finds a number in every schedule on it.
 export const SHEET_NUMBER = /^[A-Z]{1,3}[-.]?\d{1,4}(\.\d{1,3})?[A-Z]?$/
+
+/**
+ * What counts as a sheet number inside a box somebody drew around the sheet number.
+ *
+ * The strict pattern above is a description of a set's own sheets, and sheets issued with a
+ * change document aren't numbered that way: ASI#10-A1, PR#3-S2, CCD-2.1, SK-14. Those are real
+ * numbers, printed on real sheets, and refusing them meant the template simply would not read
+ * the page. Inside a drawn box the risk is small — the box is small, and how much else it holds
+ * is already scored — so this takes segments of letters and digits joined by - . # or /, as long
+ * as there is a digit somewhere and the whole thing isn't a date.
+ */
+export const SHEET_NUMBER_WIDE = /^(?=.{1,20}$)(?=.*\d)[A-Z\d]+([-.#/][A-Z\d]+)*$/
+const LOOKS_LIKE_A_DATE = /^(\d{1,2}[-./]\d{1,2}[-./]\d{2,4}|\d{4}[-./]\d{1,2}[-./]\d{1,2})$/
+
+/** A sheet number as printed on a sheet, wherever it came from. */
+export const isSheetNumber = (v: string) => SHEET_NUMBER_WIDE.test(v) && !LOOKS_LIKE_A_DATE.test(v)
 
 /** Sheet number as stored: upper case, spaces removed. */
 export function cleanNumber(s: string): string {
@@ -38,6 +57,8 @@ export interface Reading {
   number: string
   title: string
   revision: string
+  /** The date printed on the sheet, as YYYY-MM-DD, where the box held one. */
+  date: string
   /** Which template read it; null = the automatic guess. */
   templateId: string | null
   /** Best fit only: another template came close, so the row is worth a look. */
@@ -51,6 +72,7 @@ export function readWith(text: PageText, t: TitleblockTemplate): Reading {
     number: t.regions.number ? numberIn(text, t.regions.number) : '',
     title: tidyTitle(get('title')),
     revision: get('revision').replace(/^REV(ISION)?S?\.?\s*(NO\.?|MARK)?:?\s*/i, '').trim(),
+    date: t.regions.date ? dateIn(get('date')) : '',
     templateId: t.id,
   }
 }
@@ -69,17 +91,49 @@ interface NumberFind { value: string; fill: number; purity: number }
 function findNumber(text: PageText, r: Region): NumberFind {
   let best: { value: string; size: number } | null = null
   let otherChars = 0
+
+  // Pieces in reading order, each carrying where it came from. A sheet number is often split
+  // across text runs — "ASI #10-A1" arrives as three — so neighbouring pieces are tried joined
+  // as well as alone. Neighbouring means it: pieces of one run, or runs on the same line close
+  // enough to be touching. Without that, a project number on the line above would be welded to
+  // the sheet number below it.
+  interface Piece { text: string; size: number; word: number; x: number; y: number; w: number; h: number }
+  const pieces: Piece[] = []
   const words = wordsInRegion(text, r)
-  for (const w of words) {
+  words.forEach((w, i) => {
     for (const piece of w.str.split(/[\s:]+/)) {
-      if (!piece) continue
-      const value = cleanNumber(piece)
-      const size = w.vertical ? w.w : w.h
-      if (SHEET_NUMBER.test(value) && (!best || size > best.size)) {
-        if (best) otherChars += best.value.length
-        best = { value, size }
-      } else if (!LABEL_WORDS.test(piece)) otherChars += piece.length
+      if (piece) pieces.push({ text: piece, size: w.vertical ? w.w : w.h, word: i, x: w.x, y: w.y, w: w.w, h: w.h })
     }
+  })
+
+  const touching = (a: Piece, b: Piece) => {
+    if (a.word === b.word) return true
+    const line = Math.abs((a.y + a.h / 2) - (b.y + b.h / 2)) < Math.max(a.h, b.h) / 2
+    const gap = b.x - (a.x + a.w)
+    return line && gap >= -Math.max(a.h, b.h) && gap < Math.max(a.h, b.h) * 0.6
+  }
+
+  const matched = new Set<number>()
+  for (let i = 0; i < pieces.length; i++) {
+    if (LABEL_WORDS.test(pieces[i].text)) continue
+    let reach = 1
+    while (reach < 3 && i + reach < pieces.length && touching(pieces[i + reach - 1], pieces[i + reach])) reach++
+    for (let n = reach; n >= 1; n--) {
+      const run = pieces.slice(i, i + n)
+      if (run.some((x) => LABEL_WORDS.test(x.text))) continue
+      const value = cleanNumber(run.map((x) => x.text).join(''))
+      if (!isSheetNumber(value)) continue
+      const size = Math.max(...run.map((x) => x.size))
+      if (!best || size > best.size || (size === best.size && value.length > best.value.length)) {
+        best = { value, size }
+      }
+      for (let k = i; k < i + n; k++) matched.add(k)
+      break
+    }
+  }
+  for (let i = 0; i < pieces.length; i++) {
+    if (matched.has(i) || LABEL_WORDS.test(pieces[i].text)) continue
+    otherChars += pieces[i].text.length
   }
   if (!best) return { value: cleanNumber(textInRegion(text, r)), fill: 0, purity: 0 }
   const boxSize = r.h > r.w * (text.width / text.height) ? r.w : r.h
@@ -92,6 +146,40 @@ function findNumber(text: PageText, r: Region): NumberFind {
 
 function numberIn(text: PageText, r: Region): string {
   return findNumber(text, r).value
+}
+
+/**
+ * The date in a box, as YYYY-MM-DD.
+ *
+ * Title blocks print dates every way there is — 11/18/26, 11-18-2026, 18 NOV 2026,
+ * NOVEMBER 18, 2026 — and the box usually catches its label with it. Two-digit years are read
+ * as this century, which is wrong for a drawing from 1974 and right for everything CAzen will
+ * ever be handed. A box that holds something else comes back empty rather than guessing.
+ */
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+
+export function dateIn(raw: string): string {
+  const text = raw.toUpperCase().replace(/^.*?(DATE|ISSUED|ISSUE)\s*:?\s*/s, '').trim()
+  const iso = (y: number, m: number, d: number) => {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return ''
+    const year = y < 100 ? 2000 + y : y
+    if (year < 1900 || year > 2200) return ''
+    return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  // 2026-11-18
+  let m = /(\d{4})[-./](\d{1,2})[-./](\d{1,2})/.exec(text)
+  if (m) return iso(+m[1], +m[2], +m[3])
+  // 11/18/26 and 11-18-2026, month first as every US title block prints it
+  m = /(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})/.exec(text)
+  if (m) return iso(+m[3], +m[1], +m[2])
+  // 18 NOV 2026
+  m = /(\d{1,2})\s*[-.]?\s*([A-Z]{3,9})\.?\s*[-.,]?\s*(\d{2,4})/.exec(text)
+  if (m && MONTHS.indexOf(m[2].slice(0, 3)) >= 0) return iso(+m[3], MONTHS.indexOf(m[2].slice(0, 3)) + 1, +m[1])
+  // NOVEMBER 18, 2026
+  m = /([A-Z]{3,9})\.?\s*(\d{1,2})(?:ST|ND|RD|TH)?\s*[-.,]?\s*(\d{2,4})/.exec(text)
+  if (m && MONTHS.indexOf(m[1].slice(0, 3)) >= 0) return iso(+m[3], MONTHS.indexOf(m[1].slice(0, 3)) + 1, +m[2])
+  return ''
 }
 
 /** Labels printed inside the box ("SHEET TITLE:") are dropped; the rest is kept as written. */
@@ -140,7 +228,7 @@ export function anchorsFrom(text: PageText, t: TitleblockTemplate): string[] {
 }
 
 export function fitScore(text: PageText, t: TitleblockTemplate, r: Reading = readWith(text, t), all: TitleblockTemplate[] = [t]): number | null {
-  if (!t.regions.number || !SHEET_NUMBER.test(r.number)) return null
+  if (!t.regions.number || !isSheetNumber(r.number)) return null
   const n = findNumber(text, t.regions.number)
   const ps = t.page_size
   const sizeMatch = !ps ? 0.5
@@ -181,9 +269,9 @@ export function readPage(text: PageText, templates: TitleblockTemplate[], prefer
   // No title block number, but the page carries a sheet index: it's the cover.
   if (hasSheetIndex(text)) {
     const fromTemplate = templates.map((t) => readWith(text, t)).find((r) => r.title || r.revision)
-    return { number: COVER, title: fromTemplate?.title || 'Cover Sheet', revision: fromTemplate?.revision ?? '', templateId: null }
+    return { number: COVER, title: fromTemplate?.title || 'Cover Sheet', revision: fromTemplate?.revision ?? '', date: fromTemplate?.date ?? '', templateId: null }
   }
-  return { number: guessNumber(text) ?? '', title: '', revision: '', templateId: null }
+  return { number: guessNumber(text) ?? '', title: '', revision: '', date: '', templateId: null }
 }
 
 /** The sheet number given to a cover sheet that has none of its own; it sorts first. */

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getDocument } from '../lib/pdf/pdfjs'
 import type { PageText, Region } from '../lib/pdf/pageText'
 import { textInRegion } from '../lib/pdf/pageText'
-import { anchorsFrom, readWith, REGION_LABELS, saveTemplate, SHEET_NUMBER, type RegionKey, type TitleblockTemplate } from '../lib/titleblocks'
+import { anchorsFrom, isSheetNumber, readWith, REGION_LABELS, saveTemplate, type RegionKey, type TitleblockTemplate } from '../lib/titleblocks'
 
-const KEYS: RegionKey[] = ['number', 'title', 'revision']
+const KEYS: RegionKey[] = ['number', 'title', 'revision', 'date']
 
 /**
  * Draw a title block template on a sample sheet: pick "Sheet number", drag a box over it,
@@ -212,7 +212,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
   const read = (k: RegionKey) => (regions[k] ? textInRegion(page.text, regions[k]!) : '')
   const reading = readWith(page.text, { id: '', firm_id: firmId, name, regions })
   const numberRead = reading.number
-  const numberOk = SHEET_NUMBER.test(numberRead)
+  const numberOk = isSheetNumber(numberRead)
   const scanned = page.text.words.length === 0
 
   async function save() {
@@ -248,13 +248,14 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
             <button key={k} type="button" className={`tb-key ${active === k ? 'on' : ''} key-${k}`} onClick={() => setActive(k)}>
               <span className="tb-key-head">
                 <span className="tb-dot" />
-                {REGION_LABELS[k]}{k === 'revision' && <span className="muted small"> optional</span>}
+                {REGION_LABELS[k]}{k !== 'number' && k !== 'title' && <span className="muted small"> optional</span>}
                 {regions[k] && <span className="link small tb-clear" role="button" onClick={(e) => { e.stopPropagation(); const r = { ...regions }; delete r[k]; setRegions(r) }}>clear</span>}
               </span>
               <span className={`tb-read ${k === 'number' && regions.number && !numberOk ? 'bad-text' : ''}`}>
-                {regions[k] ? ((k === 'number' ? reading.number : k === 'title' ? reading.title : reading.revision) || read(k) || 'nothing read here') : active === k ? 'Drag a box on the sheet' : 'not set'}
+                {regions[k] ? (reading[k] || read(k) || 'nothing read here') : active === k ? 'Drag a box on the sheet' : 'not set'}
               </span>
               {k === 'number' && regions.number && !numberOk && read(k) && <span className="small bad-text">Doesn’t look like a sheet number</span>}
+              {k === 'date' && regions.date && !reading.date && read(k) && <span className="small bad-text">No date read from this box</span>}
             </button>
           ))}
           {scanned && <div className="notice small">This page has no text layer (it may be a scan), so nothing can be read from it. Choose another sample sheet.</div>}

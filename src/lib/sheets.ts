@@ -15,6 +15,8 @@ export interface SheetToSave {
   number: string
   title: string
   revisionLabel: string
+  /** The date printed on the sheet itself, where its title block carries one. */
+  sheetDate?: string | null
   bytes: Uint8Array
   /** The sheet's words, for search. */
   body?: string
@@ -82,7 +84,7 @@ export async function renameSheet(
 export async function listRevisions(sheetId: string): Promise<SheetRevision[]> {
   const { data, error } = await db()
     .from('sheet_revisions')
-    .select('id, revision_index, revision_label, title_at_rev, file_path, created_at, issuances(kind, number, issued_on)')
+    .select('id, revision_index, revision_label, sheet_date, title_at_rev, file_path, created_at, issuances(kind, number, issued_on)')
     .eq('sheet_id', sheetId)
     .order('revision_index', { ascending: false })
   if (error) throw error
@@ -162,6 +164,7 @@ export async function saveIssuance(
       issuance_id: iss.id,
       revision_index: revisionIndex,
       revision_label: s.revisionLabel || null,
+      sheet_date: s.sheetDate || null,
       title_at_rev: s.title || sheet.title || null,
       file_path: path,
       created_by: userId,

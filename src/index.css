@@ -345,6 +345,7 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .key-number { --c: #c8323a; }
 .key-title { --c: #4a6b82; }
 .key-revision { --c: #8a6f4e; }
+.key-date { --c: #4f7a56; }
 .tb-zoom { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .tb-zoom button { padding: 4px 10px; font-size: 13px; }
 .tb-side .actions { display: flex; gap: 8px; margin-top: 8px; }
@@ -799,6 +800,8 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 @media (prefers-reduced-motion: reduce) { .page-thumb-wait { animation: none; } }
 tr.skipped .page-thumb { opacity: 0.45; }
 .rev-cell { max-width: 90px; }
+.date-cell { max-width: 150px; }
+.pv-strip .pv-date { flex: 0 1 150px; }
 @media (max-width: 899px) { .page-thumb { width: 72px; height: 50px; } .page-thumb-wait { line-height: 50px; } }
 
 /* The naming fields that come with a page opened full size from the uploader. */
