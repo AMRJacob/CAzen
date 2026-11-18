@@ -83,3 +83,9 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+-- Neither of these is anything for a signed-out caller to reach. add_punch_item already refuses a
+-- non-member, but next_punch_number would have answered anyone holding a project uuid with a count
+-- of that project's punch items.
+revoke execute on function public.next_punch_number(uuid, uuid) from anon;
+revoke execute on function public.add_punch_item(uuid, uuid, text, text, uuid, uuid, jsonb, text, text, date) from anon;
