@@ -8,7 +8,11 @@ export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)
 /** How much of the sheet must stay on screen, so it can't be flung out of sight. */
 const KEEP_ON_SCREEN = 0.25
 
-export interface View { x: number; y: number; zoom: number }
+export interface View {
+  x: number; y: number; zoom: number
+  /** Called the moment the sheet starts to move, so work that would fight the movement can stop. */
+  onMove?: () => void
+}
 
 /**
  * Moving a drawing around: one finger or the mouse drags it, two fingers or the wheel zoom it.
@@ -51,6 +55,7 @@ export function usePageZoom(
   }, [page])
 
   const schedule = useCallback(() => {
+    view.current.onMove?.()
     if (frame.current) return
     frame.current = requestAnimationFrame(() => {
       frame.current = 0
@@ -58,9 +63,37 @@ export function usePageZoom(
     })
   }, [paint])
 
+  /**
+   * Where the viewport is, measured when it changes rather than on every event. Asking the
+   * browser for it during a drag makes it lay the page out again each time — once per pointer
+   * event, straight after the transform was written — and that is frames.
+   */
+  const boxNow = useRef<DOMRect | null>(null)
+  const measure = useCallback(() => {
+    boxNow.current = viewport.current?.getBoundingClientRect() ?? null
+    return boxNow.current
+  }, [viewport])
+  useEffect(() => {
+    const el = viewport.current
+    if (!el) return
+    measure()
+    const ro = new ResizeObserver(() => { measure() })
+    ro.observe(el)
+    window.addEventListener('scroll', measure, true)
+    return () => { ro.disconnect(); window.removeEventListener('scroll', measure, true) }
+  }, [viewport, measure])
+
+  /** The zoom the rest of the app is told about — once the movement settles, not every frame. */
+  const zoomTimer = useRef(0)
+  const tellZoom = useCallback((z: number) => {
+    window.clearTimeout(zoomTimer.current)
+    zoomTimer.current = window.setTimeout(() => setZoom(z), 140)
+  }, [])
+  useEffect(() => () => window.clearTimeout(zoomTimer.current), [])
+
   /** Keep enough of the sheet on screen to grab hold of. */
   const contain = useCallback(() => {
-    const box = viewport.current?.getBoundingClientRect()
+    const box = boxNow.current ?? measure()
     if (!box) return
     const v = view.current
     const w = width * v.zoom
@@ -69,7 +102,7 @@ export function usePageZoom(
     const slackY = box.height - h * KEEP_ON_SCREEN
     v.x = Math.min(slackX, Math.max(-w + box.width * KEEP_ON_SCREEN, v.x))
     v.y = Math.min(slackY, Math.max(-h + box.height * KEEP_ON_SCREEN, v.y))
-  }, [viewport, width, aspect])
+  }, [measure, width, aspect])
 
   /** Centre the sheet at its current zoom. */
   const centre = useCallback(() => {
@@ -83,7 +116,7 @@ export function usePageZoom(
 
   /** Zoom about a point on the screen, so whatever is under it stays under it. */
   const zoomAbout = useCallback((factor: number, clientX?: number, clientY?: number) => {
-    const box = viewport.current?.getBoundingClientRect()
+    const box = boxNow.current ?? measure()
     if (!box) return
     const v = view.current
     const next = clampZoom(v.zoom * factor)
@@ -95,8 +128,10 @@ export function usePageZoom(
     v.zoom = next
     contain()
     schedule()
-    setZoom(next)
-  }, [viewport, contain, schedule])
+    // Re-rendering the whole viewer for every notch of the wheel was most of the dropped frames:
+    // the transform above is the picture, and the number in the toolbar can wait a moment.
+    tellZoom(next)
+  }, [measure, contain, schedule, tellZoom])
 
   const moveBy = useCallback((dx: number, dy: number) => {
     view.current.x += dx
@@ -139,7 +174,7 @@ export function usePageZoom(
   useEffect(() => {
     const el = viewport.current
     if (!el) return
-    let dragging: { x: number; y: number; id: number } | null = null
+    let dragging: { x: number; y: number; id: number; held?: boolean } | null = null
     let pinch: { gap: number; zoom: number } | null = null
 
     /**
@@ -178,8 +213,9 @@ export function usePageZoom(
     const move = (e: PointerEvent) => {
       if (!dragging || e.pointerId !== dragging.id || pinch) return
       moveBy(e.clientX - dragging.x, e.clientY - dragging.y)
-      dragging = { ...dragging, x: e.clientX, y: e.clientY }
-      el.setPointerCapture?.(e.pointerId)
+      if (!dragging.held) { el.setPointerCapture?.(e.pointerId); dragging.held = true }
+      dragging.x = e.clientX
+      dragging.y = e.clientY
     }
     const up = () => { dragging = null; el.classList.remove('dragging') }
 
@@ -389,6 +425,22 @@ export function useDetailRender(
       task?.cancel()
     }
 
+    // Drawing a dense sheet takes the main thread in long slices. The moment the sheet moves
+    // again, whatever is being drawn is for a view that no longer exists — drop it at once, so
+    // the hand never has to wait for it.
+    const stop = () => {
+      if (!making) return
+      task?.cancel()
+      task = null
+      making = ''
+      last = ''
+    }
+    const v0 = view.current
+    if (v0) v0.onMove = stop
+    let size: { width: number; height: number } | null = null
+    const ro = new ResizeObserver(() => { size = null })
+    if (box.current) ro.observe(box.current)
+
     const tick = () => {
       const c = detail.current
       const area = box.current
@@ -402,7 +454,7 @@ export function useDetailRender(
       // At or below what the whole page was drawn at, it is already as sharp as the screen shows.
       if (wanted <= baseScaleOf(page, cssWidth) * 1.02) { if (drawnFor) hide(); return }
 
-      const rect = area.getBoundingClientRect()
+      const rect = (size ??= { width: area.clientWidth, height: area.clientHeight })
       const height = cssWidth / (base.width / base.height)
       // What of the page is on screen, in the page's own CSS pixels.
       const x0 = Math.max(0, (0 - v.x) / v.zoom)
@@ -423,7 +475,7 @@ export function useDetailRender(
       const key = [Math.round(left), Math.round(top), Math.round(right), Math.round(bottom), v.zoom.toFixed(3)].join(',')
       const now = Date.now()
       if (key !== last) { last = key; settleAt = now; return }
-      if (key === drawnFor || key === making || now - settleAt < 90) return
+      if (key === drawnFor || key === making || now - settleAt < 160) return
 
       const scale = Math.min(wanted, Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, ((right - left) / pageScale) * ((bottom - top) / pageScale))))
       const vp = page.getViewport({ scale })
@@ -467,6 +519,6 @@ export function useDetailRender(
     }
 
     const timer = window.setInterval(tick, 60)
-    return () => { window.clearInterval(timer); task?.cancel(); hide() }
+    return () => { window.clearInterval(timer); ro.disconnect(); if (v0?.onMove === stop) v0.onMove = undefined; task?.cancel(); hide() }
   }, [page, ready, cssWidth, detail, box, view])
 }
