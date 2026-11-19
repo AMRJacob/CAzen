@@ -1255,7 +1255,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
     position: fixed; z-index: 40;
     left: calc(10px + env(safe-area-inset-left));
     bottom: calc(10px + env(safe-area-inset-bottom));
-    width: 52px; height: 52px;
+    width: 52px; height: var(--pn-h, 52px);
     border: 2px solid var(--ink); border-radius: 26px;
     background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
     overflow: hidden;
@@ -1264,16 +1264,16 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   @supports (height: 100dvh) {
     .phone-nav {
       bottom: auto;
-      top: calc(100dvh - 62px - env(safe-area-inset-bottom));
+      top: calc(100dvh - var(--pn-h, 52px) - 10px - env(safe-area-inset-bottom));
     }
   }
   .phone-nav.open {
     width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
-    height: 58px;
   }
   /* The rest of the destinations are more than fit a phone in one row, so they take two and
      the bar grows for them. Three across the front row keeps those labels full width. */
-  .phone-nav.open.more { height: 108px; }
+  .phone-nav { transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), top 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
+  .phone-nav.more .pn-bar { align-content: stretch; }
   @supports (width: 100dvw) {
     .phone-nav.open {
       width: calc(100dvw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));

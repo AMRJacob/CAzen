@@ -47,6 +47,12 @@ each stay on one line, every column is kept (From, Date and History were hidden 
 wider. Measured at 402 px: table 862 px, one line per row. This reverses the earlier choice
 recorded in the stylesheet ("side-scrolling a table one-handed on a ladder is no good").
 
+**The phone menu stays open** (Jacob, 14:04) until something is chosen or the screen is
+touched elsewhere; the 3.2 s / 1.4 s clocks are gone. *More* ran off the bottom: it now holds
+ten items in three rows (two were added at 11:50) in a bar sized for two, and the bar grew
+downward. It is sized by its rows and grows upward from the bottom edge. Measured at 402×874:
+bar 706–864, lowest item ends at 859.
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

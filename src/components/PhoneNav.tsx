@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Mark } from './Logo'
 
@@ -13,14 +13,10 @@ import { Mark } from './Logo'
  *
  * It closes itself again, but not on a fixed count from opening: a second is less time than it
  * takes to read four labels and aim at one. The clock is generous until the first touch and
- * short after it, and any touch inside the bar starts it again.
+ * (It used to put itself away on a clock; it now stays until something is chosen or the
+ * screen is touched elsewhere.)
  */
 
-/* Opening it doesn't count as using it: the clock that matters starts when the bar itself is
-   touched. Three seconds is about what it takes to read five labels and aim at one; once you
-   have reached into the bar you already know where things are, so it can go sooner. */
-const FIRST_LOOK = 3200
-const AFTER_TOUCH = 1400
 
 interface Spot { to: string; label: string; icon: ReactElement; end?: boolean }
 
@@ -52,46 +48,32 @@ const MORE: Spot[] = [
 export function PhoneNav() {
   const [open, setOpen] = useState(false)
   const [more, setMore] = useState(false)
-  const touched = useRef(false)
-  const timer = useRef<number | null>(null)
+  const nav = useRef<HTMLElement>(null)
   const place = useLocation()
-
-  const stopClock = useCallback(() => {
-    if (timer.current !== null) { clearTimeout(timer.current); timer.current = null }
-  }, [])
-
-  const startClock = useCallback(() => {
-    stopClock()
-    timer.current = window.setTimeout(
-      () => { setOpen(false); setMore(false) },
-      touched.current ? AFTER_TOUCH : FIRST_LOOK,
-    )
-  }, [stopClock])
 
   // Going somewhere is reason enough to put it away.
   useEffect(() => { setOpen(false); setMore(false) }, [place.pathname])
 
+  // It stays until something is chosen or the screen is touched anywhere else. It used to put
+  // itself away on a clock, which on a phone meant it was gone before a thumb got to it.
   useEffect(() => {
-    if (!open) { stopClock(); return }
-    startClock()
-    return stopClock
-  }, [open, more, startClock, stopClock])
+    if (!open) return
+    const away = (e: PointerEvent) => { if (!nav.current?.contains(e.target as Node)) { setOpen(false); setMore(false) } }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [open])
 
-  useEffect(() => () => stopClock(), [stopClock])
-
-  const held = () => { touched.current = true; stopClock() }
-  // Closing and reopening starts the long clock again, since the bar went away in between.
-  const let_go = () => { if (open) startClock() }
+  // Everything else takes rows of four; the bar is as tall as the rows it has, and grows
+  // upward from the bottom edge so none of it is under the screen.
+  const rows = Math.ceil((MORE.length + 1) / 4)
+  const height = !open ? 52 : more ? 8 + rows * 50 : 58
 
   return (
     <nav
       className={`phone-nav${open ? ' open' : ''}${open && more ? ' more' : ''}`}
       aria-label="Go to"
-      onPointerDown={held}
-      onPointerUp={let_go}
-      onPointerCancel={let_go}
-      onMouseEnter={held}
-      onMouseLeave={let_go}
+      ref={nav}
+      style={{ '--pn-h': `${height}px` } as React.CSSProperties}
     >
       {/* One shape, not two. Closed it is the ensō; opening it grows the ring into the border
           around the whole menu and fades the CA out from inside it, so the menu costs no screen
@@ -100,7 +82,7 @@ export function PhoneNav() {
         className="pn-mark"
         aria-expanded={open}
         aria-label={open ? 'Hide the menu' : 'Show the menu'}
-        onClick={() => { if (!open) touched.current = false; setOpen(!open); setMore(false) }}
+        onClick={() => { setOpen(!open); setMore(false) }}
       >
         <Mark size={30} />
       </button>
@@ -112,7 +94,7 @@ export function PhoneNav() {
             <span>{s.label}</span>
           </NavLink>
         ))}
-        <button className={`pn-spot${more ? ' on' : ''}`} onClick={() => { touched.current = true; setMore(!more) }}>
+        <button className={`pn-spot${more ? ' on' : ''}`} onClick={() => setMore(!more)}>
           {more
             ? I(<><path d="M15 6l-6 6 6 6" /></>)
             : I(<><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></>)}
