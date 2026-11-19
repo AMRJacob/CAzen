@@ -40,6 +40,12 @@ from it.
   against production**: no real invitation has been made, and how long a link lasts was not
   looked up. Jacob also asked that people get access to projects they add: `create_project`
   already does this (checked in the database's function body).
+- **The invitation is a whole email to paste** (Jacob, 11:49). After *Add and make a link*,
+  Settings shows the email as it will paste — "You are invited to do CA the Zen way:", the CA
+  mark with the link on it, a text link, and a line saying the link is theirs and works once —
+  with *Copy the email* (rich and plain forms on the clipboard together) and *Copy just the
+  link*. The mark is loaded from the live site's `icon-192.png`. Checked: the clipboard's HTML
+  has the mark inside the link. **Not checked:** pasting into Gmail itself.
 - `checks/t_marks.py`, `checks/t_access.py`.
 
 ---

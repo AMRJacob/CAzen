@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFirm } from '../lib/firm'
 import { SetPassword, SignerName, useAuth } from '../lib/auth'
-import { db } from '../lib/supabase'
+import { appUrl, db } from '../lib/supabase'
 import { brandFromFirm, loadBrand, removeBrandFile, uploadBrandFile, type Brand } from '../lib/brand'
 import { sampleValues } from '../lib/templates/fields'
 import { renderForm } from '../lib/templates/render'
@@ -526,6 +526,7 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
   const [said, setSaid] = useState<string | null>(null)
   const [link, setLink] = useState<{ email: string; url: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const mail = useRef<HTMLDivElement>(null)
   const [email, setEmail] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [role, setRole] = useState<ProjectRole>('architect')
@@ -585,12 +586,46 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
         </div>
         {said && <p className="small ok-text">{said}</p>}
         {link && (
-          <div className="access-link">
-            <input readOnly value={link.url} aria-label={`Link for ${link.email}`} onFocus={(e) => e.currentTarget.select()} />
-            <button type="button" className="primary" onClick={async () => {
-              try { await navigator.clipboard.writeText(link.url); setCopied(true) }
-              catch { setError('This browser would not copy it. Select the link and copy it by hand.') }
-            }}>{copied ? 'Copied' : 'Copy link'}</button>
+          <div className="access-mail">
+            {/* The email itself, as it will paste: inline styles only, and the mark fetched from
+                the app's own address, because a mail program keeps neither a stylesheet nor a
+                picture that lives in this page. */}
+            <div className="access-mail-body" ref={mail}>
+              <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: '15px', lineHeight: 1.5, color: '#2b2d2c' }}>
+                <p style={{ margin: '0 0 14px' }}>You are invited to do CA the Zen way:</p>
+                <p style={{ margin: '0 0 14px' }}>
+                  <a href={link.url} style={{ textDecoration: 'none' }}>
+                    <img src={`${appUrl()}icon-192.png`} alt="Open CAzen" width={96} height={96} style={{ border: 0, borderRadius: '20px', display: 'block' }} />
+                  </a>
+                </p>
+                <p style={{ margin: '0 0 14px' }}>
+                  <a href={link.url} style={{ color: '#3f5a48', fontWeight: 600 }}>Open CAzen and choose your password</a>
+                </p>
+                <p style={{ margin: 0, fontSize: '13px', color: '#6b6f6a' }}>
+                  The link is for {link.email} only and works once. If it has run out, reply and I will send another.
+                </p>
+              </div>
+            </div>
+            <div className="access-link">
+              <button type="button" className="primary" onClick={async () => {
+                const html = mail.current?.innerHTML ?? ''
+                const text = `You are invited to do CA the Zen way:\n\n${link.url}\n\nThe link is for ${link.email} only and works once. If it has run out, reply and I will send another.`
+                try {
+                  // Both forms at once: a mail program takes the laid-out one, anything plainer the text.
+                  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+                    await navigator.clipboard.write([new ClipboardItem({
+                      'text/html': new Blob([html], { type: 'text/html' }),
+                      'text/plain': new Blob([text], { type: 'text/plain' }),
+                    })])
+                  } else await navigator.clipboard.writeText(text)
+                  setCopied(true)
+                } catch { setError('This browser would not copy it. Select the email above and copy it by hand.') }
+              }}>{copied ? 'Copied — paste into your email' : 'Copy the email'}</button>
+              <button type="button" onClick={async () => {
+                try { await navigator.clipboard.writeText(link.url); setCopied(false) }
+                catch { setError('This browser would not copy it.') }
+              }}>Copy just the link</button>
+            </div>
           </div>
         )}
         {link && <p className="muted small">The link works once and runs out after the time limit Supabase sets on email links. Entering the same email here again, or New link beside their name, makes a fresh one.</p>}

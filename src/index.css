@@ -2387,3 +2387,5 @@ body:has(.nb) .phone-nav { display: none; }
 .access-link { display: flex; gap: 8px; margin-top: 8px; }
 .access-link input { flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
 .obs-dot:hover, .obs-dot:active, .obs-dot:focus { background: none; }
+.access-mail { margin-top: 10px; }
+.access-mail-body { padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
