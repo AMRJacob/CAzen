@@ -6,6 +6,7 @@ import {
 } from '../lib/pads'
 import { inkRuns, samplesFrom, type InkPoint } from '../lib/ink'
 import { message } from '../lib/errors'
+import { Mark } from './Logo'
 
 /**
  * A pad you write on: the whole screen, no edges.
@@ -65,6 +66,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [editing, setEditing] = useState<string | null>(null)
   const [mine, setMine] = useState<string[]>([])
   const [view, setView] = useState<View>({ scale: 600, x: 40, y: 40 })
+  /** Whether the bar is out of the mark at all, and which panel is hanging off it. */
+  const [open, setOpen] = useState(false)
   const [menu, setMenu] = useState<null | 'tools' | 'more'>(null)
   const [trouble, setTrouble] = useState<string | null>(null)
   /** What the pad made of the last thing that touched it, and how big it was. */
@@ -92,19 +95,22 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   // ---- the menu, which puts itself away -----------------------------------------------------
 
+  /**
+   * The menu waits, then goes.
+   *
+   * It stays out as long as you are looking at it — deciding is not idling. The second only
+   * starts once you have chosen something or gone back to the canvas, which are the two ways
+   * of saying you are done with it.
+   */
   const clock = useRef<number | undefined>(undefined)
   const stopClock = useCallback(() => {
     if (clock.current) { clearTimeout(clock.current); clock.current = undefined }
   }, [])
-  const startClock = useCallback(() => {
+  const goingAway = useCallback(() => {
     stopClock()
-    clock.current = window.setTimeout(() => setMenu(null), MENU_IDLE)
+    clock.current = window.setTimeout(() => { setMenu(null); setOpen(false) }, MENU_IDLE)
   }, [stopClock])
-  useEffect(() => {
-    if (!menu) { stopClock(); return }
-    startClock()
-    return stopClock
-  }, [menu, startClock, stopClock])
+  const stay = useCallback(() => stopClock(), [stopClock])
   useEffect(() => () => stopClock(), [stopClock])
 
   // ---- what is on the canvas ----------------------------------------------------------------
@@ -155,7 +161,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   function down(e: React.PointerEvent) {
     const read = readTouch(e)
     setTouch({ read, across: Math.round(Math.max(e.width || 0, e.height || 0)) })
-    if (menu) startClock()
+    // Back on the canvas means done with the menu.
+    if (open) goingAway()
 
     if (read === 'pen') {
       penAt.current = Date.now()
@@ -225,6 +232,15 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     })
   }
 
+  /**
+   * The end of a stroke — and only ever a real end.
+   *
+   * There is deliberately no pointerleave handler here. Calling setPointerCapture makes the
+   * browser fire boundary events with a null relatedTarget, which React reads as the pointer
+   * leaving every ancestor at once; a leave handler then ends the stroke two or three samples
+   * in, which looks for all the world like a pen that does not write. Capture is what keeps
+   * the pointer ours after it crosses anything, so leave has no job to do.
+   */
   function up(e: React.PointerEvent) {
     palms.current.delete(e.pointerId)
     if (e.pointerType === 'pen') penAt.current = Date.now()
@@ -369,17 +385,15 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const inks = here.filter((m) => m.kind !== 'text')
   const texts = here.filter((m) => m.kind === 'text')
   const nib = tool === 'highlight' ? highlight : colour
-  const poke = () => { if (menu) startClock() }
-
   return (
-    <div className="padview" onPointerDown={poke} onPointerMove={poke}>
+    <div className="padview">
       {/* The drawing surface is the screen. `touch-action: none` has to be on this element and
           everything in it: iOS reads it from whatever the pointer actually lands on, and a
           child left at the default lets the system claim the gesture and cancel the stroke a
           few samples in — which looks exactly like a pen that does not work. */}
       <div className="padview-frame" ref={frame} onWheel={wheel}
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
-        onPointerCancel={up} onPointerLeave={up}>
+        onPointerCancel={up}>
         <svg className="pad-ink" aria-label="The pad">
           <Ground rule={pad.rule} view={view} />
           <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
@@ -426,45 +440,55 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         </div>
       )}
 
-      {/* The bar: what you are drawing with, always to hand. */}
-      <div className="padbar" onPointerDown={(e) => e.stopPropagation()}>
-        <button className="padbar-out" onClick={onClose} aria-label="Close the pad" title="Close the pad">
-          {icon.close}
+      {/* Everything lives in the mark, as it does everywhere else in the app: closed it is
+          the ensō, open it is the border around the tools. */}
+      <div className={`padmenu${open ? ' open' : ''}`} onPointerDown={(e) => { e.stopPropagation(); stay() }}>
+        <button className="padmenu-mark" aria-expanded={open}
+          aria-label={open ? 'Hide the tools' : 'Show the tools'}
+          onClick={() => { if (open) { setOpen(false); setMenu(null) } else { setOpen(true); stay() } }}>
+          <Mark size={30} />
         </button>
-        <span className="padbar-split" />
-        {(['pen', 'highlight', 'text', 'erase'] as Tool[]).map((t) => (
-          <button key={t} className={`padbar-key${tool === t ? ' on' : ''}`}
-            aria-pressed={tool === t} aria-label={LABEL[t]} title={LABEL[t]}
-            onClick={() => { setTool(t); if (t === 'pen' || t === 'highlight') setMenu('tools') }}>
-            {icon[t]}
+
+        <div className="padbar" {...(open ? {} : { inert: '' as unknown as boolean })}>
+          <button className="padbar-out" onClick={onClose} aria-label="Close the pad" title="Close the pad">
+            {icon.close}
           </button>
-        ))}
-        <button className="padbar-ink" aria-label="Colour and width" title="Colour and width"
-          onClick={() => setMenu(menu === 'tools' ? null : 'tools')}>
-          <span style={{ background: nib }} />
-        </button>
-        <span className="padbar-split" />
-        <button className="padbar-key" onClick={() => void undo()} disabled={!mine.length}
-          aria-label="Undo" title="Undo">{icon.undo}</button>
-        <button className={`padbar-key${menu === 'more' ? ' on' : ''}`}
-          onClick={() => setMenu(menu === 'more' ? null : 'more')}
-          aria-label="More" title="More">{icon.more}</button>
+          <span className="padbar-split" />
+          {(['pen', 'highlight', 'text', 'erase'] as Tool[]).map((t) => (
+            <button key={t} className={`padbar-key${tool === t ? ' on' : ''}`}
+              aria-pressed={tool === t} aria-label={LABEL[t]} title={LABEL[t]}
+              onClick={() => { setTool(t); setMenu(null); goingAway() }}>
+              {icon[t]}
+            </button>
+          ))}
+          <button className={`padbar-ink${menu === 'tools' ? ' on' : ''}`}
+            aria-label="Colour and width" title="Colour and width"
+            onClick={() => { setMenu(menu === 'tools' ? null : 'tools'); stay() }}>
+            <span style={{ background: nib }} />
+          </button>
+          <span className="padbar-split" />
+          <button className="padbar-key" onClick={() => { void undo(); goingAway() }} disabled={!mine.length}
+            aria-label="Undo" title="Undo">{icon.undo}</button>
+          <button className={`padbar-key${menu === 'more' ? ' on' : ''}`}
+            onClick={() => { setMenu(menu === 'more' ? null : 'more'); stay() }}
+            aria-label="More" title="More">{icon.more}</button>
+        </div>
       </div>
 
-      {menu === 'tools' && (
-        <div className="padpop" onPointerDown={(e) => { e.stopPropagation(); startClock() }}>
+      {open && menu === 'tools' && (
+        <div className="padpop" onPointerDown={(e) => { e.stopPropagation(); stay() }}>
           <div className="padpop-row">
             {(tool === 'highlight' ? HIGHLIGHTS : PAD_COLOURS).map((c) => (
               <button key={c} className={`pad-swatch${nib === c ? ' on' : ''}`} style={{ background: c }}
-                onClick={() => (tool === 'highlight' ? setHighlight(c) : setColour(c))}
+                onClick={() => { tool === 'highlight' ? setHighlight(c) : setColour(c); goingAway() }}
                 aria-label={c} />
             ))}
           </div>
           {tool !== 'highlight' && (
             <div className="padpop-row">
               {(['fine', 'medium', 'broad'] as Width[]).map((w) => (
-                <button key={w} className={`pad-nib${width === w ? ' on' : ''}`} onClick={() => setWidth(w)}
-                  aria-label={w}>
+                <button key={w} className={`pad-nib${width === w ? ' on' : ''}`}
+                  onClick={() => { setWidth(w); goingAway() }} aria-label={w}>
                   <span style={{ height: `${WIDTHS[w] * 1100}px`, background: colour }} />
                 </button>
               ))}
@@ -473,12 +497,12 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         </div>
       )}
 
-      {menu === 'more' && (
-        <div className="padpop padpop-wide" onPointerDown={(e) => { e.stopPropagation(); startClock() }}>
+      {open && menu === 'more' && (
+        <div className="padpop padpop-wide" onPointerDown={(e) => { e.stopPropagation(); stay() }}>
           <div className="padpop-row">
             {RULES.map((r) => (
               <button key={r.rule} className={`padpop-word${pad.rule === r.rule ? ' on' : ''}`}
-                onClick={() => void setRule(r.rule)}>{r.label}</button>
+                onClick={() => { void setRule(r.rule); goingAway() }}>{r.label}</button>
             ))}
           </div>
           <div className="padpop-row">
@@ -488,7 +512,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
             <button className="padbar-key" disabled={page >= pad.pages} onClick={() => setPage(page + 1)}
               aria-label="Next page">{icon.on}</button>
             <button className="padpop-word" onClick={() => void addPage()}>Add a page</button>
-            <button className="padpop-word" onClick={home}>Find my writing</button>
+            <button className="padpop-word" onClick={() => { home(); goingAway() }}>Find my writing</button>
           </div>
           <label className="check small">
             <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />

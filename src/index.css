@@ -1547,45 +1547,66 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 }
 .pad-trouble .link { color: #fff; text-decoration-color: rgba(255, 255, 255, 0.5); }
 
-/* ---------- The bar ----------
-   Icons, like every other drawing app, because a row of words is a menu and this is a hand. */
-.padbar {
+/* ---------- The tools ----------
+   All of it lives in the mark, as the main navigation does: closed it is a 52px ring with the
+   ensō in it, open the ring becomes the border around the bar. One element doing both means
+   the tools cost no screen beyond the circle they came from. */
+.padmenu {
   position: fixed; z-index: 72;
-  left: 50%; transform: translateX(-50%);
+  left: calc(12px + env(safe-area-inset-left));
   bottom: calc(12px + env(safe-area-inset-bottom));
-  display: flex; align-items: center; gap: 2px;
-  padding: 5px 7px; border-radius: 15px;
-  background: var(--paper); border: 1px solid var(--line);
-  box-shadow: 0 4px 18px rgba(43, 45, 44, 0.2);
+  display: flex; align-items: center;
+  width: 52px; height: 52px;
+  border: 2px solid var(--ink); border-radius: 26px;
+  background: var(--paper); box-shadow: 0 3px 16px rgba(43, 45, 44, 0.22);
+  overflow: hidden;
+  transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1),
+              height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 @supports (height: 100dvh) {
-  .padbar { bottom: auto; top: calc(100dvh - 60px - env(safe-area-inset-bottom)); }
+  .padmenu { bottom: auto; top: calc(100dvh - 64px - env(safe-area-inset-bottom)); }
 }
+.padmenu.open {
+  width: min(410px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+}
+.padmenu-mark {
+  flex: 0 0 48px; width: 48px; height: 48px; padding: 0;
+  display: grid; place-items: center;
+  border: none; background: none; color: var(--ink); cursor: pointer;
+  transition: opacity 0.18s, width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.padmenu.open .padmenu-mark { width: 0; flex-basis: 0; opacity: 0; pointer-events: none; }
+
+.padbar {
+  display: flex; align-items: center; gap: 1px;
+  width: 0; opacity: 0; overflow: hidden;
+  padding: 0 2px;
+  transition: opacity 0.18s 0.06s;
+}
+.padmenu.open .padbar { width: 100%; opacity: 1; justify-content: space-between; }
+
 .padbar-key, .padbar-out, .padbar-ink {
-  display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  display: grid; place-items: center; width: 40px; height: 40px; padding: 0; flex: 0 0 auto;
   border: none; border-radius: 11px; background: none; color: var(--muted); cursor: pointer;
 }
 .padbar-key:hover, .padbar-out:hover, .padbar-ink:hover { background: var(--wash); color: var(--ink); }
-.padbar-key.on { background: var(--moss-soft); color: var(--ink); }
+.padbar-key.on, .padbar-ink.on { background: var(--moss-soft); color: var(--ink); }
 .padbar-key:disabled { opacity: 0.35; cursor: default; }
 .padbar-key:disabled:hover { background: none; color: var(--muted); }
 .padbar-ink span { display: block; width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(43, 45, 44, 0.25); }
-.padbar-split { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+.padbar-split { width: 1px; height: 22px; background: var(--line); flex: 0 0 auto; }
 
-/* What the bar opens: colours, widths, and the things asked for once a session. */
+/* What the bar opens, sitting just above it. */
 .padpop {
   position: fixed; z-index: 73;
-  left: 50%; transform: translateX(-50%);
-  bottom: calc(64px + env(safe-area-inset-bottom));
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(72px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 8px;
   padding: 10px 12px; border-radius: 14px;
   background: var(--paper); border: 1px solid var(--line);
   box-shadow: 0 4px 18px rgba(43, 45, 44, 0.2);
 }
-@supports (height: 100dvh) {
-  .padpop { bottom: auto; top: calc(100dvh - 60px - env(safe-area-inset-bottom)); transform: translate(-50%, -100%); }
-}
-.padpop-wide { width: min(460px, calc(100vw - 24px)); }
+.padpop-wide { width: min(410px, calc(100vw - 24px)); }
 .padpop-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .padpop-word {
   font: inherit; font-size: 13px; padding: 6px 11px;
