@@ -60,10 +60,24 @@ export function textInRegion(text: PageText, r: Region): string {
   return joinWords(wordsInRegion(text, r), text)
 }
 
+/**
+ * The words a box takes.
+ *
+ * A run of text belongs to a box if its middle is in it — or if it *starts* in it. The second
+ * rule is for files whose fonts lie about how wide their letters are: the run's start is where
+ * it is drawn, but its reported length can be several times what is on the page, which puts its
+ * middle far outside a box drawn snugly round the words. Such a title could be seen and boxed
+ * and still read as nothing.
+ */
 export function wordsInRegion(text: PageText, r: Region): PageWord[] {
+  const inX = (x: number) => x >= r.x && x <= r.x + r.w
+  const inY = (y: number) => y >= r.y && y <= r.y + r.h
   return text.words.filter((w) => {
     const cx = w.x + w.w / 2, cy = w.y + w.h / 2
-    return cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h
+    if (inX(cx) && inY(cy)) return true
+    // Where it begins: the left end of a line of text, the bottom end of text running up the
+    // page. Its own thickness is small, so the middle of that is trusted.
+    return w.vertical ? inX(cx) && (inY(w.y + w.h) || inY(w.y)) : inX(w.x) && inY(cy)
   })
 }
 

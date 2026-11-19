@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:45 CST
+
+**The L sheets on UARM Medical Sciences will not give up their titles** (Jacob, 16:42–16:43:
+boxes drawn over the right places in the template tool still read nothing). **Cause not
+established — the PDFs have not been opened here.** What the database shows: all seven L
+sheets are titled "Date: title:" (the template's box landed on the title block's printed
+labels); for L1.01, L1.11, L2.01 and L2.11 the title *is* in the file's text ("PLANTING PLAN",
+"PLANTING PLAN ENLARGEMENT", "IRRIGATION PLAN"), on the line with the scale bar and the sheet
+number; for L1.21, L1.22 and L2.21 there is no title text at all after "TITLE:".
+
+So for four of them the words exist and a box round them reads nothing, which points at where
+the reader thinks those words are rather than at whether they are there. Two changes, both
+aimed at that, **neither confirmed against these sheets**:
+
+- A box now takes a run of text that *starts* inside it, as well as one whose middle is inside
+  it (`wordsInRegion`). A font that misreports its letter widths makes a run several times
+  longer than it is drawn, which puts its middle outside a box drawn snugly round the words.
+  This is a guess at the cause. `checks/region.test.ts`.
+- The template editor outlines every run of text the file has, in blue, on the sheet (a tick
+  box turns it off). Where there is no outline there is nothing to read; an outline far longer
+  than its words is the width problem above; an outline somewhere other than its words is a
+  placement problem that this change does not fix.
+
+---
+
 # Checkpoint — 2026-11-19, 16:35 CST
 
 **A notebook page's corner menu adds to the page** (Jacob, 16:33: the sketch, photo and

@@ -35,6 +35,7 @@ with sync_playwright() as p:
             r=pg.locator('.tb-page').bounding_box(); x0=r['x']+fx*r['width']; y0=r['y']+fy*r['height']; x1=x0+fw*r['width']; y1=y0+fh*r['height']
         pg.mouse.move(x0,y0); pg.mouse.down(); pg.mouse.move((x0+x1)/2,(y0+y1)/2,steps=4); pg.mouse.move(x1,y1,steps=4); pg.mouse.up(); pg.wait_for_timeout(250)
         return inside
+    print('readable text outlined on the sheet:',pg.locator('.tb-word').count(),'runs'); pg.screenshot(path='tb_words.png')
     zr=lambda: pg.inner_text('.tb-zoom').replace('\n',' ')
     pb=pg.locator('.tb-page').bounding_box(); z0=zr(); w0=pb['width']; pg.mouse.move(pb['x']+pb['width']*0.9,pb['y']+pb['height']*0.9); pg.mouse.wheel(0,-300); pg.wait_for_timeout(300); w1=pg.locator('.tb-page').bounding_box()['width']
     sc=lambda: pg.evaluate("[document.querySelector('.tb-scroll').scrollLeft,document.querySelector('.tb-scroll').scrollTop]"); s0=sc(); pg.mouse.down(button='middle'); pg.mouse.move(pb['x']+pb['width']*0.9-120,pb['y']+pb['height']*0.9-80,steps=5); pg.mouse.up(button='middle'); pg.wait_for_timeout(200); s1=sc()

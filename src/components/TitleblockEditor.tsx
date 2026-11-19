@@ -224,6 +224,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
   const numberRead = reading.number
   const numberOk = isSheetNumber(numberRead)
   const scanned = page.text.words.length === 0
+  const [showText, setShowText] = useState(true)
 
   async function save() {
     if (!regions.number) { setError('Draw a box around the sheet number first.'); return }
@@ -277,6 +278,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
             <button type="button" onClick={() => zoomAround(1, 0.5, 0.5)}>Fit</button>
             <button type="button" className="primary-lite" onClick={toTitleBlock}>Title block</button>
           </div>
+          <label className="small tb-show"><input type="checkbox" checked={showText} onChange={(e) => setShowText(e.target.checked)} /> Outline the text this file can be read from</label>
           <p className="muted small tb-hint">Scroll the wheel to zoom where you point. To move around, press the wheel and drag, or hold Space and drag.</p>
           <div className="actions">
             <button type="button" className="primary" onClick={save} disabled={busy || !regions.number}>{busy ? 'Saving…' : 'Save template'}</button>
@@ -291,6 +293,12 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
             <canvas ref={sharp} className="tb-sharp" />
             {KEYS.map((k) => regions[k] && (
               <span key={k} className={`tb-box key-${k} ${active === k ? 'on' : ''} ${regions[k]!.x + regions[k]!.w > 0.8 ? 'label-right' : ''}`} style={pct(regions[k]!)}><span>{REGION_LABELS[k]}</span></span>
+            ))}
+            {/* Every run of text the file actually has, outlined. A box drawn where there is no
+                outline will read nothing — the lettering there is linework or a picture — and an
+                outline much longer than its words is a font misreporting its widths. */}
+            {showText && page.text.words.map((w, i) => (
+              <span key={`w${i}`} className="tb-word" style={pct(w)} />
             ))}
             {draft && <span className={`tb-box key-${active} drawing`} style={pct(draft)} />}
           </div>
