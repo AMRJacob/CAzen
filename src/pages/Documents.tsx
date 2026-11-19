@@ -609,7 +609,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
     <>
       {note && <div className="notice">{note}</div>}
       <table>
-        <thead><tr><th>Date</th><th>Issued as</th><th>Sheets</th><th /><th /></tr></thead>
+        <thead><tr><th>Date</th><th>Issued as</th><th>Subject</th><th>Sheets</th><th /><th /></tr></thead>
         <tbody>
           {rows.map((r) => (
             <Fragment key={r.id}>
@@ -619,8 +619,14 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                   setEditing({ id: r.id, kind: r.kind, number: r.number ?? '', title: r.title ?? '', issuedOn: r.issued_on.slice(0, 10) })
                 }}>
                 <td className="nowrap">{usDate(r.issued_on)}</td>
-                <td className="nowrap">{issuanceText(r.kind, r.number)}{r.title ? ` · ${r.title}` : ''}</td>
-                <td className="small"><IssuanceSheets sheets={r.sheets} order={order} /></td>
+                <td className="nowrap">{issuanceText(r.kind, r.number)}</td>
+                {/* The subject of the change document it was issued with; failing that, the set's own. */}
+                <td className="col-title">{r.subject ?? r.title ?? ''}</td>
+                <td className="small">
+                  {/* "0 sheets" on the upload that holds the project manual read as an empty set. */}
+                  {r.sheets.length > 0 || !r.sections ? <IssuanceSheets sheets={r.sheets} order={order} /> : null}
+                  {r.sections > 0 && <span className="muted">{r.sheets.length ? ' · ' : ''}{r.sections} project manual {r.sections === 1 ? 'section' : 'sections'}</span>}
+                </td>
                 <td className="right nowrap">
                   <DownloadSet
                     project={project}
@@ -641,7 +647,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                 </td>
               </tr>
               {editing?.id === r.id && (
-                <tr className="confirm-row"><td colSpan={5}>
+                <tr className="confirm-row"><td colSpan={6}>
                   <div ref={setBox}>
                   {/* Same order as the row it opens under: date, then what it was issued as. */}
                   <div className="sheet-edit">
@@ -677,7 +683,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                 </td></tr>
               )}
               {deleting === r.id && (
-                <tr className="confirm-row"><td colSpan={5}>
+                <tr className="confirm-row"><td colSpan={6}>
                   <ConfirmDelete
                     what={issuanceText(r.kind, r.number)}
                     detail={`Its ${r.sheets.length} ${r.sheets.length === 1 ? 'sheet is' : 'sheets are'} removed; sheets it revised go back to their previous revision.`}

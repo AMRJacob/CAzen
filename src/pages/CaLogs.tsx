@@ -246,6 +246,7 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
       onChanged()
     } catch (e) { onError(message(e)) } finally { setSaving(false) }
   }
+  const beginEdit = () => setEdit({ number: row.number ?? '', title: subject, day: dayOf(row.issued_at), cost: costIsOwn(row) && cost != null ? asMoney(cost) : '', days: daysAreOwn(row) && days != null ? String(days) : '' })
   const keys = (e: React.KeyboardEvent) => { if (e.key === 'Enter') void saveEdit(); else if (e.key === 'Escape') setEdit(null) }
   const dayOf = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
@@ -266,6 +267,8 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
         </tr>
       ) : (
       <tr className={row.file_path ? 'opens' : undefined}
+        // A right-click edits the row, as it does on the drawings and the sets.
+        onContextMenu={(e) => { e.preventDefault(); beginEdit() }}
         onClick={(e) => {
           if (!row.file_path || !project) return
           if ((e.target as HTMLElement).closest('button, a, select, input')) return
@@ -294,7 +297,7 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
             </button>
           )}
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
-          {' '}<button className="link" onClick={(e) => { e.stopPropagation(); setEdit({ number: row.number ?? '', title: subject, day: dayOf(row.issued_at), cost: costIsOwn(row) && cost != null ? asMoney(cost) : '', days: daysAreOwn(row) && days != null ? String(days) : '' }) }}>Edit</button>
+          {' '}<button className="link" onClick={(e) => { e.stopPropagation(); beginEdit() }}>Edit</button>
         </td>
       </tr>
       )}

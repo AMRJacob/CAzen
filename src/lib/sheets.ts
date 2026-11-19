@@ -282,6 +282,10 @@ export interface IssuanceRow {
   number: string | null
   title: string | null
   issued_on: string
+  /** The subject of the change document this set was issued with, where there is one. */
+  subject: string | null
+  /** Project manual sections this upload brought in: a set can be all manual and no drawings. */
+  sections: number
   sheets: { number: string; revision_label: string | null }[]
 }
 
@@ -324,14 +328,21 @@ export async function renameIssuance(
 export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
   const { data, error } = await db()
     .from('issuances')
-    .select('id, kind, number, title, issued_on, created_at, sheet_revisions(revision_label, sheets(number))')
+    .select('id, kind, number, title, issued_on, created_at, sheet_revisions(revision_label, sheets(number)), issued_forms(kind, number, title, values), spec_revisions(count)')
     .eq('project_id', projectId)
     .order('issued_on', { ascending: false })
     .order('created_at', { ascending: false })
   if (error) throw error
-  type Raw = Omit<IssuanceRow, 'sheets'> & { sheet_revisions: { revision_label: string | null; sheets: { number: string } | null }[] }
+  type Raw = Omit<IssuanceRow, 'sheets' | 'subject' | 'sections'> & {
+    sheet_revisions: { revision_label: string | null; sheets: { number: string } | null }[]
+    issued_forms: { kind: string; number: string | null; title: string | null; values: Record<string, string> | null }[] | null
+    spec_revisions: { count: number }[] | null
+  }
   return ((data ?? []) as unknown as Raw[]).map((r) => ({
     id: r.id, kind: r.kind, number: r.number, title: r.title, issued_on: r.issued_on,
+    sections: r.spec_revisions?.[0]?.count ?? 0,
+    // The change document this set was issued with says what it is about; the set shows the same.
+    subject: (r.issued_forms ?? []).map((f) => f.title ?? f.values?.[`${f.kind.split('_')[0]}.title`] ?? '').find((t) => t.trim()) ?? null,
     sheets: r.sheet_revisions.map((x) => ({ number: x.sheets?.number ?? '', revision_label: x.revision_label })),
   }))
 }

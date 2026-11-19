@@ -20,7 +20,7 @@ with sync_playwright() as p:
     tot=lambda: ' || '.join(t.replace('\n',' ').replace('\t',' | ') for t in pg.locator('.register thead .reg-total').all_inner_texts())
     row=lambda n: pg.locator('.register tbody tr:has-text("%s")'%n).first
     print('top of the register:',tot()); print('CO-001 row:',row('CO-001').inner_text().replace('\t',' | '))
-    row('ASI-004').locator('button:has-text("Edit")').click(); pg.fill('.reg-edit input[aria-label=Subject]','Revised storefront head'); pg.fill('.reg-edit input[aria-label="Change to contract time, in days"]','3'); pg.keyboard.press('Enter'); pg.wait_for_timeout(400)
+    row('ASI-004').click(button='right'); print('right-click opens the editor:',pg.locator('.reg-edit').count()==1); pg.fill('.reg-edit input[aria-label=Subject]','Revised storefront head'); pg.fill('.reg-edit input[aria-label="Change to contract time, in days"]','3'); pg.keyboard.press('Enter'); pg.wait_for_timeout(400)
     print('ASI after edit:',row('ASI-004').inner_text().replace('\t',' | '),'| sent',{k:(v if k!='values' else v) for k,v in sent[-1].items() if k!='issued_at'})
     row('CO-001').locator('button:has-text("Edit")').click(); pg.fill('.reg-edit input[aria-label="Change to contract cost"]','5,100'); pg.fill('.reg-edit input[aria-label="Change to contract time, in days"]','7'); pg.screenshot(path='reg_edit.png'); pg.click('.reg-edit button:has-text("Save")'); pg.wait_for_timeout(400)
     print('CO-001 after its own figures:',row('CO-001').inner_text().replace('\t',' | ')); print('top of the register:',tot()); pg.screenshot(path='reg.png'); print('errors:',errs[:3]); b.close()

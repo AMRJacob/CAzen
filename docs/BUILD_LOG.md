@@ -33,6 +33,13 @@ from it.
   means). It is about the second copy of each PDF that CAzen writes into the project's own CA
   folder on an office computer where one has been linked. Reworded, with what happens either
   way, and now shown only on a computer that has that project's folder linked.
+- **Sets show the subject of their change document.** A set uploaded as an ASI (or other
+  change document) is linked to its entry in Change documents by `issued_forms.issuance_id`.
+  Sets and revisions has a **Subject** column carrying that entry's subject (or the set's own
+  title where there is no entry). In the database today the ten ASI sets are linked and none
+  has a subject yet. A set that is all project manual now reads "116 project manual sections"
+  rather than "0 sheets".
+- **Right-click a change document to edit it**, as on the drawings and sets.
 
 ---
 
