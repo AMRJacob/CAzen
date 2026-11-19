@@ -519,6 +519,14 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
           <button className="sv-index-toggle" onClick={() => setIndexOpen(!indexOpen)} aria-expanded={indexOpen}>
             Sheets
           </button>
+          {/* The page-turning buttons sit here, against the left edge, where nothing beside them
+              comes and goes. Among the tools they slid sideways whenever a sheet had revisions
+              to step through, so the button under the pointer changed between one sheet and the
+              next. */}
+          <span className="sv-step">
+            <button className="icon" disabled={index <= 0} onClick={() => stepTo(index - 1)} aria-label="Previous sheet" title="Previous sheet">‹</button>
+            <button className="icon" disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)} aria-label="Next sheet" title="Next sheet">›</button>
+          </span>
           {stack.length > 1 && <button onClick={back} title="Back to the previous sheet">← Back</button>}
         </div>
         <div className="sv-title">
@@ -537,9 +545,6 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
             title="Put an observation where it was seen on this sheet">
             {pinning ? 'Tap the spot' : 'Observe'}
           </button>
-          <span className="sv-sep" />
-          <button className="icon" disabled={index <= 0} onClick={() => stepTo(index - 1)} aria-label="Previous sheet">‹</button>
-          <button className="icon" disabled={index < 0 || index >= sheets.length - 1} onClick={() => stepTo(index + 1)} aria-label="Next sheet">›</button>
           {history.length > 1 && (
             <span className="sv-revs">
               <span className="sv-sep" />

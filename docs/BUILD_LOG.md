@@ -11,6 +11,21 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:11 CST
+
+**The sheet-turning buttons no longer move** (Jacob, 15:09: on the desktop the buttons for
+changing pages shift when a page has versions; confusing). In the sheet viewer ‹ › sat among
+the tools on the right, and the revision stepper (⟨ label ⟩ current) appears beside them only
+on sheets with more than one revision, so they slid sideways from one sheet to the next. They
+are now at the left edge of the bar, before the sheet number, where nothing beside them comes
+and goes (`.sv-step` in `SheetViewer.tsx`). The zoom button keeps one width whatever the
+percentage. The project manual's preview had the same fault from its "Page N of M" group; its
+‹ › are at the left too, with a fixed-width label. Phones are unchanged (there the buttons are
+under ⋯). `checks/t_steady.py`: at 1440 and 1000 px, the buttons are at the same x on a sheet
+with a revision stepper and on one without. The manual preview was compiled, not driven.
+
+---
+
 # Checkpoint — 2026-11-19, 14:57 CST
 
 **Downloading a real project to a device failed, and had since field mode was built.** Jacob,

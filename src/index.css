@@ -2610,3 +2610,10 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .take-choices button.take-remove { color: #a23a2a; border-color: #e3c4bd; background: transparent; }
 .p-about { margin-top: 28px; }
 .p-about p { margin: 0 0 8px; max-width: 70ch; }
+
+/* Turning sheets: fixed against the left of the bar. */
+.sv-step { display: inline-flex; gap: 6px; align-items: center; }
+/* The zoom figure changes from 100% to 67%; its button does not change size with it. */
+.sv-inline-tools button[title="Fit the sheet to the screen"] { min-width: 58px; font-variant-numeric: tabular-nums; }
+@media (max-width: 619px) { .sv-step { display: none; } }
+.sv-step-label { min-width: 74px; text-align: center; font-variant-numeric: tabular-nums; }

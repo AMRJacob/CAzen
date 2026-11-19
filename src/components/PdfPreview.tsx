@@ -89,19 +89,21 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra }: {
   return (
     <div className="sheet-viewer" role="dialog" aria-label={`Preview of ${title}`}>
       <div className="sv-bar">
+        {/* Before the title, against the left edge: beside the tools these moved whenever a
+            section had pages of its own to step through. */}
+        {step && (
+          <div className="sv-bar-group sv-step-fixed">
+            <button className="icon" disabled={!step.onPrev} onClick={step.onPrev} aria-label="Previous sheet">‹</button>
+            <span className="muted small nowrap sv-step-label">{step.label}</span>
+            <button className="icon" disabled={!step.onNext} onClick={step.onNext} aria-label="Next sheet">›</button>
+          </div>
+        )}
         <div className="sv-title"><span className="sv-name">{title}</span></div>
         {pages > 1 && (
           <div className="sv-bar-group">
             <button className="icon" disabled={number <= 1} onClick={() => setNumber(number - 1)} aria-label="Previous page">‹</button>
             <span className="muted small nowrap">Page {number} of {pages}</span>
             <button className="icon" disabled={number >= pages} onClick={() => setNumber(number + 1)} aria-label="Next page">›</button>
-          </div>
-        )}
-        {step && (
-          <div className="sv-bar-group">
-            <button className="icon" disabled={!step.onPrev} onClick={step.onPrev} aria-label="Previous sheet">‹</button>
-            <span className="muted small nowrap">{step.label}</span>
-            <button className="icon" disabled={!step.onNext} onClick={step.onNext} aria-label="Next sheet">›</button>
           </div>
         )}
         <div className="sv-bar-group sv-inline-tools">
