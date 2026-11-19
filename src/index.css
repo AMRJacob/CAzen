@@ -2641,3 +2641,4 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 @media (max-height: 430px) {
   .sheet-viewer > .sv-bar { padding-top: calc(4px + env(safe-area-inset-top)); padding-left: calc(8px + env(safe-area-inset-left)); padding-right: calc(8px + env(safe-area-inset-right)); }
 }
+.tb-page { margin: 0 auto; }

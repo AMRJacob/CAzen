@@ -68,11 +68,16 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
 
   const [fit, setFit] = useState(900)
   useEffect(() => {
-    const f = () => scroller.current && setFit(Math.max(320, scroller.current.clientWidth - 24))
+    // "Fit" is the whole sheet in the pane, not the sheet's width in it: a sheet as wide as the
+    // pane is taller than it, and what was cut off was the bottom — where title blocks are.
+    const f = () => {
+      const el = scroller.current
+      if (el) setFit(Math.max(320, Math.min(el.clientWidth - 24, (el.clientHeight - 24) * aspect)))
+    }
     f()
     window.addEventListener('resize', f)
     return () => window.removeEventListener('resize', f)
-  }, [])
+  }, [aspect])
   const width = fit * zoom
   const height = width / aspect
   const MAX_ZOOM = 24

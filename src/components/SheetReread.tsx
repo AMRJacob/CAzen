@@ -53,6 +53,10 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
   const [using, setUsing] = useState('')
   const [drawing, setDrawing] = useState(false)
   const dates = useRef(new Map<string, string | null>())
+  // What to read with right now, for the sheets still on their way in: a template chosen or
+  // made while a long selection is still being fetched applies to the rest as they arrive.
+  const now = useRef<{ list: TitleblockTemplate[]; pick: string }>({ list: [], pick: '' })
+  const [opened, setOpened] = useState(0)
 
   const readingOf = (sheet: CurrentSheet, text: PageText, list: TitleblockTemplate[], pick: string): Partial<Row> => {
     const one = pick ? list.find((t) => t.id === pick) : undefined
@@ -62,10 +66,10 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
     return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: differs && (!r.number || same(r.number, sheet.number)) }
   }
   /** Read everything already opened again, leaving alone what was corrected by hand. */
-  const again = (list: TitleblockTemplate[], pick: string) => setRows((all) => all.map((r) => {
+  const again = (list: TitleblockTemplate[], pick: string) => { now.current = { list, pick }; setRows((all) => all.map((r) => {
     const h = held.current.get(r.sheet.sheet_id)
     return h && !r.touched ? { ...r, ...readingOf(r.sheet, h.text, list, pick) } : r
-  }))
+  })) }
 
   useEffect(() => {
     let gone = false
@@ -74,6 +78,7 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
       dates.current = await sheetDates(sheets.map((x) => x.revision_id))
       if (gone) return
       setTemplates(list)
+      now.current = { list, pick: '' }
       setRows((all) => all.map((r) => ({ ...r, was: dates.current.get(r.sheet.revision_id) ?? null })))
       for (const sheet of sheets) {
         if (gone) return
@@ -85,7 +90,8 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
           const text = await readPageText(await pdf.getPage(1))
           void pdf.loadingTask.destroy()
           held.current.set(sheet.sheet_id, { bytes, text })
-          patch(sheet.sheet_id, readingOf(sheet, text, list, ''))
+          setOpened((n) => n + 1)
+          patch(sheet.sheet_id, readingOf(sheet, text, now.current.list, now.current.pick))
         } catch (e) {
           patch(sheet.sheet_id, { state: 'failed', problem: message(e) })
         }
@@ -147,10 +153,14 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
-          <button onClick={() => setDrawing(true)} disabled={left > 0 || !rows.some((r) => held.current.has(r.sheet.sheet_id))}
+          {/* Ready as soon as one sheet has been opened: with forty selected, waiting for the last
+              of them before a template could be made looked like a button that did not work. */}
+          <button onClick={() => setDrawing(true)} disabled={opened === 0}
             title="Draw boxes round the number, title and date on one of these sheets; the others are then read the same way">
             New template from these sheets…
           </button>
+          {opened === 0 && rows.some((r) => r.state === 'failed') && left === 0 && <span className="muted small">None of these sheets could be opened, so there is nothing to draw on.</span>}
+          {opened === 0 && left > 0 && <span className="muted small">Opening the first sheet…</span>}
         </div>
         <div className="reread-table">
           <table>

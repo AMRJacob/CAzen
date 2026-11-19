@@ -11,6 +11,27 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:22 CST
+
+**Re-read: making a template** (Jacob, 15:19: "still isn't allowing me to apply / create a new
+sheet template"). **Not reproduced as a hard failure.** Driven end to end for the first time,
+on a sheet made with a real title block (`checks/t_template.py`, `checks/tb.pdf`): open the
+re-read, *New template from these sheets…*, drag boxes round number, title and date, name it,
+save, and the selected sheets are read again with it — that worked. Two things found on the
+way that could each look like "it won't let me", both changed:
+
+- *New template…* was greyed out until **every** selected sheet had been fetched and read, one
+  after another. With a long selection that is a long wait with nothing to say why. It is now
+  ready as soon as one sheet is open, and sheets still arriving are read with whatever
+  template has been chosen or made in the meantime.
+- In the template editor "Fit" was the sheet's width, so the bottom of the sheet — where the
+  sheet number is — was below the edge of the pane and had to be scrolled to. The number box
+  is required before *Save template* is enabled. Fit is now the whole sheet.
+
+Which of these, if either, was what he hit is not known.
+
+---
+
 # Checkpoint — 2026-11-19, 15:19 CST
 
 Four things from Jacob while testing on the phone (15:12–15:18).
