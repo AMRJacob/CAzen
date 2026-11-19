@@ -30,6 +30,13 @@ way that could each look like "it won't let me", both changed:
 
 Which of these, if either, was what he hit is not known.
 
+Jacob, 15:22: the re-read is working now. **Renaming a template from the re-read dialog**
+(his next ask): with a template chosen in *Read with*, *Rename* turns its name into a box
+(Enter saves, Escape cancels) and *Change its boxes…* opens the same editor on that template.
+The table of read values stays as it is while renaming. `t_template.py` renames the template
+it has just made and checks the server, the list and the rows. *Change its boxes…* was
+compiled, not driven.
+
 ---
 
 # Checkpoint — 2026-11-19, 15:19 CST

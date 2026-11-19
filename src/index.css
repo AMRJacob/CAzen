@@ -2642,3 +2642,6 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
   .sheet-viewer > .sv-bar { padding-top: calc(4px + env(safe-area-inset-top)); padding-left: calc(8px + env(safe-area-inset-left)); padding-right: calc(8px + env(safe-area-inset-right)); }
 }
 .tb-page { margin: 0 auto; }
+.reread-name { display: inline-flex; gap: 8px; align-items: center; }
+.reread-name input { font: inherit; font-size: 14px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 220px; }
+.reread-with { flex-wrap: wrap; }

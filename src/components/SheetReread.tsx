@@ -6,7 +6,7 @@ import { readPageText, type PageText } from '../lib/pdf/pageText'
 import { TitleblockEditor } from './TitleblockEditor'
 import { renameSheet, setSheetDate, sheetDates } from '../lib/sheets'
 import type { CurrentSheet } from '../lib/types'
-import { listTemplates, readPage, readWith, type TitleblockTemplate } from '../lib/titleblocks'
+import { listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
 import { niceTitle } from '../lib/titles'
 
 /**
@@ -52,6 +52,23 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
   /** The template to read with; '' lets each sheet take whichever fits it best. */
   const [using, setUsing] = useState('')
   const [drawing, setDrawing] = useState(false)
+  /** The chosen template's boxes being redrawn, rather than a new template being made. */
+  const [editing, setEditing] = useState(false)
+  /** The chosen template's new name while it is being typed; null when it is not being renamed. */
+  const [naming, setNaming] = useState<string | null>(null)
+  const chosen = templates.find((t) => t.id === using)
+  async function rename() {
+    if (!chosen || naming === null) return
+    const name = naming.trim()
+    if (!name || name === chosen.name) { setNaming(null); return }
+    setError(null)
+    try {
+      const kept = await saveTemplate({ ...chosen, name })
+      setTemplates((all) => all.map((t) => (t.id === kept.id ? kept : t)).sort((a, b) => a.name.localeCompare(b.name)))
+      now.current = { ...now.current, list: now.current.list.map((t) => (t.id === kept.id ? kept : t)) }
+      setNaming(null)
+    } catch (e) { setError(message(e)) }
+  }
   const dates = useRef(new Map<string, string | null>())
   // What to read with right now, for the sheets still on their way in: a template chosen or
   // made while a long selection is still being fetched applies to the rest as they arrive.
@@ -123,11 +140,11 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
     return (
       <div className="reread reread-draw" role="dialog" aria-label="New title block template">
         <div className="reread-card">
-          <TitleblockEditor firmId={firmId} pages={pages}
-            onCancel={() => setDrawing(false)}
+          <TitleblockEditor firmId={firmId} pages={pages} template={editing ? chosen : undefined}
+            onCancel={() => { setDrawing(false); setEditing(false) }}
             onSaved={(t) => {
               const list = [...templates.filter((x) => x.id !== t.id), t].sort((a, b) => a.name.localeCompare(b.name))
-              setTemplates(list); setUsing(t.id); setDrawing(false)
+              setTemplates(list); setUsing(t.id); setDrawing(false); setEditing(false)
               again(list, t.id)
             }} />
         </div>
@@ -148,11 +165,25 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
         </p>
         <div className="inline-form reread-with">
           <label className="small">Read with{' '}
-            <select value={using} onChange={(e) => { setUsing(e.target.value); again(templates, e.target.value) }}>
+            <select value={using} onChange={(e) => { setUsing(e.target.value); setNaming(null); again(templates, e.target.value) }}>
               <option value="">Whichever template fits each sheet</option>
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
+          {chosen && (naming === null ? (
+            <>
+              <button className="link" onClick={() => setNaming(chosen.name)}>Rename</button>
+              <button className="link" disabled={opened === 0} onClick={() => { setEditing(true); setDrawing(true) }}
+                title="Move this template's boxes, using one of these sheets">Change its boxes…</button>
+            </>
+          ) : (
+            <form className="reread-name" onSubmit={(e) => { e.preventDefault(); void rename() }}>
+              <input autoFocus value={naming} aria-label="Template name" onChange={(e) => setNaming(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null) } }} />
+              <button type="submit" className="primary-lite">Save name</button>
+              <button type="button" className="link" onClick={() => setNaming(null)}>Cancel</button>
+            </form>
+          ))}
           {/* Ready as soon as one sheet has been opened: with forty selected, waiting for the last
               of them before a template could be made looked like a button that did not work. */}
           <button onClick={() => setDrawing(true)} disabled={opened === 0}

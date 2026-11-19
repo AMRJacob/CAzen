@@ -8,6 +8,9 @@ saved=[]; ex['titleblock_templates']=lambda req: saved
 def post(req):
     row=json.loads(req.post_data); row=row[0] if isinstance(row,list) else row; row.setdefault('id','99999999-9999-4999-8999-999999999991'); saved.append(row); return row if 'pgrst.object' in (req.headers.get('accept') or '') else [row]
 ex['POST:titleblock_templates']=post
+def patch(req):
+    saved[0].update(json.loads(req.post_data)); return saved[0]
+ex['PATCH:titleblock_templates']=patch
 pdf=open('tb.pdf','rb').read()
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex); signed_in(ctx)
@@ -37,4 +40,6 @@ with sync_playwright() as p:
     pg.fill('.tb-name input','AMR 24x36'); sv=pg.locator('button:has-text("Save template")'); print('Save enabled:',sv.is_enabled()); pg.screenshot(path='tpl_3.png'); sv.click(); pg.wait_for_timeout(1500); pg.screenshot(path='tpl_4.png')
     print('saved to server:',[(t.get('name'),sorted((t.get('regions') or {}).keys())) for t in saved],'| back at table:',pg.locator('.reread-table').count()==1,'| editor error:',pg.locator('.tb-editor .error, .tb-editor .notice').all_inner_texts())
     if pg.locator('.reread-table').count(): print('re-read with it:',pg.evaluate("[...document.querySelectorAll('.reread tbody tr')].map(r=>[r.cells[1].innerText.replace(/\\n/g,' / '),r.querySelector('input[aria-label=\"Title read\"]')?.value,r.querySelector('input[type=date]')?.value,r.querySelector('input[type=checkbox]').checked])"),'| Read with:',pg.locator('.reread-with select').input_value()[:8],'| apply button:',pg.inner_text('.reread .actions .primary'))
+    pg.click('.reread-with button:has-text("Rename")'); pg.fill('.reread-name input','AMR Architects 24x36'); pg.keyboard.press('Enter'); pg.wait_for_timeout(600)
+    print('renamed — on the server:',saved[0]['name'],'| in the list:',pg.locator('.reread-with select option:checked').inner_text(),'| rows kept:',pg.locator('input[aria-label="Title read"]').first.input_value(),'| dialog still open:',pg.locator('.reread-table').count()==1); pg.screenshot(path='tpl_5.png',clip={'x':150,'y':150,'width':1140,'height':200})
     print('errors:',errs[:4]); b.close()
