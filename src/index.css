@@ -2422,3 +2422,5 @@ body:has(.nb) .phone-nav { display: none; }
 .padsel .pad-swatch, .padsel .pad-nib, .padsel .padbar-key { flex: none; }
 .pad-textgrip.size { right: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%; cursor: ns-resize; display: none; place-items: center; font-size: 17px; font-weight: 700; line-height: 1; color: var(--ink); user-select: none; -webkit-user-select: none; }
 .pad-textbox.shown .pad-textgrip.size { display: grid; }
+.nb-exit { position: fixed; z-index: 66; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 1.5px solid #2b2d2c; border-radius: 50%; background: var(--panel); color: #2b2d2c; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); }
+.nb-exit:hover { background: var(--moss-soft); }

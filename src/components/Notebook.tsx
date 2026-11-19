@@ -135,7 +135,11 @@ export function Notebook({ project, kind, pages, onPages }: {
           onTrouble={setError} />
       ) : (
         <article key="contents" className={`nb-paper nb-contents nb-turn-${turn}`}>
-          {turnBar}
+          {/* The contents page has its own way to a new page and to every page, so the corner menu
+              had one thing left to offer here: the way out. It gets a plain button instead. */}
+          <button className="nb-exit" onClick={() => navigate('/')} aria-label={`Close ${BOOK[kind].title.toLowerCase()}`} title="Close">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
           <h1>{BOOK[kind].title}</h1>
           <p className="nb-sub">{project.number} · {project.name}</p>
           <button className="nb-today" onClick={() => void newPage()}>

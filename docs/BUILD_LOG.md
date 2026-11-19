@@ -23,6 +23,11 @@ from it.
 - **Close on a notebook did nothing — my regression from 11:50.** Close went to `/field-notes`,
   which since the Notebooks page was retired sends you straight back into the book. Close (and
   Escape on the contents page) now go to the main page.
+- **A book's contents page has an exit button, not the CA menu** (Jacob, 12:13). The page
+  already has *New page* and the list of pages, so the corner menu's only job there was the way
+  out: a round × at the top right (`.nb-exit`). Inside a page the corner menu is unchanged. The
+  paper setting is now reachable only from a page. `checks/t_notebook.py` still clicks the menu
+  on the contents page and will fail there until it is updated.
 
 ---
 
