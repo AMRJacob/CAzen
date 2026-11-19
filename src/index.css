@@ -2450,3 +2450,14 @@ body:has(.nb) .phone-nav { display: none; }
 .sched-read td.doubt input.cell { background: transparent; }
 .sched-doubts { color: #8a2a1f; margin: 6px 0; }
 .doubt-key { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; background: #fbe3df; box-shadow: inset 0 0 0 1.5px #c0392b; border-radius: 2px; }
+/* On a phone the tagger's bar is: back to the sheets, the sheet's number, Tag it here, close.
+   The zoom buttons are left off — fingers do that — because with them the close button was
+   pushed off the right edge of the screen and there was no way back to the observation. */
+.spot-bar > button, .spot-zoom { flex: none; }
+.spot-bar { padding-right: calc(12px + env(safe-area-inset-right)); padding-left: calc(12px + env(safe-area-inset-left)); }
+@media (max-width: 640px) {
+  .spot-zoom { display: none; }
+  .spot-name { font-size: 13px; }
+  .spot-bar { gap: 6px; }
+  .spot-bar > button { padding-left: 10px; padding-right: 10px; }
+}
