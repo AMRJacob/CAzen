@@ -1,5 +1,7 @@
 import { getDocument } from './pdfjs'
 import { pageBody, readPageText } from './pageText'
+import { linesByNumber, type PlacedWord } from '../scheduleRows'
+import type { ScheduleLine } from '../scheduleRead'
 
 /**
  * The lines of text on a schedule PDF, however it was made.
@@ -11,7 +13,10 @@ import { pageBody, readPageText } from './pageText'
  */
 
 export interface ScheduleText {
-  lines: string[]
+  /** Rows found by their line numbers where the page has them; plain lines where it has not. */
+  lines: ScheduleLine[]
+  /** How many pages were read by their line numbers. */
+  numbered: number
   pages: number
   /** How many of those pages had no words of their own and were read from the picture. */
   scanned: number
@@ -20,7 +25,12 @@ export interface ScheduleText {
 const MAX_PAGES = 40
 const base = () => new URL('./ocr/', document.baseURI).href
 
-type Reader = { recognize: (image: HTMLCanvasElement) => Promise<{ data: { text: string } }>; terminate: () => Promise<unknown> }
+interface OcrWord { text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }
+interface OcrData { text: string; blocks?: { paragraphs: { lines: { words: OcrWord[] }[] }[] }[] | null }
+type Reader = {
+  recognize: (image: HTMLCanvasElement, options?: object, output?: object) => Promise<{ data: OcrData }>
+  terminate: () => Promise<unknown>
+}
 
 async function reader(): Promise<Reader> {
   const { createWorker } = await import('tesseract.js')
@@ -37,14 +47,14 @@ async function reader(): Promise<Reader> {
 
 export async function scheduleText(
   bytes: Uint8Array,
-  onProgress: (p: { page: number; pages: number; reading: boolean }) => void = () => {},
+  onProgress: (p: { page: number; pages: number; reading: boolean; row?: number; rows?: number }) => void = () => {},
 ): Promise<ScheduleText> {
   const pdf = await getDocument({ data: bytes.slice() }).promise
   let ocr: Reader | null = null
   try {
     const pages = Math.min(pdf.numPages, MAX_PAGES)
-    const lines: string[] = []
-    let scanned = 0
+    const lines: ScheduleLine[] = []
+    let scanned = 0, numbered = 0
     for (let n = 1; n <= pages; n++) {
       const page = await pdf.getPage(n)
       const text = await readPageText(page)
@@ -52,7 +62,16 @@ export async function scheduleText(
       // not a schedule.
       if (text.words.length >= 12) {
         onProgress({ page: n, pages, reading: false })
-        lines.push(...pageBody(text).split('\n'))
+        // A printed PDF keeps its words in runs; a run that starts with the row's number is
+        // split so the number can stand in its column.
+        const placed: PlacedWord[] = text.words.filter((w) => !w.vertical).flatMap((w) => {
+          const m = w.str.match(/^(\s*\d{1,4})(\s+)(\S.*)$/)
+          if (!m) return [{ text: w.str.trim(), x: w.x, y: w.y, w: w.w, h: w.h }]
+          const cut = w.w * (m[1].length + m[2].length) / w.str.length
+          return [{ text: m[1].trim(), x: w.x, y: w.y, w: w.w * m[1].length / w.str.length, h: w.h }, { text: m[3].trim(), x: w.x + cut, y: w.y, w: w.w - cut, h: w.h }]
+        })
+        const rows = linesByNumber(placed, 1)
+        if (rows) { numbered++; lines.push(...rows) } else lines.push(...pageBody(text).split('\n'))
         continue
       }
       onProgress({ page: n, pages, reading: true })
@@ -69,11 +88,18 @@ export async function scheduleText(
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       await page.render({ canvas, canvasContext: ctx, viewport }).promise
       ocr ??= await reader()
-      const { data } = await ocr.recognize(canvas)
-      lines.push(...data.text.split('\n'))
+      const { data } = await ocr.recognize(canvas, {}, { text: true, blocks: true })
+      const placed: PlacedWord[] = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)))
+        .filter((w) => w.text.trim())
+        .map((w) => ({ text: w.text.trim(), x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0 }))
+      const rows = placed.length ? linesByNumber(placed, canvas.width) : null
+      if (rows) {
+        numbered++
+        lines.push(...rows)
+      } else lines.push(...data.text.split('\n'))
       canvas.width = canvas.height = 0
     }
-    return { lines, pages, scanned }
+    return { lines, pages, scanned, numbered }
   } finally {
     await ocr?.terminate().catch(() => {})
     await pdf.loadingTask.destroy()

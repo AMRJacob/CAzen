@@ -17,7 +17,7 @@ with sync_playwright() as p:
     t=time.time(); pg.set_input_files('.sched-import input[type=file]','scan.pdf')
     pg.wait_for_selector('.sched-read',timeout=120000); print('scan read in %.1fs'%(time.time()-t))
     print(pg.inner_text('.sched-import p.small'))
-    rows=pg.evaluate("[...document.querySelectorAll('.sched-read tbody tr')].map(r=>[r.querySelector('input.cell').value,...[...r.querySelectorAll('input[type=date]')].map(i=>i.value),[...r.querySelectorAll('.sched-tie')].map(t=>t.firstChild.textContent).join('|')])")
+    rows=pg.evaluate("[...document.querySelectorAll('.sched-read tbody tr')].map(r=>[r.querySelector('.sched-no').textContent,r.querySelector('input.cell').value,...[...r.querySelectorAll('input[type=date]')].map(i=>i.value),[...r.querySelectorAll('.sched-tie')].map(t=>t.firstChild.textContent).join('|')])")
     for r in rows: print('  ',r)
     pg.screenshot(path='sched_read.png')
     pg.click('.sched-import button.primary'); pg.wait_for_timeout(1500)

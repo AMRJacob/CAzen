@@ -11,6 +11,39 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 13:45 CST
+
+**The schedule is read by its line numbers, and its issues are kept.**
+
+- **Rows found by number** (`src/lib/scheduleRows.ts`, dependency-free). Jacob: recognition on a
+  scan is unreliable; find the line numbers first, then read each number's row. The reader's
+  words are taken with their positions (Tesseract's word boxes for a scan, pdf.js's for a
+  printed PDF). The left-hand column of numbers is found — the numbers sharing an edge, and of
+  those the longest run that climbs down the page, so a stray figure in the column drops out —
+  and every other word goes to the number whose line it sits on. Words on no number's line are
+  headings. A row whose number was not read, alone between two that differ by two, is given the
+  one between. Activity IDs (A1010) count as numbers. A page with no such column is read line by
+  line as before.
+- **A Line column in the edit window**, for finding a row on the sheet; headings carry none.
+  It is not saved with the activity.
+- **Tried and taken out:** reading each row a second time on its own, enlarged. On the test scan
+  it made names worse (a skewed row's strip cuts through its neighbours). Also tried 300 dpi in
+  place of 250; it was worse on the same scan and was put back.
+- **Not known:** how this does on Jacob's scan — I have not seen it. The test scan is one I
+  made: it reads 11 of 11 activities with every date right, as it did before.
+- **Issues of the schedule** (`scheduleDiff.ts`, `scheduleVersions.ts`, `History` in
+  `Schedule.tsx`). Each read-in is an issue with a date and a name. What it changed is worked
+  out against the schedule as it stood — moved (start/finish, by how many days), added, not in
+  this issue (left in the schedule, never removed), new progress — and kept with the whole
+  schedule as it stood after. The schedule page lists the issues, each opening to its changes
+  and to the schedule as it stood, with how far the last finish moved. Matching is by name, so
+  a renamed activity reads as one missing and one added.
+- **Migration `0039_schedule_versions.sql` is NOT applied** — the confirmation went unanswered.
+  Until it is, a read-in still updates the schedule and says the history is not being kept.
+- `checks/schedule.test.ts` (29 cases), `checks/t_sched.py`, `checks/t_issues.py`.
+
+---
+
 # Checkpoint — 2026-11-19, 13:05 CST
 
 - **Pad: select, right-click, text size.** A *Select* tool: click a stroke or text box, or drag

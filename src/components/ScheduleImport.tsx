@@ -17,6 +17,8 @@ interface SovLine { id: string; item_no: string | null; description: string; is_
 interface Row extends ReadActivity { keep: boolean; lines: string[] }
 
 export interface ImportResult {
+  /** Everything read and kept this time, for the record of what this issue changed. */
+  issue: { label: string | null; issued_on: string; rows: ReadActivity[] }
   add: (ReadActivity & { lines: string[] })[]
   update: { id: string; patch: Pick<Activity, 'starts_on' | 'ends_on' | 'percent'> }[]
 }
@@ -37,6 +39,8 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [over, setOver] = useState(false)
+  const [issuedOn, setIssuedOn] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })
+  const [issueName, setIssueName] = useState('')
 
   const label = useMemo(() => {
     const by = new Map((lines ?? []).map((l) => [l.id, `${l.item_no ? `${l.item_no} · ` : ''}${l.description}`]))
@@ -60,7 +64,8 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
       const { scheduleText } = await import('../lib/pdf/scheduleText')
       const text = await scheduleText(new Uint8Array(await f.arrayBuffer()), (p) =>
         setProgress(p.reading
-          ? `Reading page ${p.page} of ${p.pages} from the scan — this takes a few seconds a page…`
+          ? p.rows ? `Page ${p.page} of ${p.pages}: reading line ${p.row} of ${p.rows} by its number…`
+            : `Reading page ${p.page} of ${p.pages} from the scan — finding the line numbers…`
           : `Reading page ${p.page} of ${p.pages}…`))
       setScanned(text.scanned)
       show(readSchedule(text.lines, { scanned: text.scanned > 0 }))
@@ -83,6 +88,7 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
     setBusy(true); setError(null)
     try {
       await onKeep({
+        issue: { label: issueName.trim() || null, issued_on: issuedOn, rows: kept.map(({ keep: _k, lines: _l, ...r }) => ({ ...r, name: r.name.trim() })) },
         add: news.map(({ keep: _k, ...r }) => ({ ...r, name: r.name.trim() })),
         update: updates.map((r) => ({ id: updating(r)!.id, patch: { starts_on: r.starts_on, ends_on: r.ends_on, percent: r.percent } })),
       })
@@ -141,11 +147,12 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
           </p>
           <div className="sov-preview sched-read">
             <table>
-              <thead><tr><th /><th>Activity</th><th>Starts</th><th>Ends</th><th>Covers</th><th /></tr></thead>
+              <thead><tr><th /><th className="right" title="The line number printed on the schedule">Line</th><th>Activity</th><th>Starts</th><th>Ends</th><th>Covers</th><th /></tr></thead>
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} className={`${r.is_heading ? 'sov-heading' : ''}${r.keep ? '' : ' sched-left-out'}`}>
                     <td><input type="checkbox" checked={r.keep} aria-label={`Keep ${r.name}`} onChange={(e) => change(i, { keep: e.target.checked })} /></td>
+                    <td className="right sched-no">{r.is_heading ? '' : r.no ?? ''}</td>
                     <td><input className="cell" value={r.name} aria-label="Activity name" onChange={(e) => change(i, { name: e.target.value })} /></td>
                     {r.is_heading ? <td colSpan={3} /> : (
                       <>
@@ -172,6 +179,11 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
               by its name. Take off any that are wrong; the rest can be tied afterwards.
             </p>
           )}
+          {/* Which issue of the schedule this is: the history is kept by it. */}
+          <div className="inline-form sched-issue">
+            <label className="small">This issue is dated <input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value || issuedOn)} /></label>
+            <input value={issueName} onChange={(e) => setIssueName(e.target.value)} placeholder={existing.length ? 'What to call it, e.g. Update 3' : 'What to call it, e.g. Baseline'} aria-label="Name of this issue" />
+          </div>
           <div className="actions">
             <button className="primary" disabled={busy || (!news.length && !updates.length)} onClick={() => void keep()}>
               {busy ? 'Keeping…' : [

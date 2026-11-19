@@ -2424,3 +2424,23 @@ body:has(.nb) .phone-nav { display: none; }
 .pad-textbox.shown .pad-textgrip.size { display: grid; }
 .nb-exit { position: fixed; z-index: 66; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 1.5px solid #2b2d2c; border-radius: 50%; background: var(--panel); color: #2b2d2c; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); }
 .nb-exit:hover { background: var(--moss-soft); }
+.sched-no { color: var(--muted); font-variant-numeric: tabular-nums; width: 44px; padding-right: 8px; }
+
+/* ---------- Issues of the schedule ---------- */
+.sched-issue { margin: 12px 0 4px; align-items: center; }
+.sched-issue input[type=date] { margin-left: 6px; }
+.sched-history { margin-top: 34px; }
+.sched-history h2 { font-size: 15px; font-weight: 500; margin: 0 0 8px; }
+.sched-history > ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.sched-history > ul > li { border-bottom: 1px solid var(--line); }
+.sched-issue-row { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; width: 100%; padding: 11px 6px; border: none; border-radius: 0; background: none; text-align: left; font-size: 14px; }
+.sched-issue-row:hover { background: var(--moss-soft); }
+.sched-issue-row strong { font-variant-numeric: tabular-nums; min-width: 92px; }
+.sched-issue-body { padding: 2px 6px 14px 114px; }
+.sched-changes { margin: 0 0 10px; padding-left: 18px; font-size: 13.5px; line-height: 1.6; }
+.sched-changes .chg-missing { color: var(--muted); }
+.sched-old { margin-top: 10px; font-size: 13px; width: 100%; max-width: 720px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sched-old td, .sched-old th { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.sched-old .right { text-align: right; }
+.sched-old-head td { font-weight: 600; background: var(--wash); }
+@media (max-width: 700px) { .sched-issue-body { padding-left: 6px; } }

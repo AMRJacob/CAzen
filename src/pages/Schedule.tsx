@@ -13,6 +13,9 @@ import {
 import { listContracts, loadContract, type LoadedContract } from '../lib/payappsDb'
 import { figure } from '../lib/payapps'
 import { ScheduleImport, type ImportResult } from '../components/ScheduleImport'
+import { afterIssue, diffSchedule, finishSlip, summary, type Change, type Line } from '../lib/scheduleDiff'
+import { keepVersion, listVersions, VersionsNotSetUp, type ScheduleVersion } from '../lib/scheduleVersions'
+import { usDate } from '../lib/dates'
 import { suggestLines } from '../lib/scheduleRead'
 
 /**
@@ -34,6 +37,12 @@ export default function Schedule() {
   const [said, setSaid] = useState<string | null>(null)
 
   const projectId = current?.id
+  /** Earlier issues of the schedule; null until read, false where there is nowhere to keep them. */
+  const [versions, setVersions] = useState<ScheduleVersion[] | null | false>(null)
+  useEffect(() => {
+    if (!projectId) return
+    listVersions(projectId).then(setVersions).catch(() => setVersions(false))
+  }, [projectId])
   const load = useCallback(() => {
     if (!projectId) return
     listActivities(projectId)
@@ -92,6 +101,10 @@ export default function Schedule() {
   /** What was read from the contractor's schedule: new rows in one request, known ones updated. */
   async function keepImport(r: ImportResult) {
     if (!projectId) return
+    // What this issue changes, worked out against the schedule as it stands before any of it is applied.
+    const before: Line[] = (activities ?? []).map((a) => ({ name: a.name, is_heading: a.is_heading, starts_on: a.starts_on, ends_on: a.ends_on, percent: a.percent }))
+    const changes = diffSchedule(before, r.issue.rows)
+    const snapshot = afterIssue(before, r.issue.rows)
     const from = (activities ?? []).reduce((m, a) => Math.max(m, a.sort), 0)
     const made = await addActivities(r.add.map((a, i) => ({
       project_id: projectId, contract_id: data?.contract.id ?? null,
@@ -102,10 +115,19 @@ export default function Schedule() {
     const patched = new Map(r.update.map((u) => [u.id, u.patch]))
     setActivities((all) => [...(all ?? []).map((a) => ({ ...a, ...(patched.get(a.id) ?? {}) })), ...made])
     const tied = made.filter((a) => a.lines.length).length
+    let recorded = ''
+    try {
+      const v = await keepVersion({ project_id: projectId, label: r.issue.label, issued_on: r.issue.issued_on, snapshot, changes })
+      setVersions((all) => [v, ...(all || [])])
+      recorded = before.length ? `Kept as an issue in the history: ${summary(changes)}` : 'Kept as the first issue in the history'
+    } catch (e) {
+      // The schedule itself is updated either way; only the record of the issue is missing.
+      recorded = e instanceof VersionsNotSetUp ? 'The history of issues is not being kept yet (migration 0039)' : `The issue could not be added to the history: ${message(e)}`
+    }
     setSaid([
       made.length ? `${made.length} added` : '', r.update.length ? `${r.update.length} updated` : '',
       tied ? `${tied} tied to the schedule of values` : '',
-    ].filter(Boolean).join(', ') + '.')
+    ].filter(Boolean).join(', ') + '. ' + recorded + '.')
   }
 
   /** Offer a tie for every activity that has none, from its name. Ones already tied are left alone. */
@@ -293,6 +315,8 @@ export default function Schedule() {
           </div>
         </>
       )}
+
+      {versions && versions.length > 0 && <History versions={versions} />}
     </section>
   )
 }
@@ -325,5 +349,68 @@ function Covers({ activity, lines, onSave, onDone }: {
         <button className="link" onClick={onDone}>Cancel</button>
       </div>
     </div>
+  )
+}
+
+const day = (iso: string | null) => (iso ? usDate(iso) : '—')
+const signed = (n: number | null) => (n == null ? '' : n === 0 ? '' : ` (${n > 0 ? '+' : '−'}${Math.abs(n)} ${Math.abs(n) === 1 ? 'day' : 'days'})`)
+
+/** One change, as a sentence somebody could read out in an OAC meeting. */
+function said(c: Change): string {
+  if (c.kind === 'added') return `${c.name} — added${c.starts_on ? `, ${day(c.starts_on)} to ${day(c.ends_on)}` : ''}`
+  if (c.kind === 'missing') return `${c.name} — not in this issue (left in the schedule)`
+  if (c.kind === 'progress') return `${c.name} — ${c.from}% to ${c.to}%`
+  return `${c.name} — ${[
+    c.start ? `start ${day(c.start.from)} → ${day(c.start.to)}${signed(c.start.days)}` : '',
+    c.end ? `finish ${day(c.end.from)} → ${day(c.end.to)}${signed(c.end.days)}` : '',
+  ].filter(Boolean).join('; ')}`
+}
+
+/**
+ * The issues of the schedule, newest first: what each changed, and the schedule as it stood.
+ * A contractor's schedule is reissued as the job moves; this is where the one before can still
+ * be read, and where "when did roofing slip?" has an answer.
+ */
+function History({ versions }: { versions: ScheduleVersion[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [whole, setWhole] = useState<string | null>(null)
+  return (
+    <section className="sched-history">
+      <h2>Issues of the schedule</h2>
+      <ul>
+        {versions.map((v, i) => {
+          const older = versions[i + 1]
+          const slip = older ? finishSlip(older.snapshot, v.snapshot) : null
+          const moves = v.changes.filter((c) => c.kind !== 'progress')
+          return (
+            <li key={v.id}>
+              <button className="sched-issue-row" aria-expanded={open === v.id} onClick={() => { setOpen(open === v.id ? null : v.id); setWhole(null) }}>
+                <strong>{day(v.issued_on)}</strong>
+                <span>{v.label ?? (older ? 'Update' : 'First issue')}</span>
+                <span className="muted">{older ? summary(v.changes) : `${v.snapshot.filter((l) => !l.is_heading).length} activities`}</span>
+                {slip ? <span className={slip > 0 ? 'due' : 'ok-text'}>finish {slip > 0 ? 'later' : 'earlier'} by {Math.abs(slip)} {Math.abs(slip) === 1 ? 'day' : 'days'}</span> : null}
+              </button>
+              {open === v.id && (
+                <div className="sched-issue-body">
+                  {older && (moves.length ? <ul className="sched-changes">{moves.map((c, n) => <li key={n} className={`chg-${c.kind}`}>{said(c)}</li>)}</ul>
+                    : <p className="muted small">No dates changed, nothing added, nothing missing.</p>)}
+                  <button className="link" onClick={() => setWhole(whole === v.id ? null : v.id)}>{whole === v.id ? 'Hide the schedule as it stood' : 'Show the schedule as it stood'}</button>
+                  {whole === v.id && (
+                    <table className="sched-old">
+                      <thead><tr><th>Activity</th><th>Starts</th><th>Ends</th><th className="right">Done</th></tr></thead>
+                      <tbody>
+                        {v.snapshot.map((l, n) => (l.is_heading
+                          ? <tr key={n} className="sched-old-head"><td colSpan={4}>{l.name}</td></tr>
+                          : <tr key={n}><td>{l.name}</td><td>{day(l.starts_on)}</td><td>{day(l.ends_on)}</td><td className="right">{l.percent ? `${l.percent}%` : '—'}</td></tr>))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

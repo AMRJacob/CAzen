@@ -12,6 +12,8 @@
  */
 
 export interface ReadActivity {
+  /** The line number printed on the schedule, for finding the row on the sheet. Not kept. */
+  no?: string | null
   name: string
   is_heading: boolean
   starts_on: string | null
@@ -95,12 +97,19 @@ function nameFrom(before: string, after: string): string {
   return right.replace(/[^A-Za-z]/g, '').length >= 3 ? right : ''
 }
 
-export function readSchedule(lines: string[], opts: { scanned?: boolean } = {}): ReadActivity[] {
+/** A line as text alone, or with the line number it was found by (`scheduleRows`). */
+export type ScheduleLine = string | { no: string | null; text: string }
+
+export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } = {}): ReadActivity[] {
   const out: ReadActivity[] = []
   let pendingHeading: string | null = null
-  for (const raw of lines) {
-    const line = (opts.scanned ? mendDates(raw) : raw).replace(/ /g, ' ').trim()
+  for (const given of lines) {
+    const raw = typeof given === 'string' ? given : given.text
+    const line = (opts.scanned ? mendDates(raw) : raw).replace(/\u00a0/g, ' ').trim()
     if (!line) continue
+    // Found by its number, the number is known; read as a plain line, it is the line's first
+    // token if that is a small whole number.
+    const no = typeof given === 'string' ? (line.match(/^(\d{1,4})\s+\S/)?.[1] ?? null) : given.no
     const dates = datesIn(line)
     if (!dates.length) {
       const letters = line.replace(/[^A-Za-z]/g, '').length
@@ -120,7 +129,7 @@ export function readSchedule(lines: string[], opts: { scanned?: boolean } = {}):
     if (b < a) [a, b] = [b, a]
     const pc = line.match(/(\d{1,3})(?:\.\d+)?\s?%/)
     out.push({
-      name, is_heading: false, starts_on: a, ends_on: b,
+      no, name, is_heading: false, starts_on: a, ends_on: b,
       percent: pc ? Math.max(0, Math.min(100, Number(pc[1]))) : 0,
     })
   }

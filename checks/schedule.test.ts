@@ -20,3 +20,36 @@ eq(suggestLines('Mechanical rough-in',sov),['d'],'mechanical = HVAC')
 eq(suggestLines('Owner move-in',sov),[],'nothing forced')
 const lv=readSchedule(['A3000 Paint Level 2 10 03/23/26 04/03/26','A3010 Framing Phase 1 15 15 02/02/26 02/20/26'])
 eq(lv.map(a=>a.name),['Paint Level 2','Framing Phase 1'],'a number that belongs to the name stays')
+import { linesByNumber } from '../src/lib/scheduleRows.ts'
+{
+  // A page as a reader hands it over: words with places, out of order, with a stray number, a
+  // heading, a misread line number, and bar-chart rubbish to the right.
+  const W=(text:string,x:number,y:number)=>({text,x,y,w:text.length*7,h:12})
+  const row=(no:string,y:number,name:string,a:string,b:string)=>[W(no,40-no.length*7,y),...name.split(' ').map((t,i)=>W(t,60+i*60,y+(i%2))),W(a,420,y),W(b,500,y),W('|||',700,y+1)]
+  const words=[W('ID',26,10),W('Task',60,10),W('Name',100,10),W('Start',420,10),W('Finish',500,10),
+    W('SITEWORK',60,34),
+    ...row('1',52,'Mobilization','01/05/26','01/09/26'),...row('2',70,'Erosion control','01/12/26','01/23/26'),
+    ...row('?',88,'Clearing and grubbing','01/26/26','01/30/26'),...row('4',106,'Rough grading','02/02/26','02/13/26'),
+    W('STRUCTURE',60,124),
+    ...row('5',142,'Footings','02/16/26','02/27/26'),...row('6',160,'Slab on grade','03/02/26','03/06/26'),W('3',33,300)].sort(()=>0.5-Math.sin(1))
+  const lines=linesByNumber(words,800)!
+  eq(lines.filter(l=>l.no).map(l=>l.no),['1','2','3','4','5','6'],'line numbers found, the unread one filled in, the stray one dropped')
+  const read=readSchedule(lines)
+  eq(read.map(a=>[a.is_heading?'':a.no,a.name,a.starts_on]),[['','SITEWORK',null],['1','Mobilization','2026-01-05'],['2','Erosion control','2026-01-12'],['3','Clearing and grubbing','2026-01-26'],['4','Rough grading','2026-02-02'],['','STRUCTURE',null],['5','Footings','2026-02-16'],['6','Slab on grade','2026-03-02']],'each number given its own row; headings carry none')
+  eq(linesByNumber([W('Mobilization',60,10),W('01/05/26',300,10)],800),null,'no number column, no guessing')
+  eq(readSchedule(['12 Roofing 3 wks Mon 3/2/26 Fri 3/20/26']).map(a=>a.no),['12'],'a plain line keeps its leading number')
+}
+import { diffSchedule, afterIssue, summary, finishSlip } from '../src/lib/scheduleDiff.ts'
+{
+  const L=(name:string,s:string|null,e:string|null,p=0,h=false)=>({name,is_heading:h,starts_on:s,ends_on:e,percent:p})
+  const before=[L('SITEWORK',null,null,0,true),L('Mobilization','2026-01-05','2026-01-09',100),L('Roofing','2026-04-06','2026-04-17'),L('Painting','2026-06-08','2026-06-19')]
+  const issue=[L('SITEWORK',null,null,0,true),L('mobilization','2026-01-05','2026-01-09',100),L('Roofing','2026-04-13','2026-04-29',10),L('Punch list','2026-06-22','2026-06-26')]
+  const ch=diffSchedule(before,issue)
+  eq(ch.map(c=>[c.kind,c.name]),[['moved','Roofing'],['progress','Roofing'],['added','Punch list'],['missing','Painting']],'what an issue changed')
+  eq((ch[0] as {start:{days:number},end:{days:number}}).start.days+','+(ch[0] as {end:{days:number}}).end.days,'7,12','by how many days')
+  eq(summary(ch),'1 moved, 1 added, 1 not in this issue, 1 with new progress','said in a line')
+  const after=afterIssue(before,issue)
+  eq(after.map(l=>l.name),['SITEWORK','Mobilization','Roofing','Painting','Punch list'],'the schedule after: nothing dropped, the new one added')
+  eq(finishSlip(before,after),7,'the last finish moved a week')
+  eq(diffSchedule([],issue).map(c=>c.kind),['added','added','added'],'a first issue is all additions, with nothing missing')
+}
