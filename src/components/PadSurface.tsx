@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { graphiteOf, handOf, outlineOf, seedOf, traceTo, type Nib } from '../lib/nib'
+import { graphiteOf, handOf, outlineOf, reachAhead, seedOf, traceTo, type Nib } from '../lib/nib'
 import type { InkPoint } from '../lib/ink'
 import type { PadMark, PadRule } from '../lib/pads'
 
@@ -23,6 +23,7 @@ import type { PadMark, PadRule } from '../lib/pads'
  */
 
 export interface View { scale: number; x: number; y: number }
+interface Box { x: number; y: number; w: number; h: number }
 export interface InkStyle { colour: string; width: number; nib: Nib }
 /** What the pad gets back: a way to show the stroke in progress. */
 export interface PadInk {
@@ -43,6 +44,13 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
 }) {
   const paper = useRef<HTMLCanvasElement | null>(null)
   const live = useRef<HTMLCanvasElement | null>(null)
+  /**
+   * `desynchronized` asks the browser to put the ink on the screen without waiting for the
+   * rest of the page to be composited — the low-latency path browsers keep for drawing. Where
+   * it is not offered the flag is ignored, and nothing else changes.
+   */
+  const inkCtx = (c: HTMLCanvasElement | null): CanvasRenderingContext2D | null =>
+    c ? c.getContext('2d', { alpha: true, desynchronized: true }) : null
   const size = useRef({ w: 0, h: 0, dpr: 1 })
   const viewRef = useRef(view)
   // Written in an effect, never during render: everything that reads it runs from an event
@@ -68,7 +76,8 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
    * to where the paper is. Panning changes only where it goes, so the path is kept and the
    * canvas is moved under it; the outline is rebuilt only when the zoom changes.
    */
-  const paths = useRef(new Map<string, { scale: number; dpr: number; path: Path2D }>())
+  interface Drawn { scale: number; dpr: number; path: Path2D; box: Box }
+  const paths = useRef(new Map<string, Drawn>())
 
   const pathFor = useCallback((
     id: string | null,
@@ -76,10 +85,10 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     style: InkStyle,
     v: View,
     seed: number,
-  ): Path2D | null => {
+  ): Drawn | null => {
     const { dpr } = size.current
     const had = id ? paths.current.get(id) : undefined
-    if (had && had.scale === v.scale && had.dpr === dpr) return had.path
+    if (had && had.scale === v.scale && had.dpr === dpr) return had
     const here: InkPoint[] = points.map((p) => (
       p.length > 2
         ? [p[0] * v.scale * dpr, p[1] * v.scale * dpr, p[2] as number]
@@ -91,8 +100,16 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     if (outline.length < 3) return null
     const path = new Path2D()
     traceTo(path, outline)
-    if (id) paths.current.set(id, { scale: v.scale, dpr, path })
-    return path
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+    for (const [x, y] of outline) {
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+    const made: Drawn = { scale: v.scale, dpr, path, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } }
+    if (id) paths.current.set(id, made)
+    return made
   }, [])
 
   /** One stroke, onto whichever canvas is asked for, at the view it is asked for. */
@@ -103,10 +120,10 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     style: InkStyle,
     v: View,
     seed: number,
-  ) => {
-    if (points.length < 2) return
-    const path = pathFor(id, points, style, v, seed)
-    if (!path) return
+  ): Box | null => {
+    if (points.length < 2) return null
+    const drawn = pathFor(id, points, style, v, seed)
+    if (!drawn) return null
     const { dpr } = size.current
     const hand = handOf(style.nib)
     ctx.save()
@@ -114,8 +131,10 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     ctx.globalAlpha = hand.alpha
     const grain = style.nib === 'pencil' ? graphiteOf(ctx, style.colour) : null
     ctx.fillStyle = grain ?? style.colour
-    ctx.fill(path)
+    ctx.fill(drawn.path)
     ctx.restore()
+    const b = drawn.box
+    return { x: b.x + v.x * dpr, y: b.y + v.y * dpr, w: b.w, h: b.h }
   }, [pathFor])
 
   /** One saved mark. */
@@ -176,9 +195,10 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
 
   useLayoutEffect(() => {
     const c = paper.current
-    const ctx = c?.getContext('2d')
+    const ctx = inkCtx(c)
     if (!c || !ctx) return
     const resized = fitCanvas(c)
+    if (fitCanvas(live.current)) wetBox.current = null
     const ids = marks.map((m) => m.id)
     const sig = `${rule}|${ruleInk}`
     const was = laid.current
@@ -202,15 +222,26 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
 
   /** The stroke under the nib. Held here so a redraw can put it back where it was. */
   const wetNow = useRef<{ points: InkPoint[]; style: InkStyle; seed: number } | null>(null)
+  /**
+   * What the wet stroke covered last time.
+   *
+   * Clearing the whole canvas marks the whole canvas changed, and a screenful of pixels at
+   * three times the density then has to be handed to the compositor on every single frame of
+   * a stroke. Clearing only what was drawn means only what was drawn is handed over.
+   */
+  const wetBox = useRef<Box | null>(null)
   const drawWet = useCallback(() => {
-    const c = live.current
-    const ctx = c?.getContext('2d')
-    if (!c || !ctx) return
-    fitCanvas(c)
-    ctx.clearRect(0, 0, c.width, c.height)
+    const ctx = inkCtx(live.current)
+    if (!ctx) return
+    const was = wetBox.current
+    if (was) ctx.clearRect(was.x - 2, was.y - 2, was.w + 4, was.h + 4)
     const now = wetNow.current
-    if (now && now.points.length > 1) stroke(ctx, null, now.points, now.style, viewRef.current, now.seed)
-  }, [stroke, fitCanvas])
+    if (!now || now.points.length < 2) { wetBox.current = null; return }
+    // Drawn a little ahead of the pen, and only here: the guess never reaches the paper.
+    const guess = reachAhead(now.points)
+    const points = guess ? [...now.points, guess] : now.points
+    wetBox.current = stroke(ctx, null, points, now.style, viewRef.current, now.seed)
+  }, [stroke])
 
   const wet = useCallback((points: InkPoint[] | null, style: InkStyle, seed: number) => {
     wetNow.current = points && points.length ? { points, style, seed } : null
@@ -225,8 +256,9 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
   useEffect(() => {
     const again = () => {
       laid.current = null
+      if (fitCanvas(live.current)) wetBox.current = null
       const c = paper.current
-      const ctx = c?.getContext('2d')
+      const ctx = inkCtx(c)
       if (c && ctx) {
         fitCanvas(c)
         ctx.clearRect(0, 0, c.width, c.height)
@@ -237,7 +269,15 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
       drawWet()
     }
     window.addEventListener('resize', again)
-    return () => window.removeEventListener('resize', again)
+    // The pad can change shape without the window doing anything — opening, the keyboard
+    // coming up, a fold. Measuring is no longer done on every stroke, so something has to
+    // notice.
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(again) : null
+    if (watch && paper.current) watch.observe(paper.current)
+    return () => {
+      window.removeEventListener('resize', again)
+      watch?.disconnect()
+    }
   }, [marks, rule, ruleInk, ground, drawMark, drawWet, fitCanvas])
 
   return (

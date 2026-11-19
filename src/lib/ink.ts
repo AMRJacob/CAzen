@@ -27,6 +27,47 @@ export function forceOf(e: PointerEvent): number | null {
   return typeof p === 'number' && p > 0 && p < 1 ? p : p === 1 ? 1 : null
 }
 
+/** Across the glass, in CSS pixels, past which a contact is a hand and not a fingertip. */
+export const PALM_ACROSS = 45
+/** How long after the pen was last busy a new contact is still taken for the hand holding it. */
+export const PEN_TAIL = 300
+
+/**
+ * Hand, or meant?
+ *
+ * The one question the pad asks of every contact, kept here so it can be tested rather than
+ * guessed at — it has been got wrong more than once, and the cost each time was writing that
+ * would not write or a page that would not move.
+ *
+ * A contact is hand if it is palm-sized, or if it lands while the pen is writing or has only
+ * just stopped. A small contact joining a gesture already under way is a second finger,
+ * whatever the pen was doing. The question is asked when the contact lands and the answer is
+ * kept for as long as it is down, so a palm settled on the page stays ignored after the pen
+ * lifts instead of turning into a finger and dragging the page about.
+ */
+export function isHandContact(e: {
+  pointerType: string
+  pointerId: number
+  type: string
+  width?: number
+  height?: number
+}, world: {
+  /** Contacts already judged hand and still down. */
+  hands: Set<number>
+  /** How many fingers are already working the canvas. */
+  fingers: number
+  /** When the pen was last doing anything. */
+  penAt: number
+  now: number
+}): boolean {
+  if (e.pointerType !== 'touch') return false
+  if (world.hands.has(e.pointerId)) return true
+  if (e.type !== 'pointerdown') return false
+  if (Math.max(e.width || 0, e.height || 0) > PALM_ACROSS) return true
+  if (world.fingers > 0) return false
+  return world.now - world.penAt < PEN_TAIL
+}
+
 /**
  * Every position the pen passed through since the last event, not just where it ended up.
  *

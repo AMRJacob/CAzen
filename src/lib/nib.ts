@@ -121,6 +121,44 @@ export function outlineOf(points: InkPoint[], size: number, nib: Nib, seed = 0):
   return outline.map(([x, y]) => [x + (wobble() - 0.5) * reach, y + (wobble() - 0.5) * reach])
 }
 
+/**
+ * A short guess at where the nib is going next.
+ *
+ * Between the pen touching a point on the glass and the ink for it reaching the screen sit
+ * the browser, the compositor and the display, and nothing in a web page can remove that. It
+ * can be covered, though: the stroke is drawn a little past its last known point, along the
+ * line it is already travelling, so the ink keeps up with the nib instead of trailing it.
+ *
+ * It is a guess, so it is a careful one. The reach is cut by how sharply the stroke is
+ * turning — straight on, it runs most of a sample ahead; into a corner, it stops guessing
+ * altogether — and the guess only ever exists on the stroke being drawn. What is saved is
+ * what the pen actually did.
+ */
+export function reachAhead(points: InkPoint[]): InkPoint | null {
+  const n = points.length
+  if (n < 7) return null
+  // Direction taken over three samples rather than one. Consecutive samples are a hundredth
+  // of a second apart, and the line between two of them is mostly noise.
+  const at = (i: number) => points[n - 1 - i]
+  const dir = (a: InkPoint, b: InkPoint) => {
+    const dx = a[0] - b[0], dy = a[1] - b[1]
+    const l = Math.hypot(dx, dy)
+    return l < 1e-9 ? null : { x: dx / l, y: dy / l, l }
+  }
+  const now = dir(at(0), at(3))
+  const before = dir(at(3), at(6))
+  if (!now || !before) return null
+  // 1 carrying straight on, 0 turning a corner or doubling back.
+  const straight = Math.max(0, now.x * before.x + now.y * before.y)
+  const reach = (now.l / 3) * 2.2 * straight * straight
+  if (reach < 1e-6) return null
+  const last = at(0)
+  const f = last.length > 2 ? (last[2] as number) : null
+  const x = last[0] + now.x * reach
+  const y = last[1] + now.y * reach
+  return (f == null ? [x, y] : [x, y, f]) as InkPoint
+}
+
 /** The outline as an SVG path — used for the still pictures of a pad. */
 export function pathOf(outline: number[][]): string {
   if (outline.length < 3) return ''

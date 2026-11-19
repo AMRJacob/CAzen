@@ -4,7 +4,7 @@ import {
   HIGHLIGHTS, PAD_COLOURS,
   type MarkKind, type NotePad as Pad, type PadMark, type PadRule,
 } from '../lib/pads'
-import { samplesFrom, type InkPoint } from '../lib/ink'
+import { isHandContact, samplesFrom, type InkPoint } from '../lib/ink'
 import { PadSurface, type InkStyle, type PadInk } from './PadSurface'
 import { message } from '../lib/errors'
 import { handOf, outlineOf, pathOf, seedOf, type Nib } from '../lib/nib'
@@ -48,7 +48,7 @@ type Width = keyof typeof WIDTHS
  * fingertip. A stylus reports a pixel or two, a fingertip twenty or thirty, the side of a hand
  * far more — so this sits well above a thumb and well below a wrist.
  */
-const PALM_ACROSS = 45
+
 
 /** How long the menu stays open with nothing happening. */
 const MENU_IDLE = 1000
@@ -161,9 +161,34 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   // ---- where things are ---------------------------------------------------------------------
 
+  /**
+   * Where the drawing sits on the screen.
+   *
+   * Asking the browser costs a layout, and the pen asks through `at` for every sample it
+   * reports — eight or more a frame. The pad is a fixed overlay, so between one stroke and
+   * the next this cannot move; it is measured when a stroke starts and when the window
+   * changes, and read from there.
+   */
+  const frameBox = useRef<{ left: number; top: number } | null>(null)
+  const measure = useCallback(() => {
+    const box = frame.current?.getBoundingClientRect()
+    frameBox.current = box ? { left: box.left, top: box.top } : null
+    return frameBox.current
+  }, [])
+  useEffect(() => {
+    measure()
+    const again = () => measure()
+    window.addEventListener('resize', again)
+    window.addEventListener('orientationchange', again)
+    return () => {
+      window.removeEventListener('resize', again)
+      window.removeEventListener('orientationchange', again)
+    }
+  }, [measure])
+
   /** A pointer's position on the canvas. */
   function at(e: { clientX: number; clientY: number }): { x: number; y: number } {
-    const box = frame.current?.getBoundingClientRect()
+    const box = frameBox.current ?? measure()
     const v = viewRef.current
     if (!box) return { x: 0, y: 0 }
     return { x: (e.clientX - box.left - v.x) / v.scale, y: (e.clientY - box.top - v.y) / v.scale }
@@ -179,24 +204,22 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   function readTouch(e: React.PointerEvent): 'pen' | 'finger' | 'palm' | 'mouse' {
     if (e.pointerType === 'pen') return 'pen'
     if (e.pointerType !== 'touch') return 'mouse'
-    if (Date.now() - penAt.current < 1200) return 'palm'
-    return Math.max(e.width || 0, e.height || 0) > PALM_ACROSS ? 'palm' : 'finger'
+    return isHand(e) ? 'palm' : 'finger'
   }
 
-  /**
-   * Hand, anywhere on the pad.
-   *
-   * `readTouch` only ever saw contacts that landed on the drawing. The tools, the menu and
-   * everything else in the overlay were left to the browser, so a palm resting across them
-   * pressed buttons, took focus and dragged selections about in the middle of a word. The
-   * same question is now asked of every contact before it reaches anything: a touch that is
-   * palm-sized, or any touch at all while the pen is writing, is hand and is stopped here.
-   */
-  function handy(e: React.PointerEvent): boolean {
-    if (e.pointerType !== 'touch') return false
-    if (Date.now() - penAt.current < 1200) return true
-    return Math.max(e.width || 0, e.height || 0) > PALM_ACROSS
-  }
+  /** Contacts already judged to be hand, which stay hand until they leave the glass. */
+  const handIds = useRef(new Set<number>())
+
+  /** The rule itself lives in `ink`, where it can be tested; this is the pad's answer to it. */
+  const isHand = (e: React.PointerEvent): boolean => isHandContact(e, {
+    hands: handIds.current,
+    fingers: fingers.current.size,
+    penAt: penAt.current,
+    now: Date.now(),
+  })
+
+  const handAt = useRef(0)
+  const meantAt = useRef(0)
 
   /**
    * Taken at the capture phase, before the drawing or any button hears about it. Telling the
@@ -204,14 +227,17 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    * gesture, which cancels the pen mid-stroke, and a pointerdown that is spoken for does not
    * come back later as a click.
    */
-  const handAt = useRef(0)
-  const meantAt = useRef(0)
   function shield(e: React.PointerEvent) {
-    if (!handy(e)) {
+    if (e.type === 'pointerup') handIds.current.delete(e.pointerId)
+    if (!isHand(e)) {
       if (e.type === 'pointerdown') meantAt.current = Date.now()
       return
     }
-    if (e.type === 'pointerdown') handAt.current = Date.now()
+    if (e.type === 'pointerdown') {
+      handAt.current = Date.now()
+      handIds.current.add(e.pointerId)
+      setTouch({ read: 'palm', across: Math.round(Math.max(e.width || 0, e.height || 0)) })
+    }
     e.stopPropagation()
     if (e.cancelable) e.preventDefault()
   }
@@ -232,6 +258,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   }
 
   function down(e: React.PointerEvent) {
+    measure()
     const read = readTouch(e)
     setTouch({ read, across: Math.round(Math.max(e.width || 0, e.height || 0)) })
     // Back on the canvas means done with the menu.
@@ -280,7 +307,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     if (drawing.current !== e.pointerId) return
     if (tool === 'erase') { rub(e); return }
     const more = samplesFrom(e.nativeEvent as PointerEvent, at)
-    wetRef.current = wetRef.current ? [...wetRef.current, ...more] : more
+    // Added to the stroke in place. Copying it afresh for every sample meant a stroke cost
+    // the square of its own length by the time it was finished.
+    if (wetRef.current) for (const p of more) wetRef.current.push(p)
+    else wetRef.current = more
     showWet()
   }
 
@@ -328,6 +358,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    */
   function up(e: React.PointerEvent) {
     palms.current.delete(e.pointerId)
+    handIds.current.delete(e.pointerId)
     if (e.pointerType === 'pen') penAt.current = Date.now()
     if (fingers.current.delete(e.pointerId)) {
       if (fingers.current.size < 2) gesture.current = null
@@ -356,6 +387,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   function cancelled(e: React.PointerEvent) {
     palms.current.delete(e.pointerId)
+    handIds.current.delete(e.pointerId)
     if (fingers.current.delete(e.pointerId)) {
       if (fingers.current.size < 2) gesture.current = null
       return
