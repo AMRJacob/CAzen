@@ -1,4 +1,5 @@
--- A site visit: one trip to the job, and everything that came back from it.
+-- A page of the field-notes or meeting-notes book: one trip to the job (or one meeting), and
+-- everything that came back from it.
 --
 -- A field report used to begin as a blank form. A visit begins on site: a pad written on by
 -- hand, notes typed under the template's headings, photographs, and the observations made that
@@ -11,6 +12,8 @@
 create table if not exists site_visits (
   id          uuid primary key default gen_random_uuid(),
   project_id  uuid not null references projects(id) on delete cascade,
+  -- Which notebook the page is in: a site visit, or a meeting (no photographs or observations).
+  kind        text not null default 'visit' check (kind in ('visit', 'meeting')),
   visited_on  date not null default current_date,
   -- Arrival, as the clock on site read. Kept apart from the date so a visit can have a day
   -- and no time.
@@ -29,7 +32,7 @@ create table if not exists site_visits (
   updated_at  timestamptz not null default now()
 );
 
-create index if not exists site_visits_project on site_visits (project_id, visited_on desc);
+create index if not exists site_visits_project on site_visits (project_id, kind, visited_on desc);
 
 alter table site_visits enable row level security;
 

@@ -13,8 +13,8 @@ import {
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
-import { VisitList, VisitPage } from '../components/SiteVisits'
-import { listVisits, startVisit, VisitsNotSetUp, type SiteVisit } from '../lib/visits'
+import { Notebook, Shelf } from '../components/Notebook'
+import { listVisits, type SiteVisit, type VisitKind } from '../lib/visits'
 import { Photos } from '../components/Photos'
 import { today } from '../lib/dates'
 import type { Project } from '../lib/types'
@@ -56,12 +56,48 @@ const HEADING: Record<Area, { title: string; lead: string }> = {
 }
 
 export default function FieldNotes() {
-  // With no part named, it opens on observations: that is the one made standing on site, and
-  // the phone's menu comes here.
-  const { area = 'observations' } = useParams<{ area: Area }>()
-  const here = (['reports', 'meetings', 'observations'] as Area[]).includes(area as Area)
-    ? (area as Area) : 'observations'
-  return here === 'observations' ? <Observations /> : <Reports area={here} />
+  const { area } = useParams<{ area: Area }>()
+  if (!area) return <Books />
+  if (area === 'observations') return <Observations />
+  return <Book area={area === 'meetings' ? 'meetings' : 'reports'} />
+}
+
+/** The way in: the two books on a shelf, and the list of everything observed. */
+function Books() {
+  const { current } = useProject()
+  return (
+    <section>
+      <PageTitle>Field notes</PageTitle>
+      <p className="lead">
+        {current ? <>{current.number} {current.name} · </> : null}
+        Open a book and turn to today’s page.
+      </p>
+      <Shelf project={current} />
+      <p className="muted small">
+        <NavLink to="/field-notes/observations">Every observation on the project, and the punch list</NavLink>
+      </p>
+    </section>
+  )
+}
+
+/**
+ * A book, open. On a database that hasn't the pages table yet (migration 0033) there is no book
+ * to open, and the list of reports that was here before is shown in its place.
+ */
+function Book({ area }: { area: 'reports' | 'meetings' }) {
+  const { current } = useProject()
+  const kind: VisitKind = area === 'meetings' ? 'meeting' : 'visit'
+  const [pages, setPages] = useState<SiteVisit[] | null | false>(null)
+  const projectId = current?.id
+  useEffect(() => {
+    if (!projectId) { setPages(false); return }
+    setPages(null)
+    listVisits(projectId, kind).then(setPages).catch(() => setPages(false))
+  }, [projectId, kind])
+
+  if (pages === null) return <p className="muted page-wait">Opening the book…</p>
+  if (!pages || !current) return <Reports area={area} />
+  return <Notebook key={`${current.id}-${kind}`} project={current} kind={kind} pages={pages} onPages={setPages} />
 }
 
 /**
@@ -98,46 +134,12 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
   }, [projectId, kind])
   useEffect(() => { load() }, [load])
 
-  // Field reports begin as visits. `null` while asking; `false` on a database that hasn't the
-  // table yet, where the page is what it was before.
-  const [visits, setVisits] = useState<SiteVisit[] | null | false>(null)
-  const [visit, setVisitOpen] = useState<string | null>(null)
-  const [seen, setSeen] = useState<Observation[]>([])
-  useEffect(() => {
-    if (!projectId || area !== 'reports') { setVisits(false); return }
-    setVisits(null); setVisitOpen(null)
-    listVisits(projectId).then(setVisits)
-      .catch((e) => { setVisits(false); if (!(e instanceof VisitsNotSetUp)) setError(message(e)) })
-    listObservations(projectId).then(setSeen).catch(() => setSeen([]))
-  }, [projectId, area])
-
-  async function newVisit() {
-    if (!projectId) return
-    try {
-      const v = await startVisit(projectId)
-      setVisits((all) => [v, ...(all || [])])
-      setVisitOpen(v.id)
-    } catch (e) {
-      if (e instanceof VisitsNotSetUp) { setVisits(false); setWriting(true) } else setError(message(e))
-    }
-  }
-
   // Leaving the form behind is the same gesture whichever kind it was.
   useEffect(() => { setWriting(false) }, [kind])
 
   const listed = useMemo(
     () => [...(rows ?? [])].sort((a, b) => b.issued_at.localeCompare(a.issued_at)),
     [rows])
-
-  const open = visits ? visits.find((v) => v.id === visit) : undefined
-  if (open && current) {
-    return (
-      <VisitPage project={current} visit={open}
-        onChanged={(v) => setVisits((all) => (all || []).map((x) => (x.id === v.id ? v : x)))}
-        onClose={() => { setVisitOpen(null); load(); listObservations(current.id).then(setSeen).catch(() => {}) }}
-        onRemoved={() => { setVisits((all) => (all || []).filter((x) => x.id !== open.id)); setVisitOpen(null) }} />
-    )
-  }
 
   if (writing) {
     return (
@@ -178,25 +180,14 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
             {HEADING[area].lead}
           </p>
         </div>
-        <button className="primary" disabled={area === 'reports' && visits === null}
-          onClick={() => (area === 'reports' && visits ? void newVisit() : setWriting(true))}>
+        <button className="primary" onClick={() => setWriting(true)}>
           New {FORM_LABELS[kind].toLowerCase()}
         </button>
       </div>
 
       {error && <div className="notice error">{error}</div>}
 
-      {area === 'reports' && visits && current && (
-        <>
-          <VisitList project={current} visits={visits} observations={seen} onOpen={(v) => setVisitOpen(v.id)} />
-          <p className="muted small visit-also">
-            <button className="link" onClick={() => setWriting(true)}>Write a report without a visit</button>
-          </p>
-        </>
-      )}
-
       <Pads kind={kind === 'meeting_notes' ? 'meeting_notes' : 'field_report'}
-        attached={visits ? new Set(visits.map((v) => v.pad_id).filter((x): x is string => !!x)) : undefined}
         projectId={projectId} onTrouble={setError}
         onWriteUp={(pad) => { setFrom(pad); setWriting(true) }} />
 

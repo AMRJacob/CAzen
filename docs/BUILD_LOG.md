@@ -11,6 +11,52 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 12:10 CST
+
+**Field notes is a notebook.** Jacob's direction, replacing the four-zone visit screen built two
+hours earlier: field notes should feel like opening a small notebook and recording by sketch or
+typing, with categories already on the page; the report in its title block is something the book
+exports, not how it is used; a quick switch between *documentation* and *observation* that then
+opens the camera; a meeting-notes book that is the same thing without photographs or
+observations; and the menu item as a book you open and flip through, full screen.
+
+- `/field-notes` is a shelf with two closed books (`Shelf`). Opening one is `Notebook`
+  (`src/components/Notebook.tsx`), full screen: a contents page, then a ruled page a visit or a
+  meeting, turned with the arrows in the bar, the arrow keys, or from the contents. Pages turn
+  with a short 3-D flip (off under reduced motion).
+- A page's typed notes are categories — heading and lines — from the firm's template starters
+  (`fr.observations` for a visit, `mn.notes` for a meeting). They are stored as the same outline
+  text the templates use (`parseSections` / `writeSections` in `src/lib/visits.ts`), so export
+  needs no conversion. Categories can be renamed and added.
+- The camera sits at the corner of a visit page behind a two-way slide, Documentation |
+  Observation, which stays where it was left. Documentation adds the photograph to the page;
+  Observation asks one thing — what does it show — and keeps it as an observation on that day
+  (left blank, it is kept as a plain photograph).
+- Sketch opens the existing pad full screen. *Make the field report* / *Make the meeting notes*
+  opens the template form filled from the page.
+- `site_visits` gained `kind` ('visit' | 'meeting') in migration 0033 before it was ever applied.
+  `SiteVisits.tsx` (the four-zone screen) is removed.
+- **Migration 0033 is still not applied to production**: the database's confirmation prompt
+  timed out a second time. Until it is, each book opens the old list page (`Book` falls back to
+  `Reports`).
+
+**Panning and zooming stopped dropping frames.** Three causes in `src/lib/pdf/zoomPan.ts`: a
+React re-render of the whole viewer per wheel notch (zoom state now follows 140 ms after the
+movement), a layout read per pointer event (`getBoundingClientRect` after the transform write;
+the box is now measured on resize), and a sharpen that kept drawing after the hand moved again
+(cancelled through `View.onMove`). `checks/t_frames.py`, hatch-heavy sheet, quarter CPU: pan 94
+of 306 frames dropped → 5 of 334; zoom out 91 of 141 → 5 of 122; zoom in unchanged, about 21 of
+230, cause not found.
+
+Verified: `checks/t_notebook.py` on desk and phone — shelf, new page, categories, typed notes
+saved as outline text, a documentation photo, an observation photo with its note, export filled
+with both, contents line, and the meeting book with no camera and no photo sections.
+
+Not verified: any of it on the iPhone; the camera slide with a real camera. Pages still need a
+signal to be created and photographs still upload at the moment they are taken.
+
+---
+
 # Checkpoint — 2026-11-19, 11:20 CST
 
 **Zooming a dense sheet no longer blanks it.** Jacob reported C-101 going white for a second or

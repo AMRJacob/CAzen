@@ -10,9 +10,13 @@ import { fieldDef } from './templates/fields'
  * A visit's observations are the ones seen on its day. They are not copied here or pointed at,
  * so an observation added from the Observations page on the same day belongs to the visit too.
  */
+export type VisitKind = 'visit' | 'meeting'
+
 export interface SiteVisit {
   id: string
   project_id: string
+  /** Which notebook the page is in. */
+  kind: VisitKind
   visited_on: string
   /** "14:05:00", or null for a visit with a day and no time. */
   visited_at: string | null
@@ -26,7 +30,7 @@ export interface SiteVisit {
   created_at: string
 }
 
-const COLUMNS = 'id, project_id, visited_on, visited_at, title, weather, notes, photos, cover_photo, pad_id, issued_id, created_at'
+const COLUMNS = 'id, project_id, kind, visited_on, visited_at, title, weather, notes, photos, cover_photo, pad_id, issued_id, created_at'
 
 /** The table arrives with migration 0033; until it has been run the page shows what it did before. */
 export class VisitsNotSetUp extends Error {
@@ -37,9 +41,9 @@ const notThere = (e: unknown): boolean => {
   return m?.code === '42P01' || m?.code === 'PGRST205' || /site_visits.*(does not exist|schema cache)|Could not find the table/i.test(m?.message ?? '')
 }
 
-export async function listVisits(projectId: string): Promise<SiteVisit[]> {
+export async function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisit[]> {
   const { data, error } = await db().from('site_visits').select(COLUMNS)
-    .eq('project_id', projectId)
+    .eq('project_id', projectId).eq('kind', kind)
     .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
   if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }
   return (data ?? []) as SiteVisit[]
@@ -51,15 +55,16 @@ const clock = () => {
 }
 
 /** The visit as it starts: now, with the notes already carrying the template's headings. */
-export function buildVisit(projectId: string): SiteVisit {
+export function buildVisit(projectId: string, kind: VisitKind = 'visit'): SiteVisit {
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
+    kind,
     visited_on: today(),
     visited_at: clock(),
     title: null,
     weather: null,
-    notes: fieldDef('field_report', 'fr.notes')?.starter ?? '',
+    notes: starterFor(kind),
     photos: [],
     cover_photo: null,
     pad_id: null,
@@ -117,8 +122,47 @@ export function shortDay(iso: string): string {
 }
 
 /** Start a visit now and hand it back. */
-export async function startVisit(projectId: string): Promise<SiteVisit> {
-  const v = buildVisit(projectId)
+export async function startVisit(projectId: string, kind: VisitKind = 'visit'): Promise<SiteVisit> {
+  const v = buildVisit(projectId, kind)
   await saveVisit(v)
   return v
+}
+
+// ---------- The categories a page is organised under ----------
+
+/**
+ * A page's typed notes are kept as the outline text the report templates already use —
+ * "1. Structure" with its lines indented beneath — so a page exports into a field report or a
+ * set of meeting notes without being rewritten. On screen it is a category and the words under
+ * it; the numbering and the "a." are put back on the way out.
+ */
+export interface Section { heading: string; body: string }
+
+/** The categories a new page starts with: the firm's own template headings for that kind. */
+export function starterFor(kind: VisitKind): string {
+  return (kind === 'meeting'
+    ? fieldDef('meeting_notes', 'mn.notes')?.starter ?? fieldDef('field_report', 'fr.notes')?.starter
+    : fieldDef('field_report', 'fr.observations')?.starter) ?? '1. Notes\n  a. '
+}
+
+export function parseSections(text: string | null): Section[] {
+  const out: Section[] = []
+  for (const raw of (text ?? '').split(/\r?\n/)) {
+    const head = raw.match(/^(?:\d+|[IVX]+)[.)]\s+(.*)$/)
+    if (head) { out.push({ heading: head[1].trim(), body: '' }); continue }
+    const line = raw.replace(/^\s+/, '').replace(/^(?:[a-z]{1,2}|\d+|[ivx]+)[.)]\s?/, '')
+    if (!out.length) { if (!line.trim()) continue; out.push({ heading: 'Notes', body: '' }) }
+    const last = out[out.length - 1]
+    last.body = last.body ? `${last.body}\n${line}` : line
+  }
+  return out.map((s) => ({ ...s, body: s.body.replace(/\n+$/, '') }))
+}
+
+const letter = (i: number) => (i < 26 ? String.fromCharCode(97 + i) : `${String.fromCharCode(97 + Math.floor(i / 26) - 1)}${String.fromCharCode(97 + (i % 26))}`)
+
+export function writeSections(sections: Section[]): string {
+  return sections.map((s, i) => {
+    const lines = s.body.split('\n').map((l) => l.trim()).filter(Boolean)
+    return `${i + 1}. ${s.heading.trim() || 'Notes'}\n` + (lines.length ? lines : ['']).map((l, j) => `  ${letter(j)}. ${l}`).join('\n')
+  }).join('\n')
 }

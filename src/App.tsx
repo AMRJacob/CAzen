@@ -62,7 +62,7 @@ const nav: { label: string; items: { to: string; label: string }[] }[] = [
   {
     label: 'Field notes',
     items: [
-      { to: '/field-notes/reports', label: 'Field reports' },
+      { to: '/field-notes/reports', label: 'Field notes' },
       { to: '/field-notes/meetings', label: 'Meeting notes' },
       { to: '/field-notes/observations', label: 'Observations' },
     ],
