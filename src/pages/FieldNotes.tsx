@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
-import { NotePad, PadPages, Paper, Stroke, PAGE_H } from '../components/NotePad'
+import { NotePad, PadPages, PadStill } from '../components/NotePad'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
 import { usDate } from '../lib/dates'
@@ -267,7 +267,7 @@ function PadCard({ pad, kind, fresh, onOpen, onWriteUp, onDiscard, onRename }: {
   useEffect(() => {
     let gone = false
     listMarks(pad.id)
-      .then((m) => { if (!gone) setMarks(m.filter((x) => x.page === 1 && x.kind !== 'text')) })
+      .then((m) => { if (!gone) setMarks(m.filter((x) => x.page === 1)) })
       .catch(() => { if (!gone) setMarks([]) })
     return () => { gone = true }
   }, [pad.id, pad.pages])
@@ -275,10 +275,7 @@ function PadCard({ pad, kind, fresh, onOpen, onWriteUp, onDiscard, onRename }: {
   return (
     <div className={`pad-card-item${fresh ? ' fresh' : ''}`}>
       <button className="pad-thumb" onClick={onOpen} aria-label={`Open ${pad.title || untitled(kind)}`}>
-        <svg viewBox={`0 0 1 ${PAGE_H}`} preserveAspectRatio="xMidYMin meet" aria-hidden="true">
-          <Paper rule={pad.rule} />
-          {(marks ?? []).map((m) => <Stroke key={m.id} mark={m} />)}
-        </svg>
+        <PadStill marks={marks ?? []} rule={pad.rule} />
         {marks && !marks.length && <span className="pad-thumb-empty muted small">Nothing written yet</span>}
       </button>
       <input className="pad-card-title" defaultValue={pad.title ?? ''} placeholder={untitled(kind)}
