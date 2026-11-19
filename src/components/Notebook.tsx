@@ -116,7 +116,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
-      if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/') }
+      if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/project') }
       if (!page) return
       // Pages run newest first, so "next" in the book is the older one.
       if (e.key === 'ArrowRight' && i < pages.length - 1) go(pages[i + 1].id, 'fwd')
@@ -134,7 +134,7 @@ export function Notebook({ project, kind, pages, onPages }: {
       onContents={page ? () => go(null, 'back') : undefined}
       onBack={page ? () => go(i > 0 ? pages[i - 1].id : null, 'back') : undefined}
       onForward={page && i < pages.length - 1 ? () => go(pages[i + 1].id, 'fwd') : undefined}
-      onClose={() => navigate('/')} />
+      onClose={() => navigate('/project')} />
   )
 
   return (
@@ -155,7 +155,7 @@ export function Notebook({ project, kind, pages, onPages }: {
         <article key="contents" className={`nb-paper nb-contents nb-turn-${turn}`}>
           {/* The contents page has its own way to a new page and to every page, so the corner menu
               had one thing left to offer here: the way out. It gets a plain button instead. */}
-          <button className="nb-exit" onClick={() => navigate('/')} aria-label={`Close ${BOOK[kind].title.toLowerCase()}`} title="Close">
+          <button className="nb-exit" onClick={() => navigate('/project')} aria-label={`Close ${BOOK[kind].title.toLowerCase()}`} title="Close">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
           </button>
           <h1>{BOOK[kind].title}</h1>

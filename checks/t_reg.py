@@ -16,7 +16,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/issued_forms.*'),patch)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/ca-logs'); pg.wait_for_selector('.register .reg-total')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/ca-logs'); pg.wait_for_selector('.register .reg-total')
     tot=lambda: ' || '.join(t.replace('\n',' ').replace('\t',' | ') for t in pg.locator('.register thead .reg-total').all_inner_texts())
     row=lambda n: pg.locator('.register tbody tr:has-text("%s")'%n).first
     print('top of the register:',tot()); print('CO-001 row:',row('CO-001').inner_text().replace('\t',' | '))

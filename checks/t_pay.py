@@ -13,7 +13,7 @@ SOV="Item No.\tDescription of Work\tScheduled Value\n1\tGeneral Conditions\t$125
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,extra); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/pay'); pg.wait_for_selector('text=Set up the contract')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/pay'); pg.wait_for_selector('text=Set up the contract')
     pg.fill('.contract-setup textarea',SOV); pg.fill('input[placeholder^="$"]','423,500')
     print(pg.inner_text('.contract-setup p.small'))
     pg.fill('.contract-setup .form label:nth-child(2) input','423,450'); print(pg.inner_text('.contract-setup p.small'))

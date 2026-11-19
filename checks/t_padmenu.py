@@ -15,7 +15,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/pad_marks.*'),rest)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)[:200]))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('.p-name'); pg.goto(BASE+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad'); pg.click('.nb-pad'); pg.wait_for_selector('.padview-frame'); pg.wait_for_timeout(700)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad'); pg.click('.nb-pad'); pg.wait_for_selector('.padview-frame'); pg.wait_for_timeout(700)
     view=lambda: [round(float(v),2) for v in re.findall(r'-?[\d.]+',pg.evaluate("document.querySelector('.pad-texts').style.transform"))[:3]]
     pg.mouse.move(500,400); pg.mouse.down(); pg.mouse.move(560,430,steps=5); pg.mouse.move(640,410,steps=5); pg.mouse.up(); pg.wait_for_timeout(500); print('drawn with the mouse:',len(marks),'mark')
     v0=view(); pg.mouse.move(700,450); pg.mouse.wheel(0,-300); pg.wait_for_timeout(200); v1=view(); pg.mouse.wheel(0,300); pg.wait_for_timeout(200); v2=view()

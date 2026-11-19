@@ -10,7 +10,7 @@ extra={'site_visits':[visit],'note_pads':lambda r: pad if 'pgrst.object' in (r.h
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1300,'height':900}); install(ctx,extra); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad'); pg.click('.nb-pad'); pg.wait_for_selector('.padview-frame'); pg.wait_for_timeout(500)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad'); pg.click('.nb-pad'); pg.wait_for_selector('.padview-frame'); pg.wait_for_timeout(500)
     pg.click('.padmenu-mark'); pg.click('button[aria-label="Type"]'); pg.wait_for_timeout(200)
     pg.mouse.move(300,250); pg.mouse.down(); pg.mouse.move(420,300,steps=4); pg.screenshot(path='text_drag.png'); pg.mouse.move(560,330,steps=4); pg.mouse.up(); pg.wait_for_selector('.pad-textbox')
     print('focused for typing straight away:',pg.evaluate("document.activeElement?.classList.contains('pad-text')"))

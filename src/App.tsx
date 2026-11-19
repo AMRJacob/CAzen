@@ -29,6 +29,7 @@ function page(load: () => Promise<{ default: ComponentType }>) {
     throw e
   }))
 }
+const Overview = page(() => import('./pages/Overview'))
 const Documents = page(() => import('./pages/Documents'))
 const Manual = page(() => import('./pages/Manual'))
 const PayApps = page(() => import('./pages/PayApps'))
@@ -52,6 +53,7 @@ const nav: { label: string; items: { to: string; label: string }[] }[] = [
   {
     label: 'Documents',
     items: [
+      { to: '/project', label: 'Overview' },
       { to: '/documents', label: 'Drawings' },
       { to: '/manual', label: 'Project manual' },
       { to: '/submittals', label: 'Submittals' },
@@ -143,6 +145,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
         <Suspense fallback={<p className="muted page-wait">Loading…</p>}>
         <Routes>
           <Route path="/" element={offline ? <p className="muted">Sign-in and projects need the backend.</p> : <Home />} />
+          {!offline && <Route path="/project" element={<Overview />} />}
           <Route path="/documents" element={offline ? <p className="muted">Drawings need the backend.</p> : <Documents />} />
           <Route path="/manual" element={offline ? <p className="muted">The project manual needs the backend.</p> : <Manual />} />
           <Route path="/submittals" element={<Submittals />} />
@@ -177,7 +180,8 @@ function ProjectSwitcher() {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
   }, [open])
 
-  const pick = (id: string) => { select(id); setOpen(false) }
+  // Choosing another project arrives at that project's front page.
+  const pick = (id: string) => { select(id); setOpen(false); navigate('/project') }
   return (
     <div className="context" ref={box}>
       <button className={`project-switch${open ? ' open' : ''}`} onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}>

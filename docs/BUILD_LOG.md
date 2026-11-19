@@ -11,6 +11,46 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:10 CST
+
+**Each project has a front page** (Jacob, 16:01: a landing page with a project summary, to
+land on when leaving a notebook or choosing a project). `src/pages/Overview.tsx`, at
+`/project`; *Overview* is first under Documents in the sidebar and first under More on a
+phone.
+
+- Choosing a project on the projects page, choosing one in the sidebar's switcher, and closing
+  a notebook all arrive here. (They went to Drawings, stayed put, and went to the projects
+  page.)
+- It shows: number, name, owner, contractor, site address; **Contract** — the contract sum,
+  with original, change orders and balance to finish; **Progress** — percent complete with
+  completed-and-stored, and which pay application it is as of; **Observations** — the last
+  three made, with how many are open; **Last issued** — the most recent change order, CCD,
+  proposal request, ASI, RFI response, field report and meeting notes, with cost where one is
+  recorded. Each leads to its page. Nothing is entered here.
+- "Budget amount" was taken as the contract sum and "current progress" as the latest pay
+  application's percent complete (the G702's own figures, via `figure`). The schedule's
+  progress is not shown. A project with no contract or no application says so.
+- Each part loads and fails separately. `checks/t_overview.py`, desk and phone: a $1,000,000
+  contract with two applications reads 45%, $450,000, balance $550,450; the three latest
+  observations; one row per kind of document.
+- The existing checks clicked a project and expected Drawings; they now go there explicitly.
+
+**The projects page no longer tints the project last opened** (Jacob, 16:08: green is for
+download status; a bounce to show the tap). The `selected` class is gone from that list; a
+tapped row dips and springs back (0.22 s, off under reduced motion) and then opens. This is
+also the answer to 15:48's "the same landing page… with the simpler view", which was not
+understood then: the page gone back to had the last project highlighted.
+
+**A notebook's error notice** (16:06: the weather warning was over the way out) is at the
+bottom of the page, goes when touched, and clears itself after seven seconds. The weather
+complaint is made only when the lookup was asked for by hand.
+
+**Asked, not started — the field report's edit / preview page** (16:05, with a screenshot):
+make it look as it will print, with each part editable in place when clicked. This is a
+rebuild of `IssueForm`'s layout, not a restyle, and has not been begun.
+
+---
+
 # Checkpoint — 2026-11-19, 16:06 CST
 
 Three on the notebook page (Jacob, 15:58–16:03).

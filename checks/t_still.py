@@ -11,7 +11,7 @@ extra={'site_visits':[visit],'note_pads':lambda r: pad if 'pgrst.object' in (r.h
 def run(base,label):
     with sync_playwright() as p:
         b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':1000}); install(ctx,extra); signed_in(ctx)
-        pg=ctx.new_page(); pg.goto(base); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(base+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad .pad-still path',timeout=8000); pg.wait_for_timeout(500)
+        pg=ctx.new_page(); pg.goto(base); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(base+'#/documents'); pg.goto(base+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad .pad-still path',timeout=8000); pg.wait_for_timeout(500)
         r=pg.evaluate("""(()=>{const f=document.querySelector('.nb-pad').getBoundingClientRect(), s=document.querySelector('.nb-pad .pad-still').getBoundingClientRect();
           const big=[...document.querySelectorAll('.nb-pad .pad-still > path')].map(p=>{const b=p.getBoundingClientRect();return Math.max(b.width/s.width,b.height/s.height)});
           return {frame:[Math.round(f.width),Math.round(f.height)], still:[Math.round(s.width),Math.round(s.height)], largest: big.map(x=>+x.toFixed(2))}})()""")

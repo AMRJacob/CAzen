@@ -50,7 +50,7 @@ with sync_playwright() as p:
     ctx.route(re.compile(r'.*/blob/.*'),blob)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     idb=lambda store: pg.evaluate("s=>new Promise(r=>{const q=indexedDB.open('cazen');q.onsuccess=()=>{const g=q.result.transaction(s).objectStore(s).getAll();g.onsuccess=()=>r(g.result.map(x=>s==='files'?{path:x.path,size:x.bytes.size}:x))}})",store)
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.tap('td.p-name'); pg.wait_for_timeout(400)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.tap('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_timeout(400)
     pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-today')
     ctx.set_offline(True); pg.wait_for_timeout(200); print('— signal off —')
     pg.tap('.nb-today'); pg.wait_for_selector('.nb-quick textarea'); print('page opened with no signal:',pg.locator('.nb-z-notes').count()==1)

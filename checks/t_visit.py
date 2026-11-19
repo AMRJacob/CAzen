@@ -23,7 +23,7 @@ def run(kw,name):
     ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/x','configured':True,'bytes':0,'objects':0,'by_project':{},'cap_bytes':9e9,'max_file_bytes':1e8})))
     ctx.route(re.compile(r'.*/blob/x'), lambda r: r.fulfill(status=200,body=''))
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_timeout(900)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_timeout(900)
     pg.click('button:has-text("New field report")'); pg.wait_for_timeout(900)
     if state['missing']:
         print(name,'table missing → falls back to:',pg.inner_text('h1')); ctx.close(); return

@@ -15,7 +15,7 @@ import { message } from '../lib/errors'
 import { LocationPicker, type Location } from '../components/LocationPicker'
 
 export default function Home() {
-  const { projects, current, select, reload, loading } = useProject()
+  const { projects, select, reload, loading } = useProject()
   const { isAdmin } = useFirm()
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
@@ -118,9 +118,14 @@ export default function Home() {
   const holdEnd = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null } }
   const navigate = useNavigate()
 
+  // The project last opened is not marked on this page: colour here means one thing, whether a
+  // project is on this device. A row answers a tap by giving under it, and then opens.
+  const [tapped, setTapped] = useState<string | null>(null)
   function open(p: Project) {
+    setTapped(p.id)
     select(p.id)
-    navigate('/documents')
+    // A project is arrived at on its own front page, not on whichever list comes first.
+    window.setTimeout(() => navigate('/project'), 150)
   }
 
   return (
@@ -198,7 +203,7 @@ export default function Home() {
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
               <tr key={p.id}
-                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] || (notes[p.id] && isStale(notes[p.id], now)) ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}${away(p) ? ' p-away' : ''}`}
+                className={`opens${tapped === p.id ? ' p-tapped' : ''}${waiting[p.id] || (notes[p.id] && isStale(notes[p.id], now)) ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}${away(p) ? ' p-away' : ''}`}
                 aria-disabled={away(p) || undefined}
                 style={loading_[p.id] ? { '--p-fill': `${loading_[p.id].total ? Math.round(loading_[p.id].done / loading_[p.id].total * 100) : 3}%` } as React.CSSProperties : undefined}
                 tabIndex={away(p) ? -1 : 0} role="button" aria-label={away(p) ? `${p.number} ${p.name} is not on this device` : `Open ${p.number} ${p.name}`}

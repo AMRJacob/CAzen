@@ -11,7 +11,7 @@ def run(base,label,cpu):
         b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900},device_scale_factor=2); install(ctx,extra); signed_in(ctx)
         ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True,'bytes':0,'objects':0,'by_project':{}})))
         ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
-        pg=ctx.new_page(); pg.goto(base); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(7000)
+        pg=ctx.new_page(); pg.goto(base); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(base+'#/documents'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(7000)
         cdp=ctx.new_cdp_session(pg); cdp.send('Emulation.setCPUThrottlingRate',{'rate':cpu})
         print(label,'(CPU ÷%d)'%cpu)
         # wheel zoom in, 90 events

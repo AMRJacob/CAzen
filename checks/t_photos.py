@@ -22,7 +22,7 @@ with sync_playwright() as p:
     ctx.route(re.compile(r'.*/functions/v1/files.*'), files)
     ctx.route(re.compile(r'.*/blob/.*'), lambda r: r.fulfill(status=200,content_type='image/jpeg',body=imgs.get(r.request.url.split('/')[-1],b'')))
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes')
     pg.wait_for_selector('.nb-toc button'); print('bare /field-notes lands on:',pg.url.split('#')[1])
     pg.click('.nb-toc button'); pg.wait_for_selector('.nb-page'); pg.click('button:has-text("Make the field report")'); pg.wait_for_selector('.psheet')
     pg.check('.psheet-on input'); pg.wait_for_function("document.querySelectorAll('.psheet-cell').length===11",timeout=15000); pg.wait_for_timeout(400)

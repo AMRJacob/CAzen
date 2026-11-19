@@ -22,7 +22,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/issued_form_links.*'),unlink)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/ca-logs'); pg.wait_for_selector('.pr-answer')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/ca-logs'); pg.wait_for_selector('.pr-answer')
     print('at first  :',pg.inner_text('.pr-standing').replace('\n',' | '))
     a=pg.locator('.pr-answer').nth(0); bb=pg.locator('.pr-answer').nth(1)   # newest first: PR-002, PR-001
     bb.locator('input').fill('4,850'); bb.locator('input').press('Enter'); a.locator('input').fill('(1,200.00)'); a.locator('input').press('Enter'); pg.wait_for_timeout(300)

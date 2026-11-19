@@ -21,7 +21,7 @@ with sync_playwright() as p:
         ctx=b.new_context(viewport={'width':w,'height':900}); install(ctx,ex); signed_in(ctx)
         ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True})))
         ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
-        pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(2500)
+        pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(2500)
         at=lambda: [round(pg.locator('.sv-bar button[aria-label="%s sheet"]'%n).bounding_box()['x']) for n in ('Previous','Next')]
         a=at(); ra=pg.locator('.sv-revs').count(); pg.screenshot(path='steady_%d_a.png'%w,clip={'x':0,'y':0,'width':w,'height':60})
         pg.click('.sv-bar button[aria-label="Next sheet"]'); pg.wait_for_timeout(1800)

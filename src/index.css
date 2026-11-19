@@ -2732,3 +2732,47 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .nb-tear-say { padding: 6px 10px 4px; font-size: 12px; color: var(--muted); }
 /* A notebook's complaint sits at the bottom, where it covers nothing that is needed to leave. */
 .nb-error { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); width: max-content; text-align: left; font: inherit; font-size: 13.5px; cursor: pointer; border: none; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+
+/* ---------- A project's front page ---------- */
+.overview { max-width: 980px; }
+.ov-head { margin-bottom: 22px; }
+.ov-number { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.ov-head h1 { margin: 2px 0 10px; }
+.ov-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; margin: 0; font-size: 14px; }
+.ov-facts dt { color: var(--muted); }
+.ov-facts dd { margin: 0; }
+.ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ov-card { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; color: inherit; text-decoration: none; min-width: 0; }
+a.ov-card:hover { border-color: var(--moss); }
+.ov-wide { grid-column: 1 / -1; }
+.ov-card h2 { margin: 0 0 8px; font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.ov-card h2 a { color: inherit; text-decoration: none; }
+.ov-card h2 a:hover { color: var(--ink); }
+.ov-count { letter-spacing: 0; text-transform: none; font-size: 12.5px; }
+.ov-big { margin: 0 0 8px; font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.ov-lines { display: grid; grid-template-columns: 1fr max-content; gap: 3px 16px; margin: 0; font-size: 13.5px; }
+.ov-lines dt { color: var(--muted); }
+.ov-lines dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.ov-bar { height: 8px; border-radius: 99px; background: var(--wash); overflow: hidden; margin: 0 0 10px; }
+.ov-bar span { display: block; height: 100%; background: var(--moss); border-radius: 99px; }
+.ov-list { list-style: none; margin: 0; padding: 0; }
+.ov-list li + li { border-top: 1px solid var(--line); }
+.ov-list a { display: grid; grid-template-columns: 86px 1fr max-content; gap: 12px; align-items: baseline; padding: 9px 0; color: inherit; text-decoration: none; font-size: 14px; }
+.ov-list a:hover .ov-what { text-decoration: underline; text-decoration-color: var(--line); }
+.ov-when { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ov-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-state { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.ov-foot { margin-top: 14px; }
+@media (max-width: 619px) {
+  .ov-grid { grid-template-columns: 1fr; }
+  .ov-big { font-size: 26px; }
+  .ov-list a { grid-template-columns: 1fr max-content; }
+  .ov-when { grid-column: 1 / -1; margin-bottom: -6px; }
+  .ov-what { white-space: normal; }
+}
+
+/* A project row answers a tap by dipping and springing back. It is never tinted for having
+   been chosen: green on this page is for what is on the device. */
+@keyframes p-bounce { 0% { transform: scale(1); } 40% { transform: scale(0.965); } 100% { transform: scale(1); } }
+.projects tr.p-tapped { animation: p-bounce 0.22s ease-out; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) { .projects tr.p-tapped { animation: none; } }

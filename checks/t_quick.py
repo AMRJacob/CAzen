@@ -5,7 +5,7 @@ ex={'site_visits':lambda r: [V] if 'kind=eq.visit' in r.url else [], 'observatio
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(**PHONE); install(ctx,ex); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)[:200]))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.tap('td.p-name'); pg.wait_for_timeout(400); pg.goto(BASE+'#/field-notes/reports'); pg.tap('.nb-toc-title'); pg.wait_for_selector('.nb-quick textarea'); pg.wait_for_timeout(400)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.tap('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_timeout(400); pg.goto(BASE+'#/field-notes/reports'); pg.tap('.nb-toc-title'); pg.wait_for_selector('.nb-quick textarea'); pg.wait_for_timeout(400)
     q=pg.locator('.nb-quick').bounding_box(); t=pg.locator('.nb-quick-tag').bounding_box(); a=pg.locator('.nb-quick-keep').bounding_box()
     print('box is %d px tall | chips showing: %d | Tag then Add at the right, Add last: %s | both disabled with nothing typed: %s'%(q['height'],pg.locator('.nb-quick .chip').count(),t['x']<a['x'] and a['x']+a['width']>q['x']+q['width']-30,[pg.locator('.nb-quick-tag').is_disabled(),pg.locator('.nb-quick-keep').is_disabled()]))
     pg.screenshot(path='quick_empty.png',clip={'x':0,'y':max(0,q['y']-20),'width':402,'height':q['height']+60})

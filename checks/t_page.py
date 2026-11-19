@@ -14,7 +14,7 @@ ex={'site_visits':lambda r: visits if 'kind=eq.visit' in r.url else [],'observat
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)[:200])); pg.on('dialog',lambda d:d.accept())
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(400); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc-title')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_timeout(400); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc-title')
     pg.click('.nb-toc-title >> nth=0'); pg.wait_for_selector('.nb-z-notes textarea.nb-outline'); box='.nb-z-notes textarea.nb-outline'; val=lambda: pg.input_value(box)
     pg.click(box); pg.evaluate("(()=>{const t=document.querySelector('%s');const i=t.value.indexOf('Grading done')+12;t.setSelectionRange(i,i)})()"%box)
     pg.keyboard.press('Enter'); pg.keyboard.type('Silt fence down at east edge'); pg.wait_for_timeout(150); print('Enter in a sub-item:',repr(val().split('\n')[1:3]))

@@ -7,7 +7,7 @@ for i in range(2,7):
     ex['sheets'].append(s); ex['sheet_revisions'].append(r); ex['current_sheets'].append(c)
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex); signed_in(ctx)
-    pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('tr.opens >> nth=5')
+    pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_selector('tr.opens >> nth=5')
     n=lambda: pg.inner_text('.pick-bar strong')
     pg.click('tr.opens >> nth=0',modifiers=['Control']); pg.click('tr.opens >> nth=4',modifiers=['Shift']); print('Ctrl-click the 1st, Shift-click the 5th:',n())
     pg.keyboard.press('Escape'); pg.reload(); pg.wait_for_selector('tr.opens >> nth=5')

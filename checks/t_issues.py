@@ -19,7 +19,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/schedule_activities.*'),patch)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/schedule')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/schedule')
     def issue(text,name,date):
         pg.click('text=Read from a PDF'); pg.fill('.sched-paste textarea',text); pg.click('text=Read what was pasted'); pg.wait_for_selector('.sched-read')
         nos=pg.evaluate("[...document.querySelectorAll('.sched-read .sched-no')].map(e=>e.textContent)")

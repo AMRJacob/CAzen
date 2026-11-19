@@ -44,7 +44,7 @@ def run(kw,name):
     jpg=open('site.jpg','rb').read()
     ctx.route(re.compile(r'.*/blob/x'), lambda r: r.fulfill(status=200,content_type='image/jpeg',body=jpg if r.request.method=='GET' else b''))
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes'); pg.wait_for_selector('main .nb-tome')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes'); pg.wait_for_selector('main .nb-tome')
     pg.screenshot(path='nb_shelf_%s.png'%name)
     pg.click('main .nb-tome-fn'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(500); pg.screenshot(path='nb_contents_%s.png'%name)
     pg.click('.nb-menu-mark'); pg.wait_for_timeout(350); pg.screenshot(path='nb_menu_%s.png'%name); pg.click('.nb-menu-spot:has-text("New page")'); pg.wait_for_selector('.nb-page')

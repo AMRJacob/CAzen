@@ -16,7 +16,7 @@ with sync_playwright() as p:
     ctx.route(re.compile(r'.*/rest/v1/sheet_markups.*'),dele)
     ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True})))
     ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
-    pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(2500)
+    pg=ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(2500)
     pg.click('button:has-text("Mark up")'); pg.wait_for_timeout(300); n=lambda: pg.evaluate("document.querySelectorAll('.mk-pickable').length")
     pg.keyboard.press('s'); pg.locator('.mk-pickable').first.click(); pg.keyboard.press('Delete'); pg.wait_for_timeout(300)
     print('Delete on someone else’s:',pg.inner_text('.sv-said').replace('\n',' | '),'| still on the sheet:',n()==2,'| sent to server:',deleted); pg.screenshot(path='theirs.png',clip={'x':300,'y':760,'width':840,'height':140})

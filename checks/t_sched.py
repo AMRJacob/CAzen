@@ -13,7 +13,7 @@ extra={'pay_contracts':lambda r: contract if 'pgrst.object' in (r.headers.get('a
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':1000}); install(ctx,extra); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m: m.type=='error' and errs.append(m.text[:200]))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/schedule'); pg.click('text=Read from a PDF')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/schedule'); pg.click('text=Read from a PDF')
     t=time.time(); pg.set_input_files('.sched-import input[type=file]','scan.pdf')
     pg.wait_for_selector('.sched-read',timeout=120000); print('scan read in %.1fs'%(time.time()-t))
     print(pg.inner_text('.sched-import p.small'))

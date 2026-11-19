@@ -15,7 +15,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/(sheets|sheet_revisions)\?.*'),patch)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/documents'); pg.wait_for_selector('tr.opens >> nth=2')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/documents'); pg.wait_for_selector('tr.opens >> nth=2')
     pg.click('button:has-text("Re-read titles and dates")'); pg.click('tr.opens >> nth=1'); print('button on the page, then a plain click:',pg.inner_text('.pick-bar strong'),'| viewer opened:',pg.locator('.sv-bar').count()>0); pg.click('.pick-bar button:has-text("Cancel")'); pg.click('tr.opens >> nth=0',modifiers=['Control']); pg.click('tr.opens >> nth=2',modifiers=['Shift']); print('after ctrl-click then shift-click:',pg.inner_text('.pick-bar strong'),'| viewer opened:',pg.locator('.sv-bar').count()>0)
     pg.click('tr.opens >> nth=1',button='right'); pg.wait_for_selector('.pick-menu'); print('menu:',pg.locator('.pick-menu button').all_inner_texts()); pg.click('.pick-menu button >> nth=0')
     pg.wait_for_function("!document.querySelector('.reread p strong')",timeout=30000); pg.wait_for_timeout(300)

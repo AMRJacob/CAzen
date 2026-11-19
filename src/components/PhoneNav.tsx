@@ -34,6 +34,7 @@ const SPOTS: Spot[] = [
 ]
 
 const MORE: Spot[] = [
+  { to: '/project', label: 'Overview', icon: I(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></>) },
   { to: '/', end: true, label: 'Projects', icon: I(<><path d="M3 7h7l2 2h9v11H3V7Z" /></>) },
   { to: '/field-notes/meetings', label: 'Meeting notes', icon: I(<><path d="M8 4h9a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" /><path d="M10 9h5M10 13h5" /><path d="M6 4v16" /></>) },
   { to: '/field-notes/observations', label: 'Observations', icon: I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>) },

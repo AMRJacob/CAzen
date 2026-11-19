@@ -18,7 +18,7 @@ with sync_playwright() as p:
     pg.wait_for_selector('text=on this device',timeout=10000); print('taken to field:', pg.inner_text('.field-copy').replace('\n',' | ')[:160])
     pg.wait_for_timeout(2500)
     ctx.set_offline(True); pg.reload(); pg.wait_for_selector('text=Stand-in Office')
-    pg.click('td.p-name'); 
+    pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); 
     try:
         pg.wait_for_selector('text=A-101',timeout=6000); print('OFFLINE: sheet list shows A-101')
     except Exception as e:

@@ -17,7 +17,7 @@ with sync_playwright() as p:
     ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True})))
     ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m: m.type=='error' and errs.append(m.text[:200]))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('tr.opens >> nth=1')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_selector('tr.opens >> nth=1')
     pg.click('button:has-text("Re-read titles and dates")'); pg.click('tr.opens >> nth=0'); pg.click('tr.opens >> nth=1',modifiers=['Shift']); pg.click('.pick-bar button:has-text("Re-read their")'); pg.wait_for_selector('.reread'); pg.wait_for_function("!document.querySelector('.reread p strong')",timeout=30000); pg.wait_for_timeout(400)
     nb=pg.locator('button:has-text("New template from these sheets")'); print('with no template — read titles:',[i.input_value() for i in pg.locator('input[aria-label="Title read"]').all()],'| New template button enabled:',nb.is_enabled()); pg.screenshot(path='tpl_1.png')
     nb.click(); pg.wait_for_selector('.tb-page img'); pg.wait_for_timeout(1200)
