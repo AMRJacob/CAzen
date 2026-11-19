@@ -1938,3 +1938,19 @@ label.stack select, .obs-row select, .obs-more select {
   .visit-head { grid-template-columns: 200px minmax(0, 1fr); }
   .visit-head-cover { aspect-ratio: 4 / 3; margin: 0; border-radius: 12px; }
 }
+
+/* What the viewer has to say about the markups: a question on the way out, an undo after a delete. */
+.sv-said {
+  position: absolute; z-index: 30; left: 50%; transform: translateX(-50%);
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+  padding: 9px 12px 9px 16px; border-radius: 999px; font-size: 14px;
+  background: var(--ink); color: var(--panel); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  animation: sv-said-in 0.18s ease-out;
+}
+.sv-said span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-said button { border-radius: 999px; padding: 5px 13px; font-size: 13.5px; border: 1px solid rgba(255, 255, 255, 0.35); background: transparent; color: inherit; }
+.sv-said button:hover { background: rgba(255, 255, 255, 0.12); }
+.sv-said button.primary-lite { background: var(--panel); color: var(--ink); border-color: var(--panel); }
+@keyframes sv-said-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .sv-said { animation: none; } }

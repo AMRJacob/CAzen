@@ -48,7 +48,6 @@ const write = (p: { x: number; y: number }) => { try { localStorage.setItem(SPOT
 
 export function MarkupPalette({
   tool, setTool, colour, setColour, scale, settingScale, setSettingScale, stale, onBringForward, onDone,
-  keep, setKeep, scratch,
 }: {
   tool: Tool
   setTool: (t: Tool) => void
@@ -60,11 +59,6 @@ export function MarkupPalette({
   stale: number
   onBringForward: () => void
   onDone: () => void
-  /** Whether what gets drawn now is kept with the project or only for this sitting. */
-  keep: boolean
-  setKeep: (k: boolean) => void
-  /** How many of the markups on screen are this sitting's. */
-  scratch: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ x: number; y: number }>(() => read() ?? { x: 16, y: 16 })
@@ -139,18 +133,6 @@ export function MarkupPalette({
             aria-label={`Draw in ${c}`} aria-pressed={colour === c} data-tip={c} onClick={() => setColour(c)} />
         ))}
       </div>
-
-      {/* Not every mark is a record. Working something out on a sheet in a meeting is worth
-          drawing and not worth keeping, so this says which kind of marking this is. */}
-      <button className={`mk-keep${keep ? '' : ' off'}`} onClick={() => setKeep(!keep)}
-        aria-pressed={!keep}
-        data-tip={keep
-          ? 'Kept with the project — click for marks that go when you close the sheet'
-          : `Scratch: ${scratch || 'nothing'} ${scratch === 1 ? 'mark goes' : 'marks go'} when you close the sheet`}>
-        <Icon>{keep
-          ? <><path d="M5 4h14v16l-7-4-7 4V4Z" /></>
-          : <><path d="M5 4h14v16l-7-4-7 4V4Z" /><path d="M3 3l18 18" /></>}</Icon>
-      </button>
 
       <div className="mk-foot">
         <button className={settingScale ? 'on' : ''} onClick={() => setSettingScale(true)}

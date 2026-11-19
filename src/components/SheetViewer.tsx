@@ -13,7 +13,7 @@ import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } fro
 import { PREFS, usePref } from '../lib/prefs'
 import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
-import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, watchSheet, type Markup, type Point } from '../lib/markups'
+import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, removeMarkup, saveMarkup, watchSheet, type Markup, type Point } from '../lib/markups'
 import { listRevisions, renameSheet } from '../lib/sheets'
 import type { SheetRevision } from '../lib/types'
 
@@ -89,7 +89,18 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [markups, setMarkups] = useState<Markup[]>([])
   const [tool, setTool] = useState<Tool>(null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [keep, setKeep] = useState(true)
+  /**
+   * What the bar at the foot of the sheet is saying. Everything drawn is kept as it is drawn;
+   * the question of whether it was wanted is asked once, on the way out of marking up, and
+   * anything taken away — there or with the Delete key — can be put back.
+   */
+  const [said, setSaid] = useState<
+    | { kind: 'ask'; rows: Markup[] }
+    | { kind: 'gone'; rows: Markup[]; text: string }
+    | null>(null)
+  /** The markups that were already on the sheet when marking up began. */
+  const before = useRef<Set<string> | null>(null)
+  const wasMarking = useRef(false)
   const [colour, setColour] = useState<string>(MARKUP_COLOURS[0])
   const [settingScale, setSettingScale] = useState(false)
   const [pendingScale, setPendingScale] = useState<{ from: Point; to: Point } | null>(null)
@@ -233,6 +244,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
             ])
             if (!cancelled) {
               setMarkups(drawn)
+              // A sheet opened part-way through marking up starts its own count of what is new.
+              before.current = new Set(drawn.map((m) => m.id))
               setScale((row.data?.scale ?? null) as typeof scale)
               setMarkupsOff(null)
             }
@@ -345,6 +358,47 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
     else setManual(manual.filter((l) => l.id !== id))
   }
 
+  const mine = (m: Markup) => !m.created_by || !me || m.created_by === me
+
+  // Going into marking up notes what is already there; coming out asks about what wasn't.
+  const marking = tool !== null
+  useEffect(() => {
+    if (marking && !wasMarking.current) {
+      before.current = new Set(markups.map((m) => m.id))
+      setSaid(null)
+    }
+    if (!marking && wasMarking.current && before.current) {
+      const had = before.current
+      const drawn = markups.filter((m) => !had.has(m.id) && mine(m))
+      if (drawn.length) setSaid({ kind: 'ask', rows: drawn })
+    }
+    wasMarking.current = marking
+    // Only the going in and the coming out matter here, not every stroke between.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marking])
+
+  // The bar says its piece and goes. Left alone, what was drawn stays.
+  useEffect(() => {
+    if (!said) return
+    const t = setTimeout(() => setSaid(null), said.kind === 'ask' ? 12000 : 9000)
+    return () => clearTimeout(t)
+  }, [said])
+
+  function takeAway(rows: Markup[], text: string) {
+    const ids = new Set(rows.map((m) => m.id))
+    setMarkups((all) => all.filter((m) => !ids.has(m.id)))
+    setSelected((id) => (id && ids.has(id) ? null : id))
+    for (const m of rows) removeMarkup(m.id).catch((e) => setError(message(e)))
+    setSaid({ kind: 'gone', rows, text })
+  }
+
+  function putBack(rows: Markup[]) {
+    setMarkups((all) => [...all, ...rows.filter((m) => !all.some((x) => x.id === m.id))])
+    // The same rows under the same ids, so putting one back is the reverse of taking it away.
+    for (const m of rows) saveMarkup(m).catch((e) => setError(message(e)))
+    setSaid(null)
+  }
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, select, textarea')) return
@@ -361,7 +415,17 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
       if (tool !== null && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const pick = TOOL_KEYS[e.key.toLowerCase()]
         if (pick && !((pick === 'dimension' || pick === 'area') && !scale && !settingScale)) { e.preventDefault(); setTool(pick); if (pick !== 'select') setSelected(null) }
-        if (e.key === 'Delete' || e.key === 'Backspace') { /* handled by the layer's erase targets */ }
+        // Delete takes away what is selected, as it does everywhere else.
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+          const m = markups.find((x) => x.id === selected)
+          e.preventDefault()
+          if (m && mine(m)) takeAway([m], 'Removed.')
+          else if (m) setSaid({ kind: 'gone', rows: [], text: 'Only the person who drew that can remove it.' })
+          return
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && said?.kind === 'gone' && said.rows.length) {
+        e.preventDefault(); putBack(said.rows); return
       }
       if (e.key === 'ArrowRight' && index >= 0 && index < sheets.length - 1) go(sheets[index + 1])
       if (e.key === 'ArrowLeft' && index > 0) go(sheets[index - 1])
@@ -634,6 +698,22 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
       )}
       {linkMode && <div className="sv-hint">Drag a box over a detail tag or note, then choose the sheet it should open. Click × on a link you drew to remove it.</div>}
       <div className="sv-body">
+        {said && (
+          <div className="sv-said" role="status">
+            {said.kind === 'ask' ? (
+              <>
+                <span>Keep the {said.rows.length === 1 ? 'mark' : `${said.rows.length} marks`} you just drew?</span>
+                <button className="primary-lite" onClick={() => setSaid(null)}>Keep</button>
+                <button onClick={() => takeAway(said.rows, said.rows.length === 1 ? 'Discarded 1 mark.' : `Discarded ${said.rows.length} marks.`)}>Discard</button>
+              </>
+            ) : (
+              <>
+                <span>{said.text}</span>
+                {said.rows.length > 0 && <button className="primary-lite" onClick={() => putBack(said.rows)}>Undo</button>}
+              </>
+            )}
+          </div>
+        )}
         {tool !== null && (
           <MarkupPalette
             tool={tool} setTool={(t) => { setTool(t); if (t !== 'select') setSelected(null) }}
@@ -656,8 +736,6 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
               setMarkups((ms) => ms.map((m) => ({ ...m, revision_id: sheet.revisionId })))
             }}
             onDone={() => { setTool(null); setSettingScale(false); setSelected(null) }}
-            keep={keep} setKeep={setKeep}
-            scratch={markups.filter((m) => m.id.startsWith('scratch:')).length}
           />
         )}
         <aside className={`sv-index${indexOpen ? ' open' : ''}`} aria-label="Sheets in this set">
@@ -736,7 +814,6 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 onChange={setMarkups}
                 selected={selected}
                 onSelect={setSelected}
-                keep={keep}
                 onTrouble={setError}
                 onPick={settingScale ? (from, to) => setPendingScale({ from, to }) : undefined}
                 snapper={snapOn ? snapper : null}

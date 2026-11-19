@@ -1,0 +1,32 @@
+from common import *
+from t_fix import extra
+pdf=open('sheet.pdf','rb').read()
+with sync_playwright() as p:
+    b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); log=[]; install(ctx,extra,log); signed_in(ctx)
+    ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True,'bytes':0,'objects':0,'by_project':{}})))
+    ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
+    pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.click('text=A-101 >> nth=0'); pg.wait_for_timeout(2500)
+    pg.click('button:has-text("Mark up")'); pg.wait_for_timeout(300)
+    n=lambda: pg.evaluate("document.querySelectorAll('.mk-pickable').length")
+    print('keep toggle present:',pg.locator('.mk-keep').count())
+    box=pg.locator('.mk-layer').first.bounding_box()
+    def rect(x,y):
+        pg.keyboard.press('b'); pg.mouse.move(x,y); pg.mouse.down(); pg.mouse.move(x+120,y+80,steps=6); pg.mouse.up(); pg.wait_for_timeout(250)
+    cx,cy=box['x']+box['width']/2, box['y']+box['height']/2
+    rect(cx-250,cy-120); rect(cx+60,cy-40)
+    pg.keyboard.press('s'); pg.wait_for_timeout(200); print('drawn:',n())
+    pg.locator('.mk-pickable').first.click(); pg.keyboard.press('Delete'); pg.wait_for_timeout(300)
+    print('after Delete:',n(),'| bar:',pg.inner_text('.sv-said').replace('\n',' '))
+    pg.click('.sv-said button:has-text("Undo")'); pg.wait_for_timeout(300); print('after Undo:',n())
+    pg.locator('.mk-pickable').first.click(); pg.keyboard.press('Backspace'); pg.wait_for_timeout(200); pg.keyboard.press('Control+z'); pg.wait_for_timeout(300); print('Backspace then Ctrl+Z:',n(),'| still on the sheet:',pg.locator('.sheet-viewer, .sv-body').count()>0)
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
+    print('on leaving:',pg.inner_text('.sv-said').replace('\n',' ')); pg.screenshot(path='markup_ask.png')
+    pg.click('.sv-said button:has-text("Discard")'); pg.wait_for_timeout(300)
+    left=lambda: pg.evaluate("document.querySelectorAll('.sv-body svg rect, .sv-body svg path[d]').length")
+    print('after Discard bar:',pg.inner_text('.sv-said').replace('\n',' '))
+    dels=len([1 for m,u in log if m=='DELETE' and 'sheet_markups' in u])
+    pg.click('.sv-said button:has-text("Undo")'); pg.wait_for_timeout(600)
+    posts=len([1 for m,u in log if m=='POST' and 'sheet_markups' in u])
+    print('deletes sent:',dels,'| upserts sent in all:',posts,'| errors:',errs)
+    b.close()
