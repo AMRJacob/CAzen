@@ -78,8 +78,15 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const gesture = useRef<{ dist: number; mid: { x: number; y: number }; view: View } | null>(null)
   const penAt = useRef(0)
   const palms = useRef<Set<number>>(new Set())
+  /**
+   * The view as the pointer handlers see it.
+   *
+   * They need the current one, not the one captured when the handler was made, and writing a
+   * ref while rendering is not safe under the compiler — so it is synced after the commit,
+   * which is always before the next pointer event can run.
+   */
   const viewRef = useRef(view)
-  viewRef.current = view
+  useEffect(() => { viewRef.current = view }, [view])
 
   const complain = useCallback((m: string) => { setTrouble(m); onTrouble(m) }, [onTrouble])
 
