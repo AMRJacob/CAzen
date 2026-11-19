@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { NavLink, useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { NotePad, PadPages, PadStill } from '../components/NotePad'
 import IssueForm from './IssueForm'
@@ -54,10 +54,27 @@ const HEADING: Record<Area, { title: string; lead: string }> = {
 }
 
 export default function FieldNotes() {
-  const { area = 'reports' } = useParams<{ area: Area }>()
+  // With no part named, it opens on observations: that is the one made standing on site, and
+  // the phone's menu comes here.
+  const { area = 'observations' } = useParams<{ area: Area }>()
   const here = (['reports', 'meetings', 'observations'] as Area[]).includes(area as Area)
-    ? (area as Area) : 'reports'
+    ? (area as Area) : 'observations'
   return here === 'observations' ? <Observations /> : <Reports area={here} />
+}
+
+/**
+ * The three parts of field notes, side by side. A desk has them in the sidebar; a phone has no
+ * sidebar, and without this two of the three could not be reached from one at all.
+ */
+function AreaSwitch({ here }: { here: Area }) {
+  const parts: [Area, string][] = [['observations', 'Observations'], ['reports', 'Field reports'], ['meetings', 'Meeting notes']]
+  return (
+    <nav className="area-switch" aria-label="Field notes">
+      {parts.map(([to, label]) => (
+        <NavLink key={to} to={`/field-notes/${to}`} className={to === here ? 'on' : ''}>{label}</NavLink>
+      ))}
+    </nav>
+  )
 }
 
 // ---------- Field reports and meeting notes ----------
@@ -116,6 +133,7 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
 
   return (
     <section>
+      <AreaSwitch here={area} />
       <div className="page-head">
         <div>
           <PageTitle>{HEADING[area].title}</PageTitle>
@@ -383,9 +401,12 @@ function Observations() {
           </div>
         </div>
         {error && <div className="notice error">{error}</div>}
-        <ObservationForm project={current} types={types} existing={editing ?? undefined}
-          onSaved={() => { setWriting(false); setEditing(null); load() }}
-          onCancel={() => { setWriting(false); setEditing(null) }}
+        <ObservationForm project={current} types={types} existing={editing ?? undefined} known={all}
+          onSaved={(o, another) => {
+            if (another) { setAll((list) => [o, ...(list ?? []).filter((x) => x.id !== o.id)]); return }
+            setWriting(false); setEditing(null); load()
+          }}
+          onCancel={() => { setWriting(false); setEditing(null); load() }}
           onTrouble={setError} />
       </section>
     )
@@ -393,6 +414,7 @@ function Observations() {
 
   return (
     <section>
+      <AreaSwitch here="observations" />
       <div className="page-head">
         <div>
           <PageTitle>{HEADING.observations.title}</PageTitle>

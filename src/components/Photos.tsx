@@ -20,6 +20,7 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
   onTrouble: (m: string) => void
 }) {
   const input = useRef<HTMLInputElement | null>(null)
+  const library = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(0)
 
   async function take(files: FileList | null) {
@@ -34,6 +35,7 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
     }
     if (kept.length) onChange([...paths, ...kept])
     if (input.current) input.current.value = ''
+    if (library.current) library.current.value = ''
   }
 
   return (
@@ -47,11 +49,21 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
         {editable && (
           <button type="button" className="photo photo-add" onClick={() => input.current?.click()}>
             <span aria-hidden="true">+</span>
-            <span className="small">Photo</span>
+            <span className="small">Camera</span>
+          </button>
+        )}
+        {/* A phone's camera button opens the camera and nothing else, so photographs already
+            taken — with the phone's own camera, on the walk — need their own way in. */}
+        {editable && (
+          <button type="button" className="photo photo-add" onClick={() => library.current?.click()}>
+            <span aria-hidden="true">▦</span>
+            <span className="small">Library</span>
           </button>
         )}
       </div>
-      <input ref={input} type="file" accept="image/*" capture="environment" multiple hidden
+      <input ref={input} type="file" accept="image/*" capture="environment" hidden
+        onChange={(e) => void take(e.target.files)} />
+      <input ref={library} type="file" accept="image/*" multiple hidden
         onChange={(e) => void take(e.target.files)} />
     </div>
   )
