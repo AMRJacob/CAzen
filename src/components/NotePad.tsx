@@ -67,6 +67,15 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [fingerDraws, setFingerDraws] = useState(() => !penSeen())
   /** What the pad made of the last thing that touched it, so it can be asked. */
   const [lastTouch, setLastTouch] = useState<'pen' | 'finger' | 'palm' | 'mouse' | null>(null)
+  /**
+   * The stroke being drawn.
+   *
+   * Held in a ref and mirrored into state: the ref is what the stroke actually is, the state
+   * is only so it can be drawn. A Pencil samples far faster than React renders, and pointerup
+   * can arrive before the last setState has committed — reading the stroke back out of state
+   * at that moment loses the end of it, or on a quick stroke, all of it.
+   */
+  const wetRef = useRef<InkPoint[] | null>(null)
   const [wet, setWet] = useState<InkPoint[] | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [mine, setMine] = useState<string[]>([])
@@ -163,7 +172,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     capture(e)
     drawing.current = e.pointerId
     if (tool === 'erase') { erasing.current = new Set(); rub(e); return }
-    setWet(samplesFrom(e.nativeEvent as PointerEvent, at))
+    wetRef.current = samplesFrom(e.nativeEvent as PointerEvent, at)
+    setWet(wetRef.current)
   }
 
   function move(e: React.PointerEvent) {
@@ -173,7 +183,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     if (drawing.current !== e.pointerId) return
     if (tool === 'erase') { rub(e); return }
     const more = samplesFrom(e.nativeEvent as PointerEvent, at)
-    setWet((w) => (w ? [...w, ...more] : more))
+    wetRef.current = wetRef.current ? [...wetRef.current, ...more] : more
+    setWet(wetRef.current)
   }
 
   /** One finger drags the page; two pinch it and drag it at once. */
@@ -230,9 +241,16 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       try { await removeMarks(ids) } catch (e) { onTrouble(message(e)); load() }
       return
     }
-    const points = wet
+    let points = wetRef.current
+    wetRef.current = null
     setWet(null)
-    if (!points || points.length < 2) return
+    if (!points || !points.length) return
+    // A tap is a dot — an i, a bullet, a full stop. One point draws nothing, so it is given a
+    // second a hair away and the round cap makes it a dot.
+    if (points.length === 1) {
+      const [x, y, f] = points[0] as [number, number, number?]
+      points = [points[0], (f == null ? [x + 0.0004, y] : [x + 0.0004, y, f]) as InkPoint]
+    }
     const kind: MarkKind = tool === 'highlight' ? 'highlight' : 'ink'
     try {
       const saved = await addMark({
