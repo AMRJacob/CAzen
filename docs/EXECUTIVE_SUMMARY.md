@@ -45,7 +45,9 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Pay applications (G702/G703 layout, retainage steps, stored material) | Live |
 | Setting a contract up in the app, with a pasted schedule of values | Live (2026-11-19) |
 | Construction schedule against pay applications | Live |
-| Schedule read from the contractor's PDF (printed or scanned), rows found by their line numbers; activities tied to pay lines by name | Live (2026-11-19); not yet checked against a real scan |
+| Schedule read from the contractor's PDF (printed or scanned), rows found by their line numbers, unsure cells in red; activities tied to pay lines by name | Live (2026-11-19); on the one real scan tried, all 57 lines read |
+| Re-read titles and dates on sheets already uploaded (select several, right-click) | Live (2026-11-19); not yet tried on real sheets |
+| Pay applications read from the contractor's PDF | Not built |
 | Schedule issues: each read-in kept with what it changed and the schedule as it stood | Built (2026-11-19); waiting on migration 0039 |
 | Notebooks (field notes and meeting notes): a full-screen page a day — names, typed notes, sketch, labelled photo gallery, observations; report exported from the page | Live (2026-11-19); not yet used on the iPhone |
 | Contract library | Live |

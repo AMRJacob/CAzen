@@ -2461,3 +2461,21 @@ body:has(.nb) .phone-nav { display: none; }
   .spot-bar { gap: 6px; }
   .spot-bar > button { padding-left: 10px; padding-right: 10px; }
 }
+
+/* ---------- Several sheets chosen, and what can be done to them ---------- */
+.register tr.picked td { background: #e4eef6; box-shadow: inset 0 1px 0 #b9d2e6, inset 0 -1px 0 #b9d2e6; }
+.register tr.opens { user-select: none; -webkit-user-select: none; }
+.pick-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 8px; background: #e4eef6; border: 1px solid #b9d2e6; border-radius: 8px; font-size: 14px; position: sticky; top: 0; z-index: 3; }
+.pick-menu-shade { position: fixed; inset: 0; z-index: 80; }
+.pick-menu { position: fixed; display: flex; flex-direction: column; min-width: 270px; padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2); }
+.pick-menu button { border: none; background: none; text-align: left; padding: 9px 12px; border-radius: 6px; font-size: 14px; }
+.pick-menu button:hover { background: var(--moss-soft); }
+.reread { position: fixed; inset: 0; z-index: 85; background: rgba(20, 22, 20, 0.55); display: grid; place-items: center; padding: 20px; }
+.reread-card { background: var(--panel); border-radius: 10px; padding: 18px 20px; width: min(1100px, 100%); max-height: 100%; display: flex; flex-direction: column; }
+.reread-table { overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0 12px; }
+.reread-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.reread-table th, .reread-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.reread-table th { position: sticky; top: 0; background: var(--wash); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; color: var(--muted); }
+.reread-table input.cell { width: 100%; min-width: 150px; font: inherit; padding: 4px 6px; }
+.reread-off td { color: var(--muted); }
+.reread-warn { font-size: 11px; color: #a0522d; font-family: var(--sans); }

@@ -387,6 +387,19 @@ export async function deleteIssuance(project: ProjectStore, issuanceId: string, 
   return deleteStoredFiles(project, asPaths(data), alsoFolder)
 }
 
+/** The date on record for each of some revisions: what was read off the sheet when it came in. */
+export async function sheetDates(revisionIds: string[]): Promise<Map<string, string | null>> {
+  const { data, error } = await db().from('sheet_revisions').select('id, sheet_date').in('id', revisionIds)
+  if (error) throw error
+  return new Map(((data ?? []) as { id: string; sheet_date: string | null }[]).map((r) => [r.id, r.sheet_date]))
+}
+
+/** The date printed on a sheet, corrected for the revision it is printed on. */
+export async function setSheetDate(revisionId: string, date: string | null): Promise<void> {
+  const { error } = await db().from('sheet_revisions').update({ sheet_date: date }).eq('id', revisionId)
+  if (error) throw error
+}
+
 /** Delete one revision of a sheet (firm admins). */
 export async function deleteRevision(project: ProjectStore, revisionId: string, alsoFolder: boolean) {
   const { data, error } = await db().rpc('delete_revision', { p_revision: revisionId })

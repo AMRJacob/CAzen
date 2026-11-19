@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:00 CST
+
+- **Re-read titles and dates on sheets already uploaded** (`src/components/SheetReread.tsx`).
+  On Drawings → Current sheets, Ctrl- or Cmd-click and Shift-click choose rows (a plain click
+  still opens the sheet). A bar appears with *Re-read titles and dates*; a right-click on a
+  chosen row offers the same. Each chosen sheet's own PDF is opened and its title block read
+  with the firm's title block templates as they are now (`readPage`, the same reader the upload
+  uses). A table shows title and date on record beside what was read; the read values can be
+  corrected; only ticked rows are changed. A row is pre-ticked only where something different
+  was read *and* the number read matches the sheet's. Sheet numbers are never changed here.
+  `setSheetDate`, `sheetDates` in `sheets.ts`. Right-click on a row with nothing chosen still
+  renames it. **Checked** for selection, menu, and applying a corrected row
+  (`checks/t_reread.py`); **not checked** that a real title block reads better the second
+  time — the test sheet has no title block and no templates, so it read nothing.
+- **The tagger's close button on a phone.** Jacob: on the iPhone, from an issue, he could not
+  get back from the sheet. In *Tag to drawing* the bar had grown by three zoom buttons at
+  12:25 and on a 402 px screen the × sat past the right edge. The zoom buttons are off on a
+  phone (fingers zoom). I am inferring this is the screen he meant.
+- **"Also remove the copies in the project folder on this computer"** (Jacob asked what it
+  means). It is about the second copy of each PDF that CAzen writes into the project's own CA
+  folder on an office computer where one has been linked. Reworded, with what happens either
+  way, and now shown only on a computer that has that project's folder linked.
+
+---
+
 # Checkpoint — 2026-11-19, 14:25 CST
 
 **The schedule reader, against a real scan.** Jacob sent the contractor's schedule (an MS

@@ -38,6 +38,7 @@ const REGISTER_COLUMNS = [
   { key: 'from' }, { key: 'date' }, { key: 'history' }, { key: 'actions' },
 ]
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
+import { SheetReread } from '../components/SheetReread'
 import { TitleblockEditor } from '../components/TitleblockEditor'
 import { DisciplineOrderEditor } from '../components/DisciplineOrder'
 
@@ -79,6 +80,22 @@ export default function Documents() {
   const [allRevs, setAllRevs] = useState(false)
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [viewing, setViewing] = useState<{ start: ViewSheet; highlight?: string } | null>(null)
+  /** Sheets chosen with Ctrl- or Shift-click, to do something to several at once. */
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const lastPick = useRef<string | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [rereading, setRereading] = useState(false)
+  function pick(id: string, range: boolean, inOrder: string[]) {
+    setPicked((was) => {
+      const next = new Set(was)
+      const a = lastPick.current ? inOrder.indexOf(lastPick.current) : -1, b = inOrder.indexOf(id)
+      if (range && a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(inOrder[i])
+      else if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    lastPick.current = id
+  }
   const [ordering, setOrdering] = useState(false)
 
   const order = effectiveOrder(firm?.discipline_order, current?.discipline_order)
@@ -260,6 +277,14 @@ export default function Documents() {
           ) : sheets.length === 0 ? (
             <div className="card muted">No drawings yet. Upload the bid or permit set to start.</div>
           ) : (
+            <>
+            {picked.size > 0 && (
+              <div className="pick-bar">
+                <strong>{picked.size} {picked.size === 1 ? 'sheet' : 'sheets'} selected</strong>
+                <button className="primary-lite" onClick={() => setRereading(true)}>Re-read titles and dates</button>
+                <button className="link" onClick={() => setPicked(new Set())}>Clear</button>
+              </div>
+            )}
             <table className="register sizable" ref={cols.table}>
               {cols.cols}
               <thead>
@@ -279,15 +304,31 @@ export default function Documents() {
                 {groups.map((g) => (
                   <Fragment key={g.key}>
                     <tr className="group"><td colSpan={7}>{g.label}</td></tr>
-                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} order={order} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })} />)}
+                    {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} order={order} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })}
+                      picked={picked.has(s.sheet_id)} anyPicked={picked.size > 0}
+                      onPick={(range) => pick(s.sheet_id, range, groups.flatMap((x) => x.items.map((i) => i.sheet_id)))}
+                      onMenu={(x, y) => setMenu({ x, y })} />)}
                   </Fragment>
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </>
       )}
 
+      {menu && (
+        <div className="pick-menu-shade" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
+          <div className="pick-menu" style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.min(menu.y, window.innerHeight - 110) }}>
+            <button onClick={() => { setMenu(null); setRereading(true) }}>Re-read title and date from {picked.size === 1 ? 'the sheet' : `these ${picked.size} sheets`}</button>
+            <button onClick={() => { setMenu(null); setPicked(new Set()) }}>Clear the selection</button>
+          </div>
+        </div>
+      )}
+      {rereading && current && firm && (
+        <SheetReread project={current} firmId={firm.id} sheets={sheets.filter((s) => picked.has(s.sheet_id))}
+          onDone={(changed) => { setRereading(false); if (changed) { setPicked(new Set()); load() } }} />
+      )}
       {viewing && (
         <SheetViewer project={current} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} onSheetChanged={load} />
       )}
@@ -382,7 +423,10 @@ function DownloadSet({ project, order, label, date, gather, className }: {
   )
 }
 
-function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet: CurrentSheet; project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void }) {
+function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, anyPicked, onPick, onMenu }: {
+  sheet: CurrentSheet; project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void
+  picked: boolean; anyPicked: boolean; onPick: (range: boolean) => void; onMenu: (x: number, y: number) => void
+}) {
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -432,9 +476,20 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
     <>
       {/* The row is the way in. Anything else on it — the revisions toggle — stops the click
           getting this far, so only the row's own space opens the sheet. */}
-      <tr className={`opens${editing ? ' editing' : ''}`} tabIndex={0} role="button" aria-label={`Open ${sheet.number}`}
-        onClick={(e) => { if (!editing && !(e.target as HTMLElement).closest('button, a')) onOpen(toView(sheet)) }}
-        onContextMenu={(e) => { e.preventDefault(); startEdit() }}
+      {/* Ctrl- or Shift-click chooses the row instead of opening it; a right-click on a chosen
+          row is about the chosen ones, and on any other row it renames that one, as before. */}
+      <tr className={`opens${editing ? ' editing' : ''}${picked ? ' picked' : ''}`} tabIndex={0} role="button" aria-label={`Open ${sheet.number}`} aria-selected={picked}
+        onClick={(e) => {
+          if (editing || (e.target as HTMLElement).closest('button, a')) return
+          if (e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onPick(e.shiftKey); return }
+          onOpen(toView(sheet))
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          if (picked) onMenu(e.clientX, e.clientY)
+          else if (anyPicked) { onPick(false); onMenu(e.clientX, e.clientY) }
+          else startEdit()
+        }}
         onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(toView(sheet)) } }}>
         <td className="mono">
           {sheet.number}
@@ -518,7 +573,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen }: { sheet
               <ConfirmDelete
                 what={`${sheet.number} revision ${r.revision_label || r.revision_index}`}
                 detail={history.length === 1 ? 'It’s the only revision, so the sheet is removed from the project.' : r.revision_index === sheet.revision_index ? 'The sheet goes back to its previous revision.' : ''}
-                folderOption
+                folderOption projectId={project.id}
                 onCancel={() => setDeleting(null)}
                 onConfirm={async (alsoFolder) => {
                   await deleteRevision(project, r.id, alsoFolder)
@@ -626,7 +681,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                   <ConfirmDelete
                     what={issuanceText(r.kind, r.number)}
                     detail={`Its ${r.sheets.length} ${r.sheets.length === 1 ? 'sheet is' : 'sheets are'} removed; sheets it revised go back to their previous revision.`}
-                    folderOption
+                    folderOption projectId={project.id}
                     onCancel={() => setDeleting(null)}
                     onConfirm={async (alsoFolder) => {
                       const res = await deleteIssuance(project, r.id, alsoFolder)
