@@ -2398,3 +2398,6 @@ body:has(.nb) .phone-nav { display: none; }
 .reg-total td { font-weight: 600; background: var(--wash); padding: 8px 10px; font-variant-numeric: tabular-nums; border-bottom: none; }
 .reg-total-loose td { font-weight: 400; color: var(--muted); padding-top: 0; }
 .register thead tr:last-child td { border-bottom: 2px solid var(--ink); }
+/* The editor's Delete was red words on a red button — two rules each right alone. */
+.palette button.danger { background: var(--panel); color: var(--danger); border-color: #e6c4c4; }
+.palette button.danger:hover:not(:disabled) { background: #fbeeee; }
