@@ -58,16 +58,22 @@ export function samplesFrom(
  * A stroke as a handful of constant-width paths.
  *
  * SVG has no variable-width stroke, so a pressure stroke is cut where its width changes and
- * each piece drawn at its own width. Widths are rounded to a quarter so a steady press makes
- * one path rather than two hundred, and each piece starts on the point the last one ended on
- * so the pieces meet without a gap.
+ * each piece drawn at its own width. Widths are rounded so that a steady press makes one path
+ * rather than two hundred, and each piece starts on the point the last one ended on so the
+ * pieces meet without a gap.
+ *
+ * The rounding is to a fraction of the base width, not to a fixed amount. A sheet markup is
+ * two pixels wide and a pad stroke is three thousandths of a canvas unit; rounding both to a
+ * quarter — as this did — leaves the first alone and flattens the second to nothing, which
+ * draws a stroke that is saved, correct, and invisible.
  */
 export function inkRuns(points: InkPoint[], base: number): { width: number; d: string }[] {
   if (points.length < 2) return []
+  const step = base / 8
   const widthAt = (p: InkPoint) => {
     const f = p.length > 2 ? (p[2] as number) : null
     if (f == null) return base
-    return Math.round(base * (0.4 + 1.3 * f) * 4) / 4
+    return Math.round((base * (0.4 + 1.3 * f)) / step) * step
   }
   const runs: { width: number; d: string }[] = []
   let width = widthAt(points[0])
