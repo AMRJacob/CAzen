@@ -217,8 +217,9 @@ export function watchPad(padId: string, on: {
       { event: 'UPDATE', schema: 'public', table: 'pad_marks', filter: `pad_id=eq.${padId}` },
       (payload) => on.changed(payload.new as PadMark))
     .on('postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'pad_marks', filter: `pad_id=eq.${padId}` },
-      (payload) => on.removed((payload.old as { id: string }).id))
+      // Unfiltered, for the reason given in markups.ts: a delete carries only the row's id.
+      { event: 'DELETE', schema: 'public', table: 'pad_marks' },
+      (payload) => { const id = (payload.old as { id?: string })?.id; if (id) on.removed(id) })
     .subscribe()
   return () => { void db().removeChannel(channel) }
 }

@@ -197,6 +197,21 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
     } catch { return }
   }, [sheet.sheetId])
 
+  // A phone that was in a pocket was not listening: the browser drops the live connection when
+  // the app is put away. So what is on the sheet is asked for again whenever the app comes back
+  // to the front or finds signal, rather than trusted to have been kept up.
+  useEffect(() => {
+    const id = sheet.sheetId
+    if (!id) return
+    const again = () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return
+      listMarkups(id).then(setMarkups).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', again)
+    window.addEventListener('online', again)
+    return () => { document.removeEventListener('visibilitychange', again); window.removeEventListener('online', again) }
+  }, [sheet.sheetId])
+
   const revAt = history.findIndex((r) => r.id === sheet.revisionId)
   const newest = history[0]
   /** Step through the history of this sheet, keeping everything else about it the same. */
@@ -511,6 +526,16 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
       setDetailsBusy(false)
     }
   }
+
+  // A pinch that starts on the bar, or anywhere that is not the drawing, would otherwise zoom
+  // the whole page on an iPhone — and a zoomed page is how the screen behind gets dragged into
+  // view under the sheet. While a sheet is open, pinching belongs to the sheet alone.
+  useEffect(() => {
+    const no = (e: Event) => e.preventDefault()
+    document.addEventListener('gesturestart', no, { passive: false })
+    document.addEventListener('gesturechange', no, { passive: false })
+    return () => { document.removeEventListener('gesturestart', no); document.removeEventListener('gesturechange', no) }
+  }, [])
 
   return (
     <div className="sheet-viewer" role="dialog" aria-label={`Sheet ${sheet.number}`}>

@@ -11,6 +11,46 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:19 CST
+
+Four things from Jacob while testing on the phone (15:12–15:18).
+
+- **A border on the left and bottom of a sheet when panning.** The viewer kept clear of the
+  camera cut-out and the home bar by padding the whole screen, so the drawing stopped short of
+  those edges and bare background showed. The drawing area now runs to every edge; only the
+  toolbar and the sheet list keep inside the safe area. **Not seen here**: the test browser
+  has no cut-out, so its insets are zero — this is from reading the stylesheet, checked only
+  to the extent that the drawing area reaches the right and bottom edges and nothing else
+  moved.
+- **The page behind an open sheet can no longer scroll or be pinch-zoomed** (`html`/`body`
+  `overflow: hidden` while the viewer is up; a pinch anywhere outside the drawing is stopped).
+  Done in answer to "I can see the drawings browser at the bottom of the page and it messes up
+  the panning and zooming". Which thing he saw is not known — it may instead have been the
+  sheet list that runs along the bottom on a near-square screen (620–1099 px wide, 700+ tall),
+  which is unchanged.
+- **Asked for, then withdrawn; built and set aside, not shipped:** hiding the sheet list
+  entirely when a phone is upright, opening it from the sheet's title, and the left-hand list
+  on small phones held sideways. Jacob: "never mind — I like how it's working now". The work
+  is in no commit. He also said going between sheets "seems inconsistent"; what is
+  inconsistent has not been pinned down.
+- **Markups deleted on one device stayed on another** (Jacob: deleted on the desktop, still on
+  the phone). A sheet that is open listens for changes live, but the listener for deletions
+  was filtered by sheet, and Supabase's Realtime documentation says delete events can only be
+  filtered when the table's replica identity is full — a delete carries the row's id and
+  nothing to match a filter with. `sheet_markups` and `pad_marks` are both at the default, so
+  **deletions were never delivered**; additions and edits were. The delete listeners are now
+  unfiltered (`watchSheet`, `watchPad`) and remove by id. Also: an open sheet re-reads its
+  markups when the app comes back to the front or finds signal, since a phone in a pocket is
+  not listening. Not tried between two real devices. A sheet that is not open is read fresh
+  each time it is opened.
+- **Shift-click selected one sheet, not the run** (re-read selection on Drawings). The last
+  sheet clicked was read inside a state updater that runs after it had been overwritten with
+  the new one. `checks/t_shift.py`: Ctrl-click 1st then Shift-click 5th → 5 selected; in
+  re-read mode click 2nd, Shift-click 6th → 5; Shift-click back to the 1st → 6. The earlier
+  check clicked rows one at a time and never held Shift.
+
+---
+
 # Checkpoint — 2026-11-19, 15:11 CST
 
 **The sheet-turning buttons no longer move** (Jacob, 15:09: on the desktop the buttons for

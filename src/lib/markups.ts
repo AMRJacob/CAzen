@@ -261,8 +261,12 @@ export function watchSheet(sheetId: string, on: {
       (p) => on.added(p.new as Markup))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sheet_markups', filter },
       (p) => on.changed(p.new as Markup))
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sheet_markups', filter },
-      (p) => on.removed((p.old as { id: string }).id))
+    // No filter on this one. A deleted row arrives as its id and nothing else, so there is no
+    // sheet_id to match and a filtered subscription is never told (Supabase: delete events can
+    // only be filtered with replica identity full). Every delete is heard; one for a markup
+    // that isn't on this sheet removes nothing.
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'sheet_markups' },
+      (p) => { const id = (p.old as { id?: string })?.id; if (id) on.removed(id) })
     .subscribe()
   return () => { void db().removeChannel(channel) }
 }

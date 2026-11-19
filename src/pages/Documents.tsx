@@ -93,9 +93,12 @@ export default function Documents() {
   const [phoneSearch, setPhoneSearch] = useState(false)
   const [phoneTools, setPhoneTools] = useState(false)
   function pick(id: string, range: boolean, inOrder: string[]) {
+    // The sheet clicked before this one is read now, not inside the updater: the updater runs
+    // later, by which time it has been overwritten with this one and the run has no length.
+    const from = lastPick.current
     setPicked((was) => {
       const next = new Set(was)
-      const a = lastPick.current ? inOrder.indexOf(lastPick.current) : -1, b = inOrder.indexOf(id)
+      const a = from ? inOrder.indexOf(from) : -1, b = inOrder.indexOf(id)
       if (range && a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(inOrder[i])
       else if (next.has(id)) next.delete(id)
       else next.add(id)
