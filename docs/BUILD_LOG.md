@@ -11,6 +11,65 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:39 CST
+
+**Notebooks work with no signal** (Jacob: "I need all field notes, meeting notes, etc to be
+saved locally until I am back on the internet to be uploaded… anything I am doing with the
+notebooks functionality"). Commit `a0755a9`.
+
+- What is kept on the device now, in four new IndexedDB stores (`visits`, `pads`, `padMarks`,
+  `people`; database version 3): notebook pages, sketch pads, every mark on them, and the
+  project's people. They are kept whether or not the project was "taken to the field", and
+  giving the drawings back does not remove them.
+- Reads (`src/lib/offline/mirror.ts`, `localFirst`): from the server when it answers, from the
+  device when it doesn't (no signal, or no reply within 6 s when a copy is in hand). A row
+  changed here and not yet sent is always taken from the device, so a refresh cannot undo it.
+- Writes: `saveVisit`, `setVisit`, `removeVisit`, `newPad`, `setPad`, `removePad`, `addMark`,
+  `setMark*`, `removeMarks`, `addPerson`, `removePerson` all write to the device and queue one
+  of three new outbox jobs (`row.put`, `row.patch`, `row.remove`). Consecutive changes to the
+  same row are folded into one job while it is the newest thing waiting, so typing for an hour
+  does not queue a change a second.
+- Photographs: `keepPhoto` keeps the shrunk JPEG on the device under the path it will have,
+  queues a `file.put`, and returns at once. The upload asks storage whether the file is already
+  there before sending, so a retry after a dropped reply does not make a second copy. File
+  names gained three random characters (`Site visit 20261119-143840 t4a.jpg`) because the name
+  is now settled on the phone. A file storage refuses (full, too large) holds up only itself
+  and is retried with a growing wait; everything else still stops at the first network failure
+  and keeps its order.
+- Project list: a project with anything waiting is hatched and says how many changes, whether
+  or not its drawings are on the device.
+- Taking a project to the field now also brings its notebook pages, pads, marks and people.
+  Re-downloading no longer clears photographs from the device (it only prunes PDFs) — before
+  this, a refresh of the drawings would have dropped photos cached on site.
+- `newPad` and `addMark` no longer ask the server who is signed in (that needed signal); they
+  read the session the device holds.
+
+Checked in the test browser, phone size, network cut (`checks/t_offline_notes.py`): new page,
+two typed notes, a photo, a two-stroke sketch → all on the device, nothing sent, project row
+hatched "8 changes still to send"; left the notebook and came back with no signal → page,
+notes, photo and sketch all there; network back → page, notes, upload, pad, marks sent in the
+order made, photo path on the page equals the uploaded key, row clears. `t_hold`, `t_select`,
+`t_text`, `t_photos` and the node tests still pass.
+
+Not covered, said plainly:
+- Not tried on the iPhone. iOS Safari can evict IndexedDB for a site unused for a while unless
+  it is on the home screen; no primary source was looked up for the current rule.
+- Making the report PDF from a page and issuing it still need signal (numbering and the issued
+  register are the server's). The page it is made from does not.
+- Weather and place look-ups need signal and are skipped without it.
+- "People on other projects" suggestions need signal; this project's people do not.
+- Photos already on older pages are not brought down by "take to the field"; a photo is on the
+  device if it was taken on it or has been looked at on it.
+- A queued change the server rejects on its own terms (a row that no longer exists, a
+  permission) is still dropped, as before.
+
+**Holding a project asks before downloading** (Jacob: "I would rather the long hold on the
+project prompt you to download"). Commit `e5310cc`. The hold opens a small sheet — "Download
+the current sheets", "Download every revision", "Not now" — instead of starting at once; the
+lifting finger cannot dismiss it (backdrop taps ignored for 0.8 s). `checks/t_hold.py` updated.
+
+---
+
 # Checkpoint — 2026-11-19, 16:20 CST
 
 **Taking a project to the field is a press and hold** (Jacob, 14:25: the button was not working
