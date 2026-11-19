@@ -11,6 +11,21 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 13:05 CST
+
+- **Pad: select, right-click, text size.** A *Select* tool: click a stroke or text box, or drag
+  a box round several; drag what is picked to move it. A bar at the top gives colour, line
+  width (ink only), delete and done. A right-click picks what is under it with any tool in
+  hand. Delete/Backspace removes the selection; Redo brings it back. Recolouring and moving
+  are **not** undoable. Text boxes have a round **A** grip: drag up for larger type, down for
+  smaller (`style.size`). `setMarkStyle` in `pads.ts`; `PadSurface` now redraws when a mark
+  changes under the same id (its cache went by id alone). `checks/t_select.py`.
+- **Close on a notebook did nothing — my regression from 11:50.** Close went to `/field-notes`,
+  which since the Notebooks page was retired sends you straight back into the book. Close (and
+  Escape on the contents page) now go to the main page.
+
+---
+
 # Checkpoint — 2026-11-19, 12:45 CST
 
 **The change register can be corrected, and carries cost and time.** (`src/pages/CaLogs.tsx`,

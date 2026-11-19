@@ -76,7 +76,9 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
    * to where the paper is. Panning changes only where it goes, so the path is kept and the
    * canvas is moved under it; the outline is rebuilt only when the zoom changes.
    */
-  interface Drawn { scale: number; dpr: number; path: Path2D; box: Box }
+  /* `points` and `width` are what the outline was made from: a stroke moved or made broader
+     keeps its name, and must not keep its old outline. */
+  interface Drawn { scale: number; dpr: number; path: Path2D; box: Box; points: InkPoint[]; width: number }
   const paths = useRef(new Map<string, Drawn>())
 
   const pathFor = useCallback((
@@ -88,7 +90,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
   ): Drawn | null => {
     const { dpr } = size.current
     const had = id ? paths.current.get(id) : undefined
-    if (had && had.scale === v.scale && had.dpr === dpr) return had
+    if (had && had.scale === v.scale && had.dpr === dpr && had.points === points && had.width === style.width) return had
     const here: InkPoint[] = points.map((p) => (
       p.length > 2
         ? [p[0] * v.scale * dpr, p[1] * v.scale * dpr, p[2] as number]
@@ -107,7 +109,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
       if (y < y0) y0 = y
       if (y > y1) y1 = y
     }
-    const made: Drawn = { scale: v.scale, dpr, path, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } }
+    const made: Drawn = { scale: v.scale, dpr, path, points, width: style.width, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } }
     if (id) paths.current.set(id, made)
     return made
   }, [])
@@ -191,7 +193,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
    * What is already on the paper, so the next pass can tell an added stroke from a changed
    * drawing. A stroke appended to the end costs one stroke; anything else costs a redraw.
    */
-  const laid = useRef<{ ids: string[]; view: View; sig: string } | null>(null)
+  const laid = useRef<{ ids: string[]; view: View; sig: string; marks: PadMark[] } | null>(null)
 
   useLayoutEffect(() => {
     const c = paper.current
@@ -205,7 +207,8 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     const appended = !!was && !resized && was.sig === sig
       && was.view.scale === view.scale && was.view.x === view.x && was.view.y === view.y
       && was.ids.length <= ids.length
-      && was.ids.every((id, i) => ids[i] === id)
+      // The same marks, not only the same names: one recoloured or moved is a changed drawing.
+      && was.marks.every((m, i) => marks[i] === m)
     if (appended) {
       for (let i = was.ids.length; i < marks.length; i++) drawMark(ctx, marks[i], view)
     } else {
@@ -217,7 +220,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
         for (const id of paths.current.keys()) if (!here.has(id)) paths.current.delete(id)
       }
     }
-    laid.current = { ids, view, sig }
+    laid.current = { ids, view, sig, marks }
   }, [marks, view, rule, ruleInk, ground, drawMark, fitCanvas])
 
   /** The stroke under the nib. Held here so a redraw can put it back where it was. */
@@ -264,7 +267,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
         ctx.clearRect(0, 0, c.width, c.height)
         ground(ctx, viewRef.current)
         for (const m of marks) drawMark(ctx, m, viewRef.current)
-        laid.current = { ids: marks.map((m) => m.id), view: viewRef.current, sig: `${rule}|${ruleInk}` }
+        laid.current = { ids: marks.map((m) => m.id), view: viewRef.current, sig: `${rule}|${ruleInk}`, marks }
       }
       drawWet()
     }

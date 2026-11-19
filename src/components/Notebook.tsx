@@ -101,7 +101,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
-      if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/field-notes') }
+      if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/') }
       if (!page) return
       // Pages run newest first, so "next" in the book is the older one.
       if (e.key === 'ArrowRight' && i < pages.length - 1) go(pages[i + 1].id, 'fwd')
@@ -119,7 +119,7 @@ export function Notebook({ project, kind, pages, onPages }: {
       onContents={page ? () => go(null, 'back') : undefined}
       onBack={page ? () => go(i > 0 ? pages[i - 1].id : null, 'back') : undefined}
       onForward={page && i < pages.length - 1 ? () => go(pages[i + 1].id, 'fwd') : undefined}
-      onClose={() => navigate('/field-notes')} />
+      onClose={() => navigate('/')} />
   )
 
   return (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  addMark, listMarks, removeMarks, setMarkBody, setMarkGeometry, setPad, watchPad,
+  addMark, listMarks, removeMarks, setMarkBody, setMarkGeometry, setMarkStyle, setPad, watchPad,
   HIGHLIGHTS, PAD_COLOURS,
   type MarkKind, type NotePad as Pad, type PadMark, type PadRule,
 } from '../lib/pads'
@@ -26,7 +26,7 @@ import { Mark } from './Logo'
  * written is where it was, and the canvas simply carries on past where the page used to stop.
  */
 
-type Tool = 'pen' | 'pencil' | 'highlight' | 'text' | 'erase'
+type Tool = 'pen' | 'pencil' | 'highlight' | 'text' | 'erase' | 'select'
 
 /**
  * Pen weights, as fractions of a page's width — so 0.005 is about a millimetre, the weight of
@@ -59,6 +59,8 @@ const MENU_IDLE = 1000
  * which is drawn another way, and not on the pad.
  */
 const TEXT_UNIT = 1000
+/** Type size on the pad when a box has none of its own, in page units. */
+const TEXT_SIZE = 0.03
 
 const PEN_KEY = 'cazen.pen.seen'
 const penSeen = () => { try { return localStorage.getItem(PEN_KEY) === 'yes' } catch { return false } }
@@ -88,6 +90,12 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const boxFrom = useRef<{ id: number; x: number; y: number } | null>(null)
   /** A text box being made wider or narrower by its grip. */
+  /** What the select tool, or a right-click, has hold of. */
+  const [picked, setPicked] = useState<string[]>([])
+  /** The select tool's drag: moving what is picked, or stretching a box round more. */
+  const grab = useRef<{ id: number; x: number; y: number; moved: boolean; moving: boolean } | null>(null)
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const typeSize = useRef<{ id: string; y: number; size: number } | null>(null)
   const sizing = useRef<{ id: string; x: number; w: number; h: number | undefined; grip: 'e' | 'se'; y: number } | null>(null)
   const [mine, setMine] = useState<string[]>([])
   /** What undo took off the page, newest last, for redo to put back. Anything new empties it. */
@@ -166,10 +174,16 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   }), [pad.id])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !editing) onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, editing])
+    const onKey = (e: KeyboardEvent) => {
+      if (editing) return
+      // Heard before the notebook behind the pad, which would otherwise turn its own page back.
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); if (picked.length) setPicked([]); else onClose() }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && picked.length) { e.preventDefault(); void removePicked() }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, editing, picked])
 
   const here = marks.filter((m) => m.page === page)
 
@@ -303,6 +317,16 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       return
     }
 
+    if (tool === 'select') {
+      const p = at(e)
+      const hit = markAt(p)
+      capture(e)
+      if (hit && !picked.includes(hit.id)) setPicked([hit.id])
+      if (!hit) setPicked([])
+      grab.current = { id: e.pointerId, x: p.x, y: p.y, moved: false, moving: !!hit }
+      return
+    }
+    if (picked.length) setPicked([])
     if (tool === 'text') {
       // Dragged out to the size wanted; a tap without a drag is a box of the usual width.
       const p = at(e)
@@ -328,6 +352,19 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     // Still writing: whatever the browser said, the pen is clearly still on the glass.
     if (doubt.current && drawing.current === e.pointerId) forget()
     if (fingers.current.has(e.pointerId)) { moveFingers(e); return }
+    if (grab.current?.id === e.pointerId) {
+      const g = grab.current, p = at(e)
+      if (!g.moved && Math.hypot(p.x - g.x, p.y - g.y) * viewRef.current.scale < 5) return
+      g.moved = true
+      if (g.moving) {
+        const dx = p.x - g.x, dy = p.y - g.y
+        g.x = p.x; g.y = p.y
+        setMarks((all) => all.map((m) => (picked.includes(m.id) ? { ...m, geometry: shifted(m.geometry, dx, dy) } : m)))
+      } else {
+        setMarquee({ x: Math.min(g.x, p.x), y: Math.min(g.y, p.y), w: Math.abs(p.x - g.x), h: Math.abs(p.y - g.y) })
+      }
+      return
+    }
     if (boxFrom.current?.id === e.pointerId) {
       const p = at(e), f = boxFrom.current
       setBox({ x: Math.min(f.x, p.x), y: Math.min(f.y, p.y), w: Math.abs(p.x - f.x), h: Math.abs(p.y - f.y) })
@@ -393,6 +430,19 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       if (fingers.current.size < 2) gesture.current = null
       return
     }
+    if (grab.current?.id === e.pointerId) {
+      const g = grab.current
+      grab.current = null
+      if (g.moving && g.moved) {
+        // Where they were put is kept; a move that will not keep is put back by reading again.
+        for (const m of marks.filter((x) => picked.includes(x.id))) setMarkGeometry(m.id, m.geometry).catch((err) => { complain(message(err)); load() })
+      } else if (marquee) {
+        const r = marquee
+        setPicked(here.filter((m) => { const b = boxOf(m); return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y }).map((m) => m.id))
+      }
+      setMarquee(null)
+      return
+    }
     if (boxFrom.current?.id === e.pointerId) {
       const f = boxFrom.current, b = box
       boxFrom.current = null
@@ -423,6 +473,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   useEffect(() => () => { if (doubt.current) clearTimeout(doubt.current) }, [])
 
   function cancelled(e: React.PointerEvent) {
+    if (grab.current?.id === e.pointerId) { grab.current = null; setMarquee(null); return }
     if (boxFrom.current?.id === e.pointerId) { boxFrom.current = null; setBox(null); return }
     palms.current.delete(e.pointerId)
     handIds.current.delete(e.pointerId)
@@ -506,6 +557,42 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       if (touches(m, p, 0.02)) erasing.current.add(m.id)
     }
     if (erasing.current.size) setMarks((all) => all.filter((m) => !erasing.current.has(m.id)))
+  }
+
+  /** The topmost mark under a point: the last drawn is the one on top. */
+  function markAt(p: { x: number; y: number }): PadMark | null {
+    const reach = Math.max(0.008, 12 / viewRef.current.scale)
+    for (let i = here.length - 1; i >= 0; i--) {
+      const m = here[i]
+      if (m.kind === 'text') { const b = boxOf(m); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return m }
+      else if (touches(m, p, reach + (m.style?.width ?? 0) / 2)) return m
+    }
+    return null
+  }
+
+  /** Another colour or width for everything picked. */
+  function restyle(change: { colour?: string; width?: number }) {
+    const next = new Map<string, PadMark['style']>()
+    for (const m of marks) {
+      if (!picked.includes(m.id)) continue
+      // A highlighter stays a highlighter: it takes a colour but not a pen's width.
+      if (change.width != null && m.kind !== 'ink') continue
+      next.set(m.id, { ...m.style, ...change })
+    }
+    setMarks((all) => all.map((m) => (next.has(m.id) ? { ...m, style: next.get(m.id)! } : m)))
+    for (const [id, style] of next) setMarkStyle(id, style).catch((err) => { complain(message(err)); load() })
+  }
+
+  async function removePicked() {
+    const ids = picked
+    if (!ids.length) return
+    const gone = marks.filter((m) => ids.includes(m.id))
+    setPicked([])
+    setMarks((all) => all.filter((m) => !ids.includes(m.id)))
+    setMine((m) => m.filter((x) => !ids.includes(x)))
+    // Redo puts them back, as it does for anything undone.
+    setUndone((u) => [...u, ...gone])
+    try { await removeMarks(ids) } catch (e) { complain(message(e)); load() }
   }
 
   async function placeText(p: { x: number; y: number; w: number; h?: number }) {
@@ -624,6 +711,13 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const texts = here.filter((m) => m.kind === 'text')
 
   const nib = tool === 'highlight' ? highlight : colour
+  const chosen = here.filter((m) => picked.includes(m.id))
+  const pickedKinds = { ink: chosen.some((m) => m.kind === 'ink'), onlyHighlight: chosen.length > 0 && chosen.every((m) => m.kind === 'highlight') }
+  /** One box round everything picked, a little clear of it. */
+  const pickedBox = chosen.length ? chosen.map(boxOf).reduce((a, b) => {
+    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
+    return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
+  }) : null
   const inky = tool === 'pen' || tool === 'pencil'
   return (
     <div className="padview"
@@ -635,7 +729,13 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           few samples in — which looks exactly like a pen that does not work. */}
       <div className="padview-frame" ref={frame} onWheel={wheel}
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
-        onPointerCancel={cancelled}>
+        onPointerCancel={cancelled}
+        onContextMenu={(e) => {
+          // A right-click picks what is under it, whatever tool is in hand, and its settings open.
+          e.preventDefault()
+          const hit = markAt(at(e))
+          setPicked(hit ? (picked.includes(hit.id) ? picked : [hit.id]) : [])
+        }}>
         <PadSurface
           marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
           onReady={took} />
@@ -677,7 +777,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
                 <div className="pad-text" role="textbox" aria-multiline="true" aria-label="Text"
                   contentEditable="plaintext-only" suppressContentEditableWarning
                   data-empty={m.body ? undefined : 'Type here'}
-                  style={{ color: m.style.colour ?? undefined }}
+                  style={{ color: m.style.colour ?? undefined, fontSize: (m.style.size ?? TEXT_SIZE) * TEXT_UNIT }}
                   ref={(el) => { if (el && editing === m.id && document.activeElement !== el) el.focus() }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onFocus={() => setEditing(m.id)}
@@ -691,14 +791,60 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
                   }}>{m.body ?? ''}</div>
                 <span className="pad-textgrip e" title="Drag to change where the text wraps" {...grip('e')} />
                 <span className="pad-textgrip se" title="Drag to resize" {...grip('se')} />
+                {/* Type size: dragged up for larger, down for smaller. */}
+                <span className="pad-textgrip size" title="Drag up or down to change the text size"
+                  onPointerDown={(e) => {
+                    e.stopPropagation(); e.preventDefault()
+                    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                    typeSize.current = { id: m.id, y: e.clientY, size: m.style.size ?? TEXT_SIZE }
+                  }}
+                  onPointerMove={(e) => {
+                    const t = typeSize.current
+                    if (!t || t.id !== m.id) return
+                    const size = Math.min(0.16, Math.max(0.012, t.size + (t.y - e.clientY) / viewRef.current.scale * 0.5))
+                    setMarks((all) => all.map((x) => (x.id === m.id ? { ...x, style: { ...x.style, size } } : x)))
+                  }}
+                  onPointerUp={() => {
+                    if (typeSize.current?.id !== m.id) return
+                    typeSize.current = null
+                    setMarkStyle(m.id, m.style).catch((err) => complain(message(err)))
+                  }}>A</span>
               </div>
             )
           })}
+          {pickedBox && (
+            <div className="pad-picked" style={{ left: pickedBox.x * TEXT_UNIT, top: pickedBox.y * TEXT_UNIT, width: pickedBox.w * TEXT_UNIT, height: pickedBox.h * TEXT_UNIT }} />
+          )}
+          {marquee && (
+            <div className="pad-textdraft" style={{ left: marquee.x * TEXT_UNIT, top: marquee.y * TEXT_UNIT, width: marquee.w * TEXT_UNIT, height: marquee.h * TEXT_UNIT }} />
+          )}
           {box && box.w > 0.01 && (
             <div className="pad-textdraft" style={{ left: box.x * TEXT_UNIT, top: box.y * TEXT_UNIT, width: box.w * TEXT_UNIT, height: box.h * TEXT_UNIT }} />
           )}
         </div>
       </div>
+
+      {picked.length > 0 && (
+        <div className="padsel" role="toolbar" aria-label="What is selected" onPointerDown={(e) => e.stopPropagation()}>
+          <span className="padsel-count">{picked.length} selected</span>
+          {(pickedKinds.onlyHighlight ? HIGHLIGHTS : PAD_COLOURS).map((c) => (
+            <button key={c} className="pad-swatch" style={{ background: c }} aria-label={`Colour ${c}`} onClick={() => restyle({ colour: c })} />
+          ))}
+          {pickedKinds.ink && (
+            <>
+              <span className="padbar-split" />
+              {(['fine', 'medium', 'broad'] as Width[]).map((w) => (
+                <button key={w} className="pad-nib" aria-label={`${w} line`} onClick={() => restyle({ width: WIDTHS[w] })}>
+                  <span style={{ height: `${WIDTHS[w] * 1100}px`, background: 'var(--ink)' }} />
+                </button>
+              ))}
+            </>
+          )}
+          <span className="padbar-split" />
+          <button className="padbar-key" aria-label="Delete what is selected" title="Delete" onClick={() => void removePicked()}>{icon.erase}</button>
+          <button className="padbar-key" aria-label="Done" title="Done" onClick={() => setPicked([])}>{icon.close}</button>
+        </div>
+      )}
 
       {trouble && (
         <div className="pad-trouble" role="alert">
@@ -721,7 +867,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
             {icon.close}
           </button>
           <span className="padbar-split" />
-          {(['pen', 'pencil', 'highlight', 'text', 'erase'] as Tool[]).map((t) => (
+          {(['pen', 'pencil', 'highlight', 'text', 'erase', 'select'] as Tool[]).map((t) => (
             <button key={t} className={`padbar-key${tool === t ? ' on' : ''}`}
               aria-pressed={tool === t} aria-label={LABEL[t]} title={LABEL[t]}
               onClick={() => { setTool(t); setMenu(null); goingAway() }}>
@@ -811,7 +957,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 }
 
 const LABEL: Record<Tool, string> = {
-  pen: 'Pen', pencil: 'Pencil', highlight: 'Highlighter', text: 'Type', erase: 'Erase',
+  pen: 'Pen', pencil: 'Pencil', highlight: 'Highlighter', text: 'Type', erase: 'Erase', select: 'Select',
 }
 
 
@@ -832,6 +978,7 @@ const icon = {
   pencil: stroked(<><path d="M3 21l1.2-4.6L15 5.6l3.4 3.4L7.6 19.8 3 21Z" /><path d="M13 7.6l3.4 3.4" /><path d="M4.2 16.4l3.4 3.4" /></>),
   highlight: stroked(<><path d="M5 18h5l8.5-8.5a2 2 0 0 0-3-3L7 15v3Z" /><path d="M4 21h9" /></>),
   text: stroked(<><path d="M5 6V4h14v2" /><path d="M12 4v16" /><path d="M9 20h6" /></>),
+  select: stroked(<><path d="M5 3.5 18.5 12l-6 1.4-2.3 5.9L5 3.5Z" /></>),
   erase: stroked(<><path d="M8 20h11" /><path d="M15.5 4.5 20 9l-9 9H6.5L3.5 15l12-10.5Z" /><path d="M9 9l6 6" /></>),
   undo: stroked(<><path d="M4 9h11a5 5 0 0 1 0 10h-5" /><path d="M7.5 5.5 4 9l3.5 3.5" /></>),
   redo: stroked(<><path d="M20 9H9a5 5 0 0 0 0 10h5" /><path d="M16.5 5.5 20 9l-3.5 3.5" /></>),
@@ -842,6 +989,22 @@ const icon = {
 }
 
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n))
+
+/** The box a mark sits in, in page units, with a little air round a stroke. */
+function boxOf(m: PadMark): { x: number; y: number; w: number; h: number } {
+  const g = m.geometry as { points?: InkPoint[]; x?: number; y?: number; w?: number; h?: number }
+  if (!g.points) return { x: g.x ?? 0, y: g.y ?? 0, w: g.w ?? 0.2, h: Math.max(g.h ?? 0, 0.05) }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const p of g.points) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1] }
+  const air = 0.008 + (m.style?.width ?? 0) / 2
+  return { x: x0 - air, y: y0 - air, w: x1 - x0 + 2 * air, h: y1 - y0 + 2 * air }
+}
+
+/** A mark's geometry, moved. */
+function shifted(g: PadMark['geometry'], dx: number, dy: number): PadMark['geometry'] {
+  if ('points' in g) return { points: g.points.map((p) => (p.length > 2 ? [p[0] + dx, p[1] + dy, p[2] as number] : [p[0] + dx, p[1] + dy]) as InkPoint) }
+  return { ...g, x: g.x + dx, y: g.y + dy }
+}
 
 function capture(e: React.PointerEvent): void {
   try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
@@ -941,7 +1104,8 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
       {marks.filter((m) => m.kind === 'text').map((m) => {
         const g = m.geometry as { x: number; y: number; w: number }
         // Wrapped at the box's width, near enough: the still is a thumbnail, not the page.
-        const fit = Math.max(4, Math.floor(g.w / (0.026 * 0.5)))
+        const fs = (m.style.size ?? TEXT_SIZE) * 0.87
+        const fit = Math.max(4, Math.floor(g.w / (fs * 0.5)))
         const lines: string[] = []
         for (const para of (m.body ?? '').split('\n')) {
           let line = ''
@@ -951,8 +1115,8 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
           lines.push(line)
         }
         return (
-          <text key={m.id} x={g.x} y={g.y + 0.028} fontSize={0.026} fill={m.style.colour ?? '#2b2d2c'}>
-            {lines.slice(0, 40).map((l, i) => <tspan key={i} x={g.x + 0.006} dy={i ? 0.034 : 0}>{l}</tspan>)}
+          <text key={m.id} x={g.x} y={g.y + fs * 1.08} fontSize={fs} fill={m.style.colour ?? '#2b2d2c'}>
+            {lines.slice(0, 40).map((l, i) => <tspan key={i} x={g.x + 0.006} dy={i ? fs * 1.3 : 0}>{l}</tspan>)}
           </text>
         )
       })}

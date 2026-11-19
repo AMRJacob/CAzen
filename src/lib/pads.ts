@@ -43,7 +43,8 @@ export interface PadMark {
   kind: MarkKind
   geometry: MarkGeometry
   /** `nib` says whether a stroke is ink or graphite; they are drawn differently. */
-  style: { colour?: string; width?: number; nib?: 'pencil' }
+  /** `size` is a text box's type size, in page units like everything else on the pad. */
+  style: { colour?: string; width?: number; nib?: 'pencil'; size?: number }
   body: string | null
   created_by: string | null
   created_at: string
@@ -131,6 +132,12 @@ export async function setMarkBody(id: string, body: string): Promise<void> {
 /** A text box made wider, narrower or taller: where it wraps is part of what was written. */
 export async function setMarkGeometry(id: string, geometry: MarkGeometry): Promise<void> {
   const { error } = await db().from('pad_marks').update({ geometry }).eq('id', id)
+  if (error) throw error
+}
+
+/** A stroke or a text box given another colour or width after the fact. */
+export async function setMarkStyle(id: string, style: PadMark['style']): Promise<void> {
+  const { error } = await db().from('pad_marks').update({ style }).eq('id', id)
   if (error) throw error
 }
 
