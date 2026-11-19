@@ -1509,62 +1509,17 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 }
 
 /* ---------- Notes pads ---------- */
-/* The pad takes the whole screen. A pad you are half looking at is a pad you stop using. */
-.padview {
-  position: fixed; inset: 0; z-index: 70;
-  display: flex; flex-direction: column;
-  background: var(--paper);
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.padview-head {
-  display: flex; gap: 14px; align-items: center;
-  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
-}
-.padview-back {
-  display: inline-flex; align-items: center; gap: 5px;
-  font: inherit; font-size: 14px; padding: 5px 10px 5px 6px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-  color: var(--ink); cursor: pointer;
-}
-.padview-back:hover { background: var(--wash); }
-.padview-title { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
-.padview-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.padview-saved { margin-left: auto; }
+/* The pad IS the screen: edge to edge, nothing above it, nothing beside it. Everything else
+   floats over it and gets out of the way. */
+.padview { position: fixed; inset: 0; z-index: 70; background: var(--wash); }
 
-.padview-tools {
-  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
-  padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
-}
-.padview-tools-end { margin-left: auto; gap: 14px; }
-.padview-paper {
-  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
-  padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--wash);
-}
-.pad-tool-group { display: flex; gap: 6px; align-items: center; }
-.pad-tool-group > button {
-  font: inherit; font-size: 13px; padding: 5px 11px;
-  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
-  border-radius: 7px; cursor: pointer;
-}
-.pad-tool-group > button.on { background: var(--moss-soft); color: var(--ink); border-color: var(--moss); font-weight: 500; }
-.pad-tool-group > button.link { border: none; background: none; padding: 5px 4px; }
-.pad-tool-group > button.link.on { color: var(--ink); background: none; }
-.pad-swatch { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; }
-.pad-swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink); }
-.pad-nib { width: 28px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
-.pad-nib.on { border-color: var(--moss); background: var(--moss-soft); }
-.pad-nib span { display: block; width: 16px; border-radius: 2px; }
-
-/* The writing surface. The pen writes here and fingers move the page, so the browser is told
-   to keep its own gestures off it entirely. */
 .padview-frame {
-  flex: 1; position: relative; overflow: hidden; background: var(--wash);
+  position: absolute; inset: 0; overflow: hidden;
   touch-action: none; overscroll-behavior: none; cursor: crosshair;
 }
 .pad-surface {
   position: absolute; top: 0; left: 0; transform-origin: 0 0;
-  background: #fffdf8; box-shadow: 0 2px 10px rgba(43, 45, 44, 0.18); border-radius: 2px;
+  background: #fffdf8; box-shadow: 0 2px 14px rgba(43, 45, 44, 0.2); border-radius: 2px;
 }
 .pad-ink { display: block; width: 100%; height: 100%; }
 .pad-rules line { stroke: #dfe7ee; stroke-width: 0.0008; }
@@ -1580,11 +1535,72 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pad-text:hover { border-color: var(--line); }
 .pad-text:focus { border-color: var(--faint); border-style: solid; background: rgba(255, 255, 255, 0.85); outline: none; }
 
-.padview-foot {
-  display: flex; gap: 10px; align-items: center;
-  padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel);
+/* ---------- The pad's menu ----------
+   The same mark the main menu is, in the same corner, growing the same way: closed it is a
+   52px ring with the ensō in it, open it is the border around the tools. */
+.padmenu {
+  position: fixed; z-index: 72;
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  width: 52px; height: 52px;
+  display: flex; align-items: flex-start;
+  border: 2px solid var(--ink); border-radius: 26px;
+  background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.2);
+  overflow: hidden;
+  transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1),
+              height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1),
+              border-radius 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
-.padview-zoom { margin-left: auto; }
+@supports (height: 100dvh) {
+  .padmenu { bottom: auto; top: calc(100dvh - 62px - env(safe-area-inset-bottom)); }
+}
+.padmenu.open {
+  width: min(520px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  height: auto; max-height: 72dvh;
+  border-radius: 18px;
+}
+@supports (height: 100dvh) {
+  .padmenu.open { top: auto; bottom: calc(10px + env(safe-area-inset-bottom)); }
+}
+.padmenu-mark {
+  flex: 0 0 48px; width: 48px; height: 48px; padding: 0;
+  display: grid; place-items: center;
+  border: none; background: none; color: var(--ink); cursor: pointer;
+  transition: opacity 0.2s, width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.padmenu.open .padmenu-mark { width: 0; flex-basis: 0; opacity: 0; pointer-events: none; }
+
+.padmenu-sheet {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 0; width: 0; opacity: 0; overflow: hidden auto;
+  transition: opacity 0.2s 0.06s;
+}
+.padmenu.open .padmenu-sheet { width: 100%; padding: 14px 16px 16px; opacity: 1; }
+.padmenu-top { display: flex; gap: 12px; align-items: baseline; }
+.padmenu-title { display: flex; flex-direction: column; min-width: 0; }
+.padmenu-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.padmenu-close {
+  margin-left: auto; font: inherit; font-size: 13px; padding: 5px 11px; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  color: var(--ink); cursor: pointer;
+}
+.padmenu-close:hover { background: var(--wash); }
+.padmenu-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.padmenu-row > button {
+  font: inherit; font-size: 13px; padding: 6px 12px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: 8px; cursor: pointer;
+}
+.padmenu-row > button.on { background: var(--moss-soft); color: var(--ink); border-color: var(--moss); font-weight: 500; }
+.padmenu-row > button.link { border: none; background: none; padding: 6px 4px; }
+.padmenu-row > button.icon { padding: 4px 10px; }
+.pad-swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; }
+.pad-swatch.on { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink); }
+.pad-nib { width: 30px; height: 26px; padding: 0; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; border-radius: 7px; cursor: pointer; }
+.pad-nib.on { border-color: var(--moss); background: var(--moss-soft); }
+.pad-nib span { display: block; width: 18px; border-radius: 2px; }
+.padmenu-hand { margin-top: 2px; }
+.padmenu-note { margin: 0; line-height: 1.45; }
 
 /* ---------- Pads in the list ---------- */
 /* Shown as the first page of what is on them. Most pads never get titled, and a glance at

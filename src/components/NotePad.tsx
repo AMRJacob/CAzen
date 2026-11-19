@@ -7,16 +7,23 @@ import {
 import { inkRuns, samplesFrom, type InkPoint } from '../lib/ink'
 import { message } from '../lib/errors'
 import { usDate } from '../lib/dates'
+import { Mark } from './Logo'
 
 /**
- * A pad you write on. It takes the whole screen, because handwriting at thumbnail size is not
- * handwriting, and because a pad you are half looking at is a pad you stop using.
+ * A pad you write on, edge to edge.
  *
- * The hand rule is the thing that makes it usable on a tablet: **the pen writes and fingers
- * never do.** One finger drags the page about, two pinch it; neither leaves a mark, so you can
- * rest a hand on the glass, shove the page up to reach the bottom of it, and write — without
- * ever reaching for a mode switch. Drawing with a finger is there for anyone without a stylus,
- * and it is a deliberate choice.
+ * The hand rule: **the pen writes, a finger moves the page, and a palm does neither.** One
+ * finger drags, two pinch, and a pen landing cancels whatever the fingers were doing so a
+ * resting hand cannot pull the page out from under the nib.
+ *
+ * A palm is told from a finger by how much of it is on the glass. A stylus tip reports a
+ * contact a pixel or two across, a fingertip twenty or thirty, and the side of a hand a great
+ * deal more — so a wide contact is ignored outright rather than being allowed to pan. Contacts
+ * that arrive while the pen is writing are ignored too, whatever their size.
+ *
+ * If the device has never reported a pen at all, a finger draws, because a phone with no
+ * stylus still has to be usable. The first time a pen does touch the glass the pad switches to
+ * pen-only and says so.
  *
  * Everything is kept in fractions of the page's width, so a stroke drawn on a phone is the
  * same stroke on a laptop, at any zoom, and the page's proportions hold.
@@ -53,14 +60,19 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [colour, setColour] = useState<string>(PAD_COLOURS[0])
   const [highlight, setHighlight] = useState<string>(HIGHLIGHTS[0])
   const [width, setWidth] = useState<Width>('medium')
-  const [fingerDraws, setFingerDraws] = useState(false)
+  /**
+   * Whether a finger leaves a mark. False once a pen has ever touched this device, true until
+   * then — a phone with no stylus still has to be usable.
+   */
+  const [fingerDraws, setFingerDraws] = useState(() => !penSeen())
+  /** What the pad made of the last thing that touched it, so it can be asked. */
+  const [lastTouch, setLastTouch] = useState<'pen' | 'finger' | 'palm' | 'mouse' | null>(null)
   const [wet, setWet] = useState<InkPoint[] | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [mine, setMine] = useState<string[]>([])
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 })
-  /** The scale at which the page fits, so the readout can call that 100%. */
-  const [fitted, setFitted] = useState(1)
-  const [paper, setPaper] = useState(false)
+  /** The menu over the pad. Shut by default: the pad is what you came for. */
+  const [menu, setMenu] = useState(false)
 
   const frame = useRef<HTMLDivElement | null>(null)
   const surface = useRef<HTMLDivElement | null>(null)
@@ -69,6 +81,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   /** The fingers currently on the glass, by pointer id — how pinch and pan are worked out. */
   const fingers = useRef<Map<number, { x: number; y: number }>>(new Map())
   const gesture = useRef<{ dist: number; mid: { x: number; y: number }; view: View } | null>(null)
+  /** When the pen last did anything. Contacts just after it are hand, not intent. */
+  const penAt = useRef(0)
+  /** Contacts judged to be a palm, so their later moves are ignored without re-judging. */
+  const palms = useRef<Set<number>>(new Set())
 
   // ---- what is on the pad ----------------------------------------------------------------
 
@@ -103,31 +119,56 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     return { x: (e.clientX - box.left) / box.width, y: (e.clientY - box.top) / box.width }
   }
 
-  /** True when this pointer is one that writes rather than one that moves the page. */
-  const writes = (e: React.PointerEvent): boolean =>
-    e.pointerType === 'pen' || e.pointerType === 'mouse' || (e.pointerType === 'touch' && fingerDraws)
+  /**
+   * What just touched the glass.
+   *
+   * Size is the honest signal: a stylus tip is a pixel or two across, a fingertip twenty or
+   * thirty, the side of a hand far more. A contact arriving while the pen is writing is hand
+   * whatever its size, because the pen is what the person is doing.
+   */
+  function readTouch(e: React.PointerEvent): 'pen' | 'finger' | 'palm' | 'mouse' {
+    if (e.pointerType === 'pen') return 'pen'
+    if (e.pointerType !== 'touch') return 'mouse'
+    if (Date.now() - penAt.current < 1200) return 'palm'
+    const across = Math.max(e.width || 0, e.height || 0)
+    return across > PALM_ACROSS ? 'palm' : 'finger'
+  }
 
   function down(e: React.PointerEvent) {
-    if (!writes(e)) {
+    const touch = readTouch(e)
+    setLastTouch(touch)
+
+    if (touch === 'pen') {
+      penAt.current = Date.now()
+      // The first pen on this device settles the question of what fingers are for.
+      if (!penSeen()) { rememberPen(); setFingerDraws(false) }
+      // A pen landing cancels whatever the fingers were doing, so a resting hand cannot drag
+      // the page out from under the nib.
+      fingers.current.clear()
+      gesture.current = null
+    }
+
+    if (touch === 'palm') { palms.current.add(e.pointerId); return }
+
+    const draws = touch === 'pen' || touch === 'mouse' || fingerDraws
+    if (!draws) {
       // A finger. It moves the page; it never leaves a mark.
       fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
       gesture.current = null
-      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
+      capture(e)
       return
     }
-    // A pen landing cancels whatever the fingers were doing, so a resting hand cannot drag the
-    // page out from under the nib.
-    fingers.current.clear()
-    gesture.current = null
 
     if (tool === 'text') { void placeText(at(e)); return }
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
+    capture(e)
     drawing.current = e.pointerId
     if (tool === 'erase') { erasing.current = new Set(); rub(e); return }
     setWet(samplesFrom(e.nativeEvent as PointerEvent, at))
   }
 
   function move(e: React.PointerEvent) {
+    if (palms.current.has(e.pointerId)) return
+    if (e.pointerType === 'pen') penAt.current = Date.now()
     if (fingers.current.has(e.pointerId)) { moveFingers(e); return }
     if (drawing.current !== e.pointerId) return
     if (tool === 'erase') { rub(e); return }
@@ -169,6 +210,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   }
 
   function up(e: React.PointerEvent) {
+    palms.current.delete(e.pointerId)
+    if (e.pointerType === 'pen') penAt.current = Date.now()
     if (fingers.current.delete(e.pointerId)) {
       if (fingers.current.size < 2) gesture.current = null
       return
@@ -257,8 +300,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     const wide = box.width / BASE
     const tall = (box.height - 16) / (BASE * PAGE_H)
     const scale = clamp(Math.min(wide, tall), 0.4, 8)
-    setFitted(scale)
-    setView({ scale, x: (box.width - BASE * scale) / 2, y: 8 })
+    setView({ scale, x: (box.width - BASE * scale) / 2, y: (box.height - BASE * PAGE_H * scale) / 2 })
   }, [])
 
   useEffect(() => { fit() }, [fit])
@@ -295,78 +337,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   return (
     <div className="padview">
-      <header className="padview-head">
-        <button className="padview-back" onClick={onClose} aria-label="Back to Field notes">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 5l-7 7 7 7" />
-          </svg>
-          Field notes
-        </button>
-        <span className="padview-title">
-          <strong>{pad.title || 'Untitled'}</strong>
-          <span className="muted small">{usDate(pad.noted_on)}</span>
-        </span>
-        <span className="padview-saved muted small">Saved as you write</span>
-      </header>
-
-      <div className="padview-tools">
-        <div className="pad-tool-group">
-          {(['pen', 'highlight', 'text', 'erase'] as Tool[]).map((t) => (
-            <button key={t} className={tool === t ? 'on' : ''} onClick={() => setTool(t)}
-              aria-pressed={tool === t}>
-              {t === 'pen' ? 'Pen' : t === 'highlight' ? 'Highlighter' : t === 'text' ? 'Type' : 'Erase'}
-            </button>
-          ))}
-        </div>
-
-        {(tool === 'pen' || tool === 'highlight') && (
-          <div className="pad-tool-group">
-            {(tool === 'pen' ? PAD_COLOURS : HIGHLIGHTS).map((c) => (
-              <button key={c} className={`pad-swatch${nib === c ? ' on' : ''}`} style={{ background: c }}
-                onClick={() => (tool === 'pen' ? setColour(c) : setHighlight(c))}
-                aria-label={`${tool === 'pen' ? 'Ink' : 'Highlighter'} ${c}`} />
-            ))}
-          </div>
-        )}
-        {tool === 'pen' && (
-          <div className="pad-tool-group">
-            {(['fine', 'medium', 'broad'] as Width[]).map((w) => (
-              <button key={w} className={`pad-nib${width === w ? ' on' : ''}`} onClick={() => setWidth(w)}
-                aria-label={w}>
-                <span style={{ height: `${WIDTHS[w] * 1100}px`, background: colour }} />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="pad-tool-group padview-tools-end">
-          <button className="link" onClick={() => void undo()} disabled={!mine.length}>Undo</button>
-          <button className={`link${paper ? ' on' : ''}`} onClick={() => setPaper(!paper)}>Paper</button>
-          <button className="link" onClick={fit}>Fit</button>
-        </div>
-      </div>
-
-      {paper && (
-        <div className="padview-paper">
-          <div className="pad-tool-group">
-            {RULES.map((r) => (
-              <button key={r.rule} className={pad.rule === r.rule ? 'on' : ''}
-                onClick={() => void setRule(r.rule)}>{r.label}</button>
-            ))}
-          </div>
-          <label className="check small">
-            <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
-            Draw with a finger
-          </label>
-          <span className="muted small">
-            {fingerDraws
-              ? 'A finger draws. Two fingers still pinch to zoom.'
-              : 'The pen draws. One finger moves the page, two pinch to zoom.'}
-          </span>
-        </div>
-      )}
-
+      {/* The pad is the screen. Everything else floats over it and gets out of the way. */}
       <div className="padview-frame" ref={frame} onWheel={wheel}
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onPointerCancel={up} onPointerLeave={up}>
@@ -412,19 +383,109 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         </div>
       </div>
 
-      <footer className="padview-foot">
-        <button className="icon" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">‹</button>
-        <span className="muted small nowrap">Page {page} of {pad.pages}</span>
-        <button className="icon" disabled={page >= pad.pages} onClick={() => setPage(page + 1)} aria-label="Next page">›</button>
-        <button className="link" onClick={() => void addPage()}>Add a page</button>
-        <span className="muted small nowrap padview-zoom">{Math.round((view.scale / fitted) * 100)}%</span>
-      </footer>
+      {/* The same mark the main menu is, in the same corner, doing the same thing. */}
+      <div className={`padmenu${menu ? ' open' : ''}`}>
+        <button className="padmenu-mark" aria-expanded={menu}
+          aria-label={menu ? 'Hide the pad’s menu' : 'Show the pad’s menu'}
+          onClick={() => setMenu(!menu)}>
+          <Mark size={30} />
+        </button>
+
+        <div className="padmenu-sheet" {...(menu ? {} : { inert: '' as unknown as boolean })}>
+          <div className="padmenu-top">
+            <span className="padmenu-title">
+              <strong>{pad.title || 'Untitled'}</strong>
+              <span className="muted small">{usDate(pad.noted_on)} · page {page} of {pad.pages}</span>
+            </span>
+            <button className="padmenu-close" onClick={onClose}>Close the pad</button>
+          </div>
+
+          <div className="padmenu-row">
+            {(['pen', 'highlight', 'text', 'erase'] as Tool[]).map((t) => (
+              <button key={t} className={tool === t ? 'on' : ''} onClick={() => setTool(t)}
+                aria-pressed={tool === t}>
+                {t === 'pen' ? 'Pen' : t === 'highlight' ? 'Highlighter' : t === 'text' ? 'Type' : 'Erase'}
+              </button>
+            ))}
+          </div>
+
+          {(tool === 'pen' || tool === 'highlight') && (
+            <div className="padmenu-row">
+              {(tool === 'pen' ? PAD_COLOURS : HIGHLIGHTS).map((c) => (
+                <button key={c} className={`pad-swatch${nib === c ? ' on' : ''}`} style={{ background: c }}
+                  onClick={() => (tool === 'pen' ? setColour(c) : setHighlight(c))}
+                  aria-label={`${tool === 'pen' ? 'Ink' : 'Highlighter'} ${c}`} />
+              ))}
+              {tool === 'pen' && (['fine', 'medium', 'broad'] as Width[]).map((w) => (
+                <button key={w} className={`pad-nib${width === w ? ' on' : ''}`} onClick={() => setWidth(w)}
+                  aria-label={w}>
+                  <span style={{ height: `${WIDTHS[w] * 1100}px`, background: colour }} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="padmenu-row">
+            {RULES.map((r) => (
+              <button key={r.rule} className={pad.rule === r.rule ? 'on' : ''}
+                onClick={() => void setRule(r.rule)}>{r.label}</button>
+            ))}
+          </div>
+
+          <div className="padmenu-row">
+            <button className="icon" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">‹</button>
+            <span className="muted small nowrap">Page {page} of {pad.pages}</span>
+            <button className="icon" disabled={page >= pad.pages} onClick={() => setPage(page + 1)} aria-label="Next page">›</button>
+            <button className="link" onClick={() => void addPage()}>Add a page</button>
+            <button className="link" onClick={() => void undo()} disabled={!mine.length}>Undo</button>
+            <button className="link" onClick={fit}>Fit the page</button>
+          </div>
+
+          <label className="check small padmenu-hand">
+            <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
+            Draw with a finger
+          </label>
+          <p className="muted small padmenu-note">
+            {fingerDraws
+              ? 'A finger draws. Two fingers pinch to zoom, and a palm is ignored.'
+              : 'The pen draws. One finger moves the page, two pinch to zoom, and a palm is ignored.'}
+            {lastTouch && <> The last thing to touch the pad was read as a <strong>{lastTouch}</strong>.</>}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
 
 /** The page's own width in layout pixels. Everything else is a scale on top of it. */
 const BASE = 850
+
+/**
+ * How wide a contact has to be, in CSS pixels, before it is taken for a hand rather than a
+ * fingertip. A stylus reports a pixel or two, a fingertip twenty or thirty, the side of a hand
+ * far more — so this sits well above a thumb and well below a wrist.
+ */
+const PALM_ACROSS = 45
+
+/**
+ * Whether a pen has ever touched this device.
+ *
+ * Remembered rather than asked, because the answer decides whether a finger draws, and nobody
+ * should have to set that twice. Storage can refuse — a private window, a locked-down browser
+ * — and the pad works either way; it only means the question is asked again next time.
+ */
+const PEN_KEY = 'cazen.pen.seen'
+function penSeen(): boolean {
+  try { return localStorage.getItem(PEN_KEY) === 'yes' } catch { return false }
+}
+function rememberPen(): void {
+  try { localStorage.setItem(PEN_KEY, 'yes') } catch { /* it will be asked again */ }
+}
+
+/** Pointer capture, which some browsers refuse; a refused capture loses nothing but precision. */
+function capture(e: React.PointerEvent): void {
+  try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
+}
 
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n))
 
