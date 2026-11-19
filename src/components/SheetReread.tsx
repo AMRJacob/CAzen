@@ -15,7 +15,8 @@ import { niceTitle } from '../lib/titles'
  * An upload that went in with the wrong title block template — or before there was one — leaves
  * sheets with titles and dates that are wrong or missing. This opens each chosen sheet's own
  * file, reads its title block with the templates as they are now, and shows what it found
- * beside what is on record. Nothing changes until it is applied, and only the rows ticked.
+ * beside what is on record. Nothing changes until it is applied. The sheets were chosen on the list; here the choice is
+ * what to read them with.
  * The sheet number is shown but never changed from here: it is what everything else hangs on.
  */
 
@@ -75,15 +76,13 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
   const now = useRef<{ list: TitleblockTemplate[]; pick: string }>({ list: [], pick: '' })
   const [opened, setOpened] = useState(0)
 
-  const readingOf = (sheet: CurrentSheet, text: PageText, list: TitleblockTemplate[], pick: string): Partial<Row> => {
+  const readingOf = (_sheet: CurrentSheet, text: PageText, list: TitleblockTemplate[], pick: string): Partial<Row> => {
     const one = pick ? list.find((t) => t.id === pick) : undefined
     const r = one ? readWith(text, one) : readPage(text, list)
     const title = niceTitle(r.title) ?? ''
-    // The sheets were chosen once already, on the list; they are not asked for again here.
-    // Every sheet something was read from is ticked, changed or not. The one exception is a title
-    // block that read as a different sheet's number: that is the wrong box, or the wrong
-    // sheet, and putting its title on this one is the mistake this exists to undo.
-    return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: (!!title || !!r.date) && (!r.number || same(r.number, sheet.number)) }
+    // The sheets were chosen on the list and are not chosen again here: every one something
+    // was read from is changed. This window is for deciding what to read them with.
+    return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: !!title || !!r.date }
   }
   /** Read everything already opened again, leaving alone what was corrected by hand. */
   const again = (list: TitleblockTemplate[], pick: string) => { now.current = { list, pick }; setRows((all) => all.map((r) => {
@@ -163,7 +162,7 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
           <button className="link" onClick={() => onDone(0)}>Close</button>
         </div>
         <p className="muted small">
-          Each sheet’s title block is read again with the title block templates as they are now. Tick what should replace what is on record; the read values can be corrected first. Sheet numbers are not changed here.
+          Each sheet’s title block is read again with the title block templates as they are now. Choose or make the template to read them with; what was read replaces what is on record for every sheet listed, and can be corrected here first. Sheet numbers are not changed here.
           {left > 0 && <strong> Reading {rows.length - left + 1} of {rows.length}…</strong>}
         </p>
         <div className="inline-form reread-with">
@@ -198,13 +197,12 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
         </div>
         <div className="reread-table">
           <table>
-            <thead><tr><th /><th>Sheet</th><th>Title on record</th><th>Title read</th><th>Date on record</th><th>Date read</th></tr></thead>
+            <thead><tr><th>Sheet</th><th>Title on record</th><th>Title read</th><th>Date on record</th><th>Date read</th></tr></thead>
             <tbody>
               {rows.map((r) => {
                 const odd = r.state === 'read' && !!r.number && !same(r.number, r.sheet.number)
                 return (
                   <tr key={r.sheet.sheet_id} className={r.apply ? '' : 'reread-off'}>
-                    <td><input type="checkbox" checked={r.apply} disabled={r.state !== 'read'} aria-label={`Apply to ${r.sheet.number}`} onChange={(e) => patch(r.sheet.sheet_id, { apply: e.target.checked })} /></td>
                     <td className="mono">{r.sheet.number}
                       {odd && <div className="reread-warn" title="The title block read a different sheet number, so the wrong box may have been read">read as {r.number}</div>}
                       {r.unsure && !odd && <div className="reread-warn" title="Two templates fit this sheet about equally">check</div>}
@@ -224,16 +222,16 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
         {error && <div className="notice error">{error}</div>}
         <div className="actions">
           <button className="primary" disabled={busy || left > 0 || !picked.length} onClick={() => void apply()}>
-            {busy ? 'Changing…' : picked.length ? `Change ${picked.length} ${picked.length === 1 ? 'sheet' : 'sheets'}` : 'Nothing ticked'}
+            {busy ? 'Changing…' : picked.length ? `Change ${picked.length} ${picked.length === 1 ? 'sheet' : 'sheets'}` : 'Nothing read yet'}
           </button>
           <button className="link" onClick={() => onDone(0)}>Cancel</button>
           {(() => {
-            const odd = rows.filter((r) => r.state === 'read' && !r.apply && !!r.number && !same(r.number, r.sheet.number)).length
-            const blank = rows.filter((r) => r.state === 'read' && !r.title && !r.date).length
+            const odd = rows.filter((r) => r.state === 'read' && r.apply && !!r.number && !same(r.number, r.sheet.number)).length
+            const blank = rows.filter((r) => r.state === 'read' && !r.apply).length
             return (odd > 0 || blank > 0) && left === 0 && (
               <span className="muted small">
-                {[odd > 0 && `${odd} left unticked: the title block read as a different sheet number`,
-                  blank > 0 && `${blank} with nothing read`].filter(Boolean).join(' · ')}
+                {[odd > 0 && `${odd} read as a different sheet number — the wrong box may have been read`,
+                  blank > 0 && `${blank} with nothing read, left as ${blank === 1 ? 'it is' : 'they are'}`].filter(Boolean).join(' · ')}
               </span>
             )
           })()}

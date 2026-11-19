@@ -1,4 +1,4 @@
-import { db } from './supabase'
+import { db, whoAmI } from './supabase'
 import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
 import { queue, unsentIds } from './offline/outbox'
 
@@ -114,8 +114,7 @@ export function buildMarkup(m: {
 
 /** Keep a markup: on this device, and in the queue for the server. */
 export async function saveMarkup(row: Markup): Promise<void> {
-  const { data: u } = await db().auth.getUser().catch(() => ({ data: { user: null } }))
-  const withAuthor = { ...row, created_by: row.created_by ?? u.user?.id ?? null }
+  const withAuthor = { ...row, created_by: row.created_by ?? await whoAmI() }
   await localPut('markups', withAuthor).catch(() => { /* a device that won't keep it can still send it */ })
   await queue(row.project_id, { kind: 'markup.add', row: withAuthor as unknown as Record<string, unknown> })
 }

@@ -11,6 +11,36 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:28 CST
+
+**A markup deleted on the web was still on the phone — and the phone was right** (Jacob,
+15:25). In the database the two ink markups on G001 (Code info / life safety plan), drawn at
+15:07, are still there, and both have **no author** (`created_by` null). The removal rule is
+"only the person who drew it" (`author_drop`: `created_by = auth.uid()`), and null is nobody,
+so the server removed nothing and reported no error. The web app had already taken them off
+its own screen; the phone, reading the server, showed them. Not a syncing delay.
+
+- Why no author: `saveMarkup` asked the server who was signed in (`auth.getUser()`) and filed
+  nobody when that came back empty. Why it came back empty on his desktop is **not known**.
+  The author now comes from the session the device holds (`whoAmI` in `supabase.ts`), for
+  markups, observations and sheet links. Checked with the sign-in service blocked: the markup
+  is sent with its author.
+- A removal the server does not carry out is now noticed: the outbox asks for the removed row
+  back, and if nothing was removed and the markup is still there, the viewer puts it back and
+  says it could not be removed for everyone.
+- **Not applied — migration `0040_markup_authors.sql`**: lets any project member remove a
+  markup that has no author, and gives new markups the sender as author by default. The tool
+  that applies migrations refused it in this session. **Until it is applied the two markups
+  on G001 cannot be removed from the app by anyone.**
+
+**Re-read: the window no longer asks which sheets** (Jacob, 15:26, confirming). The tick
+boxes are gone. Every selected sheet that something was read from is changed; the window is
+for choosing, making, renaming or re-drawing the template, and for correcting a value before
+it goes in. A sheet whose title block read as another sheet's number is still changed, and is
+counted in a line by the button. Sheets with nothing read are left as they are.
+
+---
+
 # Checkpoint — 2026-11-19, 15:22 CST
 
 **Re-read: making a template** (Jacob, 15:19: "still isn't allowing me to apply / create a new

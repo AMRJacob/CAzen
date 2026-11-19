@@ -17,6 +17,9 @@ import { sendFile, type StorageMode } from '../files'
  * quoted by number yet.
  */
 
+/** Sent on the window when the server would not carry out something this device had already shown as done. */
+export const REFUSED_EVENT = 'cazen:refused'
+
 export type Job =
   | { kind: 'markup.add'; row: Record<string, unknown> }
   | { kind: 'markup.edit'; id: string; patch: Record<string, unknown> }
@@ -130,8 +133,15 @@ async function send(raw: AnyJob, projectId = ''): Promise<void> {
     return
   }
   if (job.kind === 'markup.remove') {
-    const { error } = await sb().from('sheet_markups').delete().eq('id', job.id)
+    const { data, error } = await sb().from('sheet_markups').delete().eq('id', job.id).select('id')
     if (error) throw error
+    // The database refuses a removal by saying nothing and removing nothing. If the markup is
+    // still there afterwards it was refused, and the device that thinks it is gone is told —
+    // otherwise it is gone here and present for everybody else, with nothing to say so.
+    if (!data?.length) {
+      const { data: still } = await sb().from('sheet_markups').select('id').eq('id', job.id).maybeSingle()
+      if (still) window.dispatchEvent(new CustomEvent(REFUSED_EVENT, { detail: { table: 'sheet_markups', id: job.id } }))
+    }
     return
   }
   if (job.kind === 'observation.add') {

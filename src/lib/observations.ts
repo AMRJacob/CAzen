@@ -1,4 +1,4 @@
-import { db } from './supabase'
+import { db, whoAmI } from './supabase'
 import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
 import { queue, unsentIds } from './offline/outbox'
 import { today } from './dates'
@@ -168,8 +168,7 @@ export function buildObservation(o: {
 
 /** Keep an observation: on this device, and in the queue for the server. */
 export async function saveObservation(row: Observation): Promise<void> {
-  const { data: u } = await db().auth.getUser().catch(() => ({ data: { user: null } }))
-  const withAuthor = { ...row, created_by: row.created_by ?? u.user?.id ?? null }
+  const withAuthor = { ...row, created_by: row.created_by ?? await whoAmI() }
   await localPut('observations', withAuthor).catch(() => { /* it can still be sent */ })
   await queue(row.project_id, { kind: 'observation.add', row: withAuthor as unknown as Record<string, unknown> })
 }

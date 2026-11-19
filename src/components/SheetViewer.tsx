@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { niceTitle } from '../lib/titles'
 import type { PDFPageProxy } from 'pdfjs-dist'
-import { db } from '../lib/supabase'
+import { db, whoAmI } from '../lib/supabase'
+import { REFUSED_EVENT } from '../lib/offline/outbox'
 import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
@@ -197,6 +198,21 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
     } catch { return }
   }, [sheet.sheetId])
 
+  // A removal the server would not carry out: the markup is put back on screen, and said.
+  useEffect(() => {
+    const id = sheet.sheetId
+    if (!id) return
+    const refused = (e: Event) => {
+      if ((e as CustomEvent<{ table: string }>).detail?.table !== 'sheet_markups') return
+      listMarkups(id).then((rows) => {
+        setMarkups(rows)
+        setSaid({ kind: 'gone', rows: [], text: 'That markup could not be removed for everyone, so it is back.' })
+      }).catch(() => {})
+    }
+    window.addEventListener(REFUSED_EVENT, refused)
+    return () => window.removeEventListener(REFUSED_EVENT, refused)
+  }, [sheet.sheetId])
+
   // A phone that was in a pocket was not listening: the browser drops the live connection when
   // the app is put away. So what is on the sheet is asked for again whenever the app comes back
   // to the front or finds signal, rather than trusted to have been kept up.
@@ -247,8 +263,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
         setText(await readPageText(first))
         const links = await db().from('sheet_links').select('id, target_number, label, x, y, w, h').eq('revision_id', sheet.revisionId)
         if (!cancelled) setManual((links.data ?? []) as ManualLink[])
-        const { data: who } = await db().auth.getUser()
-        if (!cancelled) setMe(who.user?.id ?? null)
+        const who = await whoAmI()
+        if (!cancelled) setMe(who)
         // Markups are an addition to a sheet, not a condition of showing one: if they can't be
         // read the drawing still opens and says so, rather than the whole viewer failing.
         if (sheet.sheetId) {
@@ -358,9 +374,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
 
   async function saveLink() {
     if (!pending || !target) return
-    const { data: u } = await db().auth.getUser()
     const { data, error } = await db().from('sheet_links')
-      .insert({ revision_id: sheet.revisionId, project_id: project.id, target_number: target, ...pending, created_by: u.user?.id })
+      .insert({ revision_id: sheet.revisionId, project_id: project.id, target_number: target, ...pending, created_by: await whoAmI() })
       .select('id, target_number, label, x, y, w, h').single()
     if (error) { setError(error.message); return }
     setManual([...manual, data as ManualLink])

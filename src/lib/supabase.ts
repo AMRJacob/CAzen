@@ -43,3 +43,18 @@ export function storedSession(): Session | null {
     return s?.user?.id && s.access_token ? s : null
   } catch { return null }
 }
+
+/**
+ * Who is signed in, from the session this device already holds.
+ *
+ * Not `auth.getUser()`: that asks the server, and when the server doesn't answer — a slow
+ * connection, no connection — it comes back with nobody. A row then went in with no author,
+ * and a row with no author is one its author can never remove, because the database lets only
+ * the person who made a markup take it away.
+ */
+export async function whoAmI(): Promise<string | null> {
+  try {
+    const { data } = await db().auth.getSession()
+    return data.session?.user.id ?? storedSession()?.user.id ?? null
+  } catch { return storedSession()?.user.id ?? null }
+}
