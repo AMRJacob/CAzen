@@ -87,6 +87,11 @@ export function Notebook({ project, kind, pages, onPages }: {
   }, [tearing])
   const [observations, setObservations] = useState<Observation[]>([])
   const [types, setTypes] = useState<ObservationType[]>([])
+  useEffect(() => {
+    if (!error) return
+    const t = setTimeout(() => setError(null), 7000)
+    return () => clearTimeout(t)
+  }, [error])
 
   useEffect(() => {
     if (kind !== 'visit') return
@@ -134,7 +139,9 @@ export function Notebook({ project, kind, pages, onPages }: {
 
   return (
     <div className={`nb nb-${kind} nb-rule-${paper}`}>
-      {error && <div className="notice error nb-error">{error}</div>}
+      {/* At the foot of the page, out of the way of the bar and the way out; it goes when
+          touched, and by itself after a few seconds. */}
+      {error && <button className="notice error nb-error" onClick={() => setError(null)} title="Dismiss">{error}<span aria-hidden="true"> ×</span></button>}
       {page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
           until={nextStart(pages, page)}
@@ -351,7 +358,9 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
       const when = new Date(`${page.visited_on}T${page.visited_at ?? '12:00:00'}`)
       const found = await weatherAt(lat, lon, when)
       if (found) change({ weather: found })
-      else if (lat == null) onTrouble('No location to look the weather up for: the phone would not give one and the project has none set.')
+      // Said only when it was asked for by hand: a page that looks the weather up for itself
+      // and cannot simply leaves the line empty.
+      else if (lat == null && byHand) onTrouble('No location to look the weather up for: the phone would not give one and the project has none set.')
       // Asked for by hand and nothing came back: say so, so it isn't a button that does nothing.
       else if (byHand) onTrouble('The weather service had no observation for here at that time. It covers the United States and the last six days.')
     } finally { setAsking(false) }
