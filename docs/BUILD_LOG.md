@@ -40,7 +40,7 @@ from it.
   a renamed activity reads as one missing and one added.
 - **Migration `0039_schedule_versions.sql` is NOT applied** — the confirmation went unanswered.
   Until it is, a read-in still updates the schedule and says the history is not being kept.
-- `checks/schedule.test.ts` (29 cases), `checks/t_sched.py`, `checks/t_issues.py`.
+- `checks/schedule.test.ts` (25 cases), `checks/t_sched.py`, `checks/t_issues.py`.
 
 ---
 
