@@ -2652,3 +2652,5 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 /* A button on its own in the More menu is a block like its neighbours. As a flex box — which is
    what "shown only when narrow" made it — its words sat at the left instead of the middle. */
 @media (max-width: 619px) { .sv-more > button.sv-narrow-only { display: block; text-align: center; } }
+.mk-pickable.movable { cursor: grab; touch-action: none; }
+.mk-pickable.movable:active { cursor: grabbing; }

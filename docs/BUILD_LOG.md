@@ -11,6 +11,30 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:42 CST
+
+**Markups can be moved, and notes reshaped** (Jacob, 15:40–15:41: drag an item to move it,
+handles to reshape; reshaping already worked for shapes but not notes, and moving not at all).
+With *Select* chosen in the markup palette:
+
+- Press on a markup and drag: it moves — boxes, clouds, lines, arrows, dimensions, areas,
+  freehand ink, and notes. It stops at the edge of the sheet. A press that does not travel
+  only selects; nothing is saved.
+- Notes are now selectable like everything else: four corner handles resize the box, and a
+  **double-click** changes the words (a single click used to; in Select it now picks the note
+  up). A note that points at something keeps pointing at the same spot when it is moved or
+  resized.
+- Freehand ink still has no handles — it moves, it does not reshape.
+- Someone else's markup can be selected but not moved or reshaped, as before.
+- While a dimension or area is being dragged its figure stays where it was and jumps to the
+  new place on release.
+
+`checks/t_move.py`: each of box, ink, arrow and note dragged by a tenth of the sheet's width
+and saved shifted by exactly that; a click saves nothing; a corner drag resizes the box and
+the note; the note's pointer is kept; double-click opens the note's words.
+
+---
+
 # Checkpoint — 2026-11-19, 15:36 CST
 
 **Anyone on the project may remove a markup, after a warning** (Jacob, 15:34: "allow anyone to

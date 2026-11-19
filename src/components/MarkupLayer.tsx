@@ -517,7 +517,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 
       {/* Notes are HTML, so the words wrap and can be typed into. */}
       {markups.filter((m) => m.kind === 'text').map((m) => {
-        const g = m.geometry as { x: number; y: number; w: number; h: number }
+        // While it is being dragged the note is drawn where it has got to, not where it was.
+        const g = (dragGeom?.id === m.id ? dragGeom.geometry : m.geometry) as { x: number; y: number; w: number; h: number }
         const mine = !m.created_by || m.created_by === me
         return (
           <div key={m.id} className={`mk-note${olderThan(m) ? ' mk-older' : ''}`}
@@ -579,12 +580,27 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
 
       {/* Select: something to click on each markup, then handles on the one that's picked up. */}
       {tool === 'select' && markups.map((m) => {
-        if (m.kind === 'text') return null  // a note is already a thing you click
-        const box = pad(boundsOf(m.geometry))
+        if (m.kind === 'text' && editing?.id === m.id) return null  // being typed into
+        const shown = dragGeom?.id === m.id ? dragGeom.geometry : m.geometry
+        const box = pad(boundsOf(shown))
+        const can = mineToEdit(m)
         return (
-          <button key={`s${m.id}`} className={`mk-pickable${selected === m.id ? ' on' : ''}`} style={pct(box)}
+          <button key={`s${m.id}`} className={`mk-pickable${selected === m.id ? ' on' : ''}${can ? ' movable' : ''}`} style={pct(box)}
             aria-label={`Select this ${m.kind}`}
-            onPointerDown={(e) => { e.stopPropagation(); onSelect?.(m.id) }} />
+            title={can ? (m.kind === 'text' ? 'Drag to move · double-click to change the words' : 'Drag to move') : undefined}
+            // Pressing picks it up; dragging from there moves it. A press that does not travel
+            // is just a selection — nothing is saved unless the shape actually went somewhere.
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              onSelect?.(m.id)
+              if (!can) return
+              try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* move anyway */ }
+              grabbed.current = { id: m.id, handle: 'move', from: m.geometry, at: at(e) }
+            }}
+            onPointerMove={move}
+            onPointerUp={up}
+            onPointerCancel={() => { grabbed.current = null; setDragGeom(null) }}
+            onDoubleClick={() => { if (m.kind === 'text' && can) setEditing({ id: m.id, body: m.body ?? '' }) }} />
         )
       })}
       {tool === 'select' && picked && mineToEdit(picked) && handlesOf(dragGeom?.id === picked.id ? dragGeom.geometry : picked.geometry).map((h) => (
@@ -628,7 +644,8 @@ function boundsOf(g: Geometry): { x: number; y: number; w: number; h: number } {
   return g
 }
 
-type Handle = 'from' | 'to' | 'nw' | 'ne' | 'se' | 'sw'
+/** 'move' is the whole shape taken hold of by its body rather than by a corner or an end. */
+type Handle = 'from' | 'to' | 'nw' | 'ne' | 'se' | 'sw' | 'move'
 
 const pad = (b: { x: number; y: number; w: number; h: number }) => ({
   x: b.x - 0.004, y: b.y - 0.004, w: b.w + 0.008, h: b.h + 0.008,
@@ -653,12 +670,28 @@ function handlesOf(g: Geometry): { name: Handle; at: Point }[] {
 }
 
 /** The shape after a handle has been dragged to a point. */
-function moveHandle(g: Geometry, handle: Handle, to: Point, _from: Point): Geometry {
+function moveHandle(g: Geometry, handle: Handle, to: Point, from: Point): Geometry {
+  if (handle === 'move') return shifted(g, to.x - from.x, to.y - from.y)
   if ('from' in g) return handle === 'from' ? { from: to, to: g.to } : { from: g.from, to }
   if ('points' in g) return g
   const x1 = g.x, y1 = g.y, x2 = g.x + g.w, y2 = g.y + g.h
   const [ax, ay] = handle === 'nw' ? [x2, y2] : handle === 'ne' ? [x1, y2] : handle === 'se' ? [x1, y1] : [x2, y1]
-  return { x: Math.min(ax, to.x), y: Math.min(ay, to.y), w: Math.abs(to.x - ax), h: Math.abs(to.y - ay) }
+  // A note keeps pointing at what it was pointing at while its box is reshaped.
+  return { x: Math.min(ax, to.x), y: Math.min(ay, to.y), w: Math.abs(to.x - ax), h: Math.abs(to.y - ay), ...(g.leader ? { leader: g.leader } : {}) }
+}
+
+/**
+ * A shape slid across the sheet without changing it. Kept on the page: it stops at the edge
+ * rather than being dropped where it can never be picked up again.
+ */
+function shifted(g: Geometry, dx: number, dy: number): Geometry {
+  const b = boundsOf(g)
+  dx = Math.max(-b.x, Math.min(1 - b.x - b.w, dx))
+  dy = Math.max(-b.y, Math.min(1 - b.y - b.h, dy))
+  if ('from' in g) return { from: { x: g.from.x + dx, y: g.from.y + dy }, to: { x: g.to.x + dx, y: g.to.y + dy } }
+  if ('points' in g) return { points: g.points.map((p) => (p.length === 3 ? [p[0] + dx, p[1] + dy, p[2]] : [p[0] + dx, p[1] + dy]) as InkPoint) }
+  // The note moves; what it points at stays where it is.
+  return { ...g, x: g.x + dx, y: g.y + dy }
 }
 
 /**
