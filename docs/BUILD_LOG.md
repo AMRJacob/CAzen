@@ -42,6 +42,12 @@ height at 1440, 1920 and 402 px wide (it is 4 px tall on the phone at fit, and i
 zooming in). A browser without container units keeps 13 px. iOS's own text enlargement is
 switched off for the layer; **not seen on the iPhone**.
 
+Jacob, 15:43: **the sheet went blank under the pointer while placing an observation.** The
+layer that takes the tap is a button the size of the sheet, and every button's hover colour
+is opaque (`button:hover` outranks the layer's own faint tint), so hovering painted the sheet
+over. It now keeps its tint at rest, hovered and pressed — read back from the browser in all
+three states — and a tap still places the pin and opens the form.
+
 ---
 
 # Checkpoint — 2026-11-19, 15:36 CST

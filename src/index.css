@@ -2671,3 +2671,10 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .mk-older-tag { font-size: 0.73em; top: -0.62em; left: 0.46em; padding: 0 0.4em; }
 .mk-hit.theirs { cursor: pointer; }
 .mk-layer { -webkit-text-size-adjust: none; text-size-adjust: none; }
+/* The layer that takes the tap when placing an observation is a button the size of the sheet.
+   Every button's hover and pressed colours are opaque, so under the pointer it painted the
+   whole sheet over. It keeps one faint tint whatever the pointer is doing. */
+.sv-page button.obs-pin-catcher,
+.sv-page button.obs-pin-catcher:hover,
+.sv-page button.obs-pin-catcher:active,
+.sv-page button.obs-pin-catcher:focus { background: rgba(95, 122, 97, 0.06); border: none; border-radius: 0; padding: 0; box-shadow: none; outline: none; }
