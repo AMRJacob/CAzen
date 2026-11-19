@@ -11,6 +11,26 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 12:45 CST
+
+**The change register can be corrected, and carries cost and time.** (`src/pages/CaLogs.tsx`,
+`src/lib/issued.ts`; no schema change.)
+
+- *Edit* on any row: number, subject, issued day, change to contract cost, change to contract
+  time (days). Enter saves, Escape cancels. It corrects the register's record only — the PDF
+  that was issued is not rewritten, and the row says so while editing.
+- **Cost** and **Time** columns. Kept in the document's own `values` (`chg.cost`, `chg.days`);
+  a proposal request's cost *is* its price (`pr.price`), one figure. A change order with no
+  figure of its own shows the sum of the proposal requests it covers, in grey italics.
+- **Totals at the top** of the register (Jacob asked for the bottom, then the top): *Change
+  orders to date* — cost and days — and, beneath, *Proposal requests not yet in a change
+  order* (not-accepted ones left out). They are separate lines because adding both would count
+  a PR twice once it is rolled in. **This split is my reading**; Jacob asked only for "a total
+  cost and time". Totals are over the whole project, not the filter.
+- `checks/t_reg.py`.
+
+---
+
 # Checkpoint — 2026-11-19, 12:25 CST
 
 **Tag marks, tagging with pan and zoom, dots on the sheet, and invitations as a link.**

@@ -2389,3 +2389,12 @@ body:has(.nb) .phone-nav { display: none; }
 .obs-dot:hover, .obs-dot:active, .obs-dot:focus { background: none; }
 .access-mail { margin-top: 10px; }
 .access-mail-body { padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.reg-edit input { width: 100%; min-width: 0; font: inherit; padding: 5px 7px; }
+.reg-edit td:first-child input { width: 110px; }
+.reg-edit-note td { padding-top: 0; border-top: none; }
+.register .col-chg { width: 110px; font-variant-numeric: tabular-nums; }
+.register .summed { color: var(--muted); font-style: italic; }
+.reg-edit .col-chg input { width: 100%; text-align: right; }
+.reg-total td { font-weight: 600; background: var(--wash); padding: 8px 10px; font-variant-numeric: tabular-nums; border-bottom: none; }
+.reg-total-loose td { font-weight: 400; color: var(--muted); padding-top: 0; }
+.register thead tr:last-child td { border-bottom: 2px solid var(--ink); }

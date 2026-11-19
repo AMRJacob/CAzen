@@ -49,6 +49,16 @@ export async function saveIssued(project: ProjectStore, kind: FormKind, values: 
   if (error) throw error
 }
 
+/**
+ * Correct what the register says about a document: its number, its subject, the day it went
+ * out. The register's record only — the PDF that was issued is what was issued, and is not
+ * rewritten.
+ */
+export async function setIssuedDetails(id: string, patch: { number: string | null; title: string | null; issued_at: string; values?: Record<string, string> }): Promise<void> {
+  const { error } = await db().from('issued_forms').update(patch).eq('id', id)
+  if (error) throw error
+}
+
 export const openIssued = (project: ProjectStore, path: string) => openFile(project, path)
 
 const PREFIX: Record<FormKind, string> = {
@@ -293,4 +303,54 @@ export function prStanding(rows: RegisterRow[]) {
     if (decision === 'approved') out.approvedLoose += price; else out.deciding += price
   }
   return out
+}
+
+/**
+ * What a document changes in the contract: dollars and days.
+ *
+ * Kept with the document's own values, so no new columns. A proposal request's cost is its
+ * price — one figure, not two. A change order with no figure of its own is worth what the
+ * proposal requests it covers are worth, since that is what it rolls up.
+ */
+export function changeCost(row: RegisterRow | IssuedForm): number | null {
+  if (row.kind === 'pr') return prPrice(row)
+  const own = Number(row.values?.['chg.cost'])
+  if (row.values?.['chg.cost'] != null && row.values['chg.cost'] !== '' && Number.isFinite(own)) return own
+  const covers = (row as RegisterRow).covers?.map((c) => prPrice(c)).filter((n): n is number => n != null) ?? []
+  return row.kind === 'change_order' && covers.length ? covers.reduce((a, b) => a + b, 0) : null
+}
+export function changeDays(row: RegisterRow | IssuedForm): number | null {
+  const own = row.values?.['chg.days']
+  if (own != null && own !== '' && Number.isFinite(Number(own))) return Number(own)
+  const covers = (row as RegisterRow).covers?.map((c) => changeDays(c)).filter((n): n is number => n != null) ?? []
+  return row.kind === 'change_order' && covers.length ? covers.reduce((a, b) => a + b, 0) : null
+}
+/** Whether a change order's figure is its own or added up from what it covers. */
+export const costIsOwn = (row: IssuedForm) => row.kind === 'pr' || (row.values?.['chg.cost'] ?? '') !== ''
+export const daysAreOwn = (row: IssuedForm) => (row.values?.['chg.days'] ?? '') !== ''
+
+/** The values of a row with new change figures written in. */
+export function withChange(row: IssuedForm, cost: number | null, days: number | null): Record<string, string> {
+  const values = { ...(row.values ?? {}) }
+  const key = row.kind === 'pr' ? 'pr.price' : 'chg.cost'
+  if (cost == null) delete values[key]; else values[key] = String(cost)
+  if (days == null) delete values['chg.days']; else values['chg.days'] = String(days)
+  return values
+}
+
+/**
+ * The foot of the register. Change orders are what change the contract, so they are the total;
+ * proposal requests not yet in one are shown apart, because adding both would count a PR twice
+ * once it is rolled in.
+ */
+export function changeTotals(rows: RegisterRow[]) {
+  const sum = (list: RegisterRow[]) => ({
+    cost: list.reduce((n, r) => n + (changeCost(r) ?? 0), 0),
+    days: list.reduce((n, r) => n + (changeDays(r) ?? 0), 0),
+    count: list.length,
+  })
+  return {
+    orders: sum(rows.filter((r) => r.kind === 'change_order')),
+    loose: sum(rows.filter((r) => r.kind === 'pr' && !r.rolledInto && prDecision(r) !== 'rejected')),
+  }
 }

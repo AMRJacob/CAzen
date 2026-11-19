@@ -39,7 +39,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Markups, dimensions and scale on sheets; markups carried across revisions | Live |
 | Project manual: split by section, revisioned, searchable | Live |
 | Document creation (field reports, meeting notes, ASIs, RFI responses, PRs, CCDs), form template editor, templates started from a firm PDF | Live |
-| Change documents register | Live |
+| Change documents register; rows editable (number, subject, date); change to contract cost and time per document, totalled at the top | Live (cost, time and editing 2026-11-19) |
 | Observations with photographs and pins on the sheet; punch list; field report written from a visit's observations | Live |
 | Note pads (handwritten, live across devices) | Live |
 | Pay applications (G702/G703 layout, retainage steps, stored material) | Live |

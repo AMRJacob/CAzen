@@ -2,8 +2,8 @@ import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
-import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, setPrResponse, uncover, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
-import { money as asMoney } from '../lib/money'
+import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
+import { money as asMoney, NOTHING } from '../lib/money'
 import { money as readMoney } from '../lib/sovPaste'
 import { openFile, type ProjectStore } from '../lib/files'
 import { listIssuanceSheets } from '../lib/sheets'
@@ -90,6 +90,8 @@ export default function CaLogs() {
   const orders = useMemo(() => (rows ?? []).filter((r) => r.kind === 'change_order')
     .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true })), [rows])
   const standing = useMemo(() => prStanding(rows ?? []), [rows])
+  // Over everything on the project, not only what the filter is showing.
+  const totals = useMemo(() => changeTotals(rows ?? []), [rows])
   /** A price or a decision changed on screen first, then kept; the list is not fetched again for it. */
   const patchRow = useCallback((id: string, values: Record<string, string>) => {
     setRows((all) => (all ?? []).map((r) => (r.id === id ? { ...r, values }
@@ -174,7 +176,19 @@ export default function CaLogs() {
         : !listed.length ? <div className="card muted">Nothing issued yet.</div> : (
         <table className="register">
           <thead>
-            <tr><th>Number</th><th>Type</th><th className="col-title">Subject</th><th className="col-date">Issued</th><th /></tr>
+            <tr><th>Number</th><th>Type</th><th className="col-title">Subject</th><th className="col-date">Issued</th><th className="right col-chg">Cost</th><th className="right col-chg">Time</th><th /></tr>
+            <tr className="reg-total">
+              <td colSpan={4}>Change orders to date{totals.orders.count ? ` (${totals.orders.count})` : ''}</td>
+              <td className="right nowrap">{totals.orders.count ? asMoney(totals.orders.cost) : NOTHING}</td>
+              <td className="right nowrap">{totals.orders.count ? daysText(totals.orders.days) : NOTHING}</td><td />
+            </tr>
+            {totals.loose.count > 0 && (
+              <tr className="reg-total reg-total-loose">
+                <td colSpan={4}>Proposal requests not yet in a change order ({totals.loose.count})</td>
+                <td className="right nowrap">{asMoney(totals.loose.cost)}</td>
+                <td className="right nowrap">{daysText(totals.loose.days)}</td><td />
+              </tr>
+            )}
           </thead>
           <tbody>
             {listed.map((r) => (
@@ -189,6 +203,9 @@ export default function CaLogs() {
     </section>
   )
 }
+
+/** Days as the contract counts them: signed, so a credit of time reads as one. */
+const daysText = (n: number) => (n === 0 ? NOTHING : `${n > 0 ? '+' : '−'}${Math.abs(n)} ${Math.abs(n) === 1 ? 'day' : 'days'}`)
 
 function Row({ row, project, loose, orders, onValues, attaching, onAttach, onChanged, onError }: {
   /** The project's change orders, for a proposal request to be rolled into. */
@@ -205,9 +222,49 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
   const [picked, setPicked] = useState<string[]>([])
   const [showing, setShowing] = useState(false)
   const subject = row.title ?? row.values?.[`${row.kind.split('_')[0]}.title`] ?? ''
+  const cost = changeCost(row), days = changeDays(row)
+  /** The row being corrected: number, subject and day, as typed so far. */
+  const [edit, setEdit] = useState<{ number: string; title: string; day: string; cost: string; days: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  async function saveEdit() {
+    if (!edit || saving) return
+    setSaving(true)
+    try {
+      // The time of day it was issued is kept; only the day moves.
+      const was = new Date(row.issued_at)
+      const [y, m, d] = edit.day.split('-').map(Number)
+      const when = y && m && d ? new Date(y, m - 1, d, was.getHours(), was.getMinutes(), was.getSeconds()) : was
+      const cost = edit.cost.trim() ? readMoney(edit.cost) : null
+      const days = edit.days.trim() ? Number(edit.days.replace(/[^0-9.+-]/g, '')) : null
+      if (edit.cost.trim() && cost == null) { onError('That cost is not a figure.'); return }
+      if (days != null && !Number.isFinite(days)) { onError('Time is a number of days.'); return }
+      await setIssuedDetails(row.id, {
+        number: edit.number.trim() || null, title: edit.title.trim() || null, issued_at: when.toISOString(),
+        values: withChange(row, cost, days),
+      })
+      setEdit(null)
+      onChanged()
+    } catch (e) { onError(message(e)) } finally { setSaving(false) }
+  }
+  const keys = (e: React.KeyboardEvent) => { if (e.key === 'Enter') void saveEdit(); else if (e.key === 'Escape') setEdit(null) }
+  const dayOf = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
   return (
     <>
+      {edit ? (
+        <tr className="reg-edit">
+          <td><input className="mono" value={edit.number} onChange={(e) => setEdit({ ...edit, number: e.target.value })} onKeyDown={keys} aria-label="Number" /></td>
+          <td className="nowrap">{FORM_LABELS[row.kind]}</td>
+          <td className="col-title"><input autoFocus value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} onKeyDown={keys} aria-label="Subject" /></td>
+          <td className="col-date"><input type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} onKeyDown={keys} aria-label="Issued" /></td>
+          <td className="col-chg"><input className="right" inputMode="decimal" value={edit.cost} placeholder="$" onChange={(e) => setEdit({ ...edit, cost: e.target.value })} onKeyDown={keys} aria-label="Change to contract cost" /></td>
+          <td className="col-chg"><input className="right" inputMode="numeric" value={edit.days} placeholder="days" onChange={(e) => setEdit({ ...edit, days: e.target.value })} onKeyDown={keys} aria-label="Change to contract time, in days" /></td>
+          <td className="right nowrap">
+            <button className="primary" disabled={saving} onClick={() => void saveEdit()}>{saving ? 'Saving…' : 'Save'}</button>{' '}
+            <button className="link" onClick={() => setEdit(null)}>Cancel</button>
+          </td>
+        </tr>
+      ) : (
       <tr className={row.file_path ? 'opens' : undefined}
         onClick={(e) => {
           if (!row.file_path || !project) return
@@ -228,6 +285,8 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
           ) : null}
         </td>
         <td className="col-date">{usDate(new Date(row.issued_at))}</td>
+        <td className={`right nowrap col-chg${costIsOwn(row) ? '' : ' summed'}`} title={costIsOwn(row) ? undefined : 'Added up from the proposal requests it covers'}>{cost == null ? NOTHING : asMoney(cost)}</td>
+        <td className={`right nowrap col-chg${daysAreOwn(row) ? '' : ' summed'}`}>{days == null ? NOTHING : daysText(days)}</td>
         <td className="right nowrap">
           {row.issuance_id && (
             <button className="link" onClick={(e) => { e.stopPropagation(); setShowing(!showing) }}>
@@ -235,23 +294,28 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
             </button>
           )}
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
+          {' '}<button className="link" onClick={(e) => { e.stopPropagation(); setEdit({ number: row.number ?? '', title: subject, day: dayOf(row.issued_at), cost: costIsOwn(row) && cost != null ? asMoney(cost) : '', days: daysAreOwn(row) && days != null ? String(days) : '' }) }}>Edit</button>
         </td>
       </tr>
+      )}
+      {edit && (
+        <tr className="reg-edit-note"><td /><td colSpan={6} className="muted small">This corrects the register. The PDF that was issued stays as it was issued.</td></tr>
+      )}
 
       {row.kind === 'pr' && (
-        <tr className="pr-response"><td /><td colSpan={4}>
+        <tr className="pr-response"><td /><td colSpan={6}>
           <PrResponse row={row} orders={orders} onValues={onValues} onChanged={onChanged} onError={onError} />
         </td></tr>
       )}
 
       {showing && row.issuance_id && (
-        <tr className="confirm-row"><td colSpan={5}>
+        <tr className="confirm-row"><td colSpan={7}>
           <IssuedSheets issuanceId={row.issuance_id} project={project} onError={onError} />
         </td></tr>
       )}
 
       {attaching && (
-        <tr className="confirm-row"><td colSpan={5}>
+        <tr className="confirm-row"><td colSpan={7}>
           <p className="small"><strong>Which proposal requests does {row.number ?? 'this change order'} cover?</strong></p>
           {!loose.length && !row.covers?.length ? (
             <p className="muted small">Every proposal request on this project is already in a change order.</p>
