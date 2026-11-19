@@ -26,7 +26,20 @@ import { Mark } from './Logo'
 
 type Tool = 'pen' | 'highlight' | 'text' | 'erase'
 
-const WIDTHS = { fine: 0.0018, medium: 0.003, broad: 0.0052 } as const
+/**
+ * Pen weights, as fractions of a page's width — so 0.005 is about a millimetre, the weight of
+ * an ordinary rollerball. The old set was a third of this and read as a hairline on a phone.
+ */
+const WIDTHS = { fine: 0.003, medium: 0.005, broad: 0.009 } as const
+
+/**
+ * The thinnest ink may ever be drawn, in CSS pixels.
+ *
+ * Ink is kept in canvas units so it thickens as you zoom in, the way real ink would — but
+ * that also means it thins to nothing as you zoom out, and a stroke you cannot see is a
+ * stroke you have lost. Below this it stops shrinking.
+ */
+const THINNEST = 1.4
 type Width = keyof typeof WIDTHS
 
 /**
@@ -279,7 +292,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         geometry: { points },
         style: {
           colour: kind === 'highlight' ? highlight : colour,
-          width: kind === 'highlight' ? 0.022 : WIDTHS[width],
+          width: kind === 'highlight' ? 0.03 : WIDTHS[width],
         },
       })
       setMine((m) => [...m, saved.id])
@@ -325,6 +338,11 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     catch (e) { complain(message(e)) }
   }
 
+  /** The ruling's strength, written once the slider is let go rather than on every step. */
+  async function saveInk(rule_ink: number) {
+    try { await setPad(pad.id, { rule_ink }) } catch (e) { complain(message(e)) }
+  }
+
   async function setRule(rule: PadRule) {
     onChanged({ ...pad, rule })
     try { await setPad(pad.id, { rule }) } catch (e) { complain(message(e)) }
@@ -343,7 +361,11 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     const pad_ = 0.06
     const w = bounds.x2 - bounds.x1 + pad_ * 2
     const h = bounds.y2 - bounds.y1 + pad_ * 2
-    const scale = clamp(Math.min(box.width / w, box.height / h), 60, 12000)
+    // Framing everything written is only worth doing while it still leaves the writing
+    // readable. Past that it is better to show less of it at a size you can read, so the
+    // scale never falls below roughly two page widths across the screen.
+    const readable = box.width / 2.2
+    const scale = clamp(Math.max(Math.min(box.width / w, box.height / h), readable), 60, 12000)
     setView({
       scale,
       x: box.width / 2 - ((bounds.x1 + bounds.x2) / 2) * scale,
@@ -395,13 +417,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onPointerCancel={up}>
         <svg className="pad-ink" aria-label="The pad">
-          <Ground rule={pad.rule} view={view} />
+          <Ground rule={pad.rule} ink={pad.rule_ink ?? 40} view={view} />
           <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-            {inks.map((m) => <Stroke key={m.id} mark={m} />)}
+            {inks.map((m) => <Stroke key={m.id} mark={m} scale={view.scale} />)}
             {wet && (
               <g className={tool === 'highlight' ? 'pad-hl' : undefined}>
-                {inkRuns(wet, tool === 'highlight' ? 0.022 : WIDTHS[width]).map((r, i) => (
-                  <path key={i} d={r.d} stroke={nib} strokeWidth={r.width}
+                {inkRuns(wet, tool === 'highlight' ? 0.03 : WIDTHS[width]).map((r, i) => (
+                  <path key={i} d={r.d} stroke={nib}
+                    strokeWidth={Math.max(r.width, THINNEST / view.scale)}
                     fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 ))}
               </g>
@@ -502,9 +525,20 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           <div className="padpop-row">
             {RULES.map((r) => (
               <button key={r.rule} className={`padpop-word${pad.rule === r.rule ? ' on' : ''}`}
-                onClick={() => { void setRule(r.rule); goingAway() }}>{r.label}</button>
+                onClick={() => { void setRule(r.rule); stay() }}>{r.label}</button>
             ))}
           </div>
+          {pad.rule !== 'blank' && (
+            <label className="padpop-slider">
+              <span className="muted small">Ruling</span>
+              <input type="range" min={0} max={100} step={5} value={pad.rule_ink ?? 40}
+                aria-label="How strongly the ruling is drawn"
+                onChange={(e) => { onChanged({ ...pad, rule_ink: Number(e.target.value) }); stay() }}
+                onPointerUp={(e) => void saveInk(Number((e.target as HTMLInputElement).value))}
+                onKeyUp={(e) => void saveInk(Number((e.target as HTMLInputElement).value))} />
+              <span className="muted small nowrap">{pad.rule_ink ?? 40}%</span>
+            </label>
+          )}
           <div className="padpop-row">
             <button className="padbar-key" disabled={page <= 1} onClick={() => setPage(page - 1)}
               aria-label="Previous page">{icon.back}</button>
@@ -570,8 +604,8 @@ function capture(e: React.PointerEvent): void {
  * It is a pattern in screen space offset by the view, so it carries on wherever the canvas is
  * pushed, and it fades out when zoomed far enough that it would be noise.
  */
-function Ground({ rule, view }: { rule: PadRule; view: View }) {
-  if (rule === 'blank') return null
+function Ground({ rule, ink, view }: { rule: PadRule; ink: number; view: View }) {
+  if (rule === 'blank' || ink <= 0) return null
   // Keep the ruling about a finger's width apart on screen, doubling as you zoom out so it
   // never turns into a grey wash.
   let step = 0.042 * view.scale
@@ -585,10 +619,11 @@ function Ground({ rule, view }: { rule: PadRule; view: View }) {
       <defs>
         <pattern id={id} width={step} height={step} patternUnits="userSpaceOnUse" x={ox} y={oy}>
           {rule === 'dots'
-            ? <circle cx={step / 2} cy={step / 2} r={Math.max(0.7, step * 0.022)} className="ground-dot" />
+            ? <circle cx={step / 2} cy={step / 2} r={Math.max(0.7, step * 0.022)}
+                className="ground-dot" opacity={ink / 100} />
             : <>
-              <path d={`M 0 ${step} H ${step}`} className="ground-line" />
-              {rule === 'grid' && <path d={`M ${step} 0 V ${step}`} className="ground-line" />}
+              <path d={`M 0 ${step} H ${step}`} className="ground-line" opacity={ink / 100} />
+              {rule === 'grid' && <path d={`M ${step} 0 V ${step}`} className="ground-line" opacity={ink / 100} />}
             </>}
         </pattern>
       </defs>
@@ -597,14 +632,18 @@ function Ground({ rule, view }: { rule: PadRule; view: View }) {
   )
 }
 
-export function Stroke({ mark }: { mark: PadMark }) {
+export function Stroke({ mark, scale }: { mark: PadMark; scale?: number }) {
   const g = mark.geometry as { points: InkPoint[] }
   if (!g?.points?.length) return null
-  const runs = inkRuns(g.points, mark.style.width ?? 0.003)
+  const runs = inkRuns(g.points, mark.style.width ?? 0.005)
+  // Zoomed out, a stroke would be drawn thinner than a pixel and disappear. It stops
+  // shrinking at the point where it would stop being ink.
+  const floor = scale ? THINNEST / scale : 0
   return (
     <g className={mark.kind === 'highlight' ? 'pad-hl' : undefined}>
       {runs.map((r, i) => (
-        <path key={i} d={r.d} stroke={mark.style.colour ?? '#2b2d2c'} strokeWidth={r.width}
+        <path key={i} d={r.d} stroke={mark.style.colour ?? '#2b2d2c'}
+          strokeWidth={Math.max(r.width, floor)}
           fill="none" strokeLinecap="round" strokeLinejoin="round" />
       ))}
     </g>
@@ -646,9 +685,11 @@ export function extentOf(marks: PadMark[]): { x1: number; y1: number; x2: number
  * to its own extent. Used for the thumbnails in the list and for reading a pad while typing
  * it up, where a live pad would only be something a stray touch could change.
  */
-export function PadStill({ marks, rule, ratio = 11 / 8.5 }: {
+export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
   marks: PadMark[]
   rule: PadRule
+  /** How strongly the ruling is drawn, nought to a hundred. */
+  ink?: number
   /** How tall the frame is relative to its width. */
   ratio?: number
 }) {
@@ -669,8 +710,8 @@ export function PadStill({ marks, rule, ratio = 11 / 8.5 }: {
   return (
     <svg className="pad-still" viewBox={`${x} ${y} ${w} ${h}`} preserveAspectRatio="xMidYMid meet"
       aria-hidden="true">
-      <StillGround rule={rule} x={x} y={y} w={w} h={h} />
-      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} />)}
+      <StillGround rule={rule} ink={ink} x={x} y={y} w={w} h={h} />
+      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} scale={1 / w} />)}
       {marks.filter((m) => m.kind === 'text').map((m) => {
         const g = m.geometry as { x: number; y: number; w: number }
         return (
@@ -683,10 +724,10 @@ export function PadStill({ marks, rule, ratio = 11 / 8.5 }: {
 }
 
 /** The ruling behind a still, in canvas units rather than screen pixels. */
-function StillGround({ rule, x, y, w, h }: {
-  rule: PadRule; x: number; y: number; w: number; h: number
+function StillGround({ rule, ink, x, y, w, h }: {
+  rule: PadRule; ink: number; x: number; y: number; w: number; h: number
 }) {
-  if (rule === 'blank') return null
+  if (rule === 'blank' || ink <= 0) return null
   let step = 0.042
   while (w / step > 44) step *= 2
   const first = Math.ceil(y / step) * step
@@ -695,7 +736,7 @@ function StillGround({ rule, x, y, w, h }: {
   const across = Math.ceil(w / step) + 1
   if (rule === 'dots') {
     return (
-      <g>
+      <g opacity={ink / 100}>
         {Array.from({ length: down }, (_, r) => Array.from({ length: across }, (_, c) => (
           <circle key={`${r}-${c}`} cx={left + c * step} cy={first + r * step}
             r={step * 0.04} className="ground-dot" />
@@ -704,7 +745,7 @@ function StillGround({ rule, x, y, w, h }: {
     )
   }
   return (
-    <g>
+    <g opacity={ink / 100}>
       {Array.from({ length: down }, (_, r) => (
         <path key={`h${r}`} d={`M ${x} ${first + r * step} H ${x + w}`} className="ground-line"
           strokeWidth={step * 0.02} />
@@ -741,7 +782,7 @@ export function PadPages({ pad, onTrouble }: { pad: Pad; onTrouble: (m: string) 
         const here = marks.filter((m) => m.page === n)
         return (
           <figure key={n} className="pad-page-read">
-            <PadStill marks={here} rule={pad.rule} />
+            <PadStill marks={here} rule={pad.rule} ink={pad.rule_ink ?? 40} />
             {pad.pages > 1 && <figcaption className="muted small">Page {n}</figcaption>}
           </figure>
         )

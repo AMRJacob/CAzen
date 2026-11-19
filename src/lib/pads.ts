@@ -23,6 +23,8 @@ export interface NotePad {
   noted_on: string
   pages: number
   rule: PadRule
+  /** How strongly the ruling is drawn, nought to a hundred. */
+  rule_ink: number
   issued_id: string | null
   created_by: string | null
   created_at: string
@@ -46,7 +48,7 @@ export interface PadMark {
   created_at: string
 }
 
-const PAD_COLUMNS = 'id, project_id, kind, title, noted_on, pages, rule, issued_id, created_by, created_at, updated_at'
+const PAD_COLUMNS = 'id, project_id, kind, title, noted_on, pages, rule, rule_ink, issued_id, created_by, created_at, updated_at'
 const MARK_COLUMNS = 'id, pad_id, project_id, page, kind, geometry, style, body, created_by, created_at'
 
 /** The colours a pen writes in. Ink first, because most notes are written in it. */
@@ -81,7 +83,7 @@ export async function newPad(projectId: string, kind: PadKind, fields: {
   return data as NotePad
 }
 
-export async function setPad(id: string, patch: Partial<Pick<NotePad, 'title' | 'noted_on' | 'pages' | 'rule' | 'issued_id'>>): Promise<void> {
+export async function setPad(id: string, patch: Partial<Pick<NotePad, 'title' | 'noted_on' | 'pages' | 'rule' | 'rule_ink' | 'issued_id'>>): Promise<void> {
   const { error } = await db().from('note_pads')
     .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
   if (error) throw error

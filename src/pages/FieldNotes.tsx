@@ -275,7 +275,7 @@ function PadCard({ pad, kind, fresh, onOpen, onWriteUp, onDiscard, onRename }: {
   return (
     <div className={`pad-card-item${fresh ? ' fresh' : ''}`}>
       <button className="pad-thumb" onClick={onOpen} aria-label={`Open ${pad.title || untitled(kind)}`}>
-        <PadStill marks={marks ?? []} rule={pad.rule} />
+        <PadStill marks={marks ?? []} rule={pad.rule} ink={pad.rule_ink ?? 40} />
         {marks && !marks.length && <span className="pad-thumb-empty muted small">Nothing written yet</span>}
       </button>
       <input className="pad-card-title" defaultValue={pad.title ?? ''} placeholder={untitled(kind)}

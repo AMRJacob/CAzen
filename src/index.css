@@ -1797,3 +1797,5 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .contract-title { font-size: 15px; text-align: left; flex: 1 1 14em; }
 .contract-row.locked .contract-title { color: var(--ink); }
 .contract-row .inline-field { gap: 6px; }
+.padpop-slider { display: flex; align-items: center; gap: 10px; }
+.padpop-slider input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--moss); }
