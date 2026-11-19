@@ -1,0 +1,15 @@
+from common import *
+with sync_playwright() as p:
+    b=p.chromium.launch(channel='chrome'); ctx=b.new_context(**PHONE); install(ctx); signed_in(ctx)
+    pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office',timeout=8000)
+    pg.wait_for_function("navigator.serviceWorker.controller!==null || navigator.serviceWorker.ready.then(()=>true)",timeout=8000)
+    pg.wait_for_timeout(2500)
+    n=pg.evaluate("caches.keys().then(async k=>(await (await caches.open(k[0])).keys()).length)")
+    print('online ok; cached files:',n)
+    ctx.set_offline(True)
+    t=time.time(); pg.reload(); pg.wait_for_selector('text=Stand-in Office',timeout=8000)
+    print('OFFLINE cold reload shows project list in %.2fs'%(time.time()-t))
+    pg.screenshot(path='offline_home.png')
+    print('errors:',errs)
+    b.close()

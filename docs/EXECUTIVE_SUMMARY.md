@@ -24,32 +24,28 @@ Part of it covers ground BIM360/ACC already covers for CA (sheets, revisions, li
 
 ## Where it stands
 
+As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_LOG.md`.
+
 | Feature | Status |
 | --- | --- |
 | Sign-in, invites, create password | Live |
-| Projects and sidebar project switcher; project Location (address search, map pin, Open in Maps) | Live |
-| Drawings: upload rounds, split, revision history, set as of date | Live |
-| Title block templates | Live |
-| Sheet order by discipline | Live |
-| Sheet search and links between sheets | Live |
-| CAzen file storage on Cloudflare R2, with copies to the project's CA folder | Live, prototype (needs the Cloudflare setup in docs/SETUP.md) |
-| Delete a set or revision, archive or delete a project (admins only); daily project data backup to the project folder | Live |
+| Projects and project switcher; project location (address search, map pin, Open in Maps) | Live |
+| Drawings: upload rounds, split, revision history, set as of date, title block templates, discipline order, search, links between sheets | Live |
+| Markups, dimensions and scale on sheets; markups carried across revisions | Live |
+| Project manual: split by section, revisioned, searchable | Live |
+| Document creation (field reports, meeting notes, ASIs, RFI responses, PRs, CCDs), form template editor, templates started from a firm PDF | Live |
+| Change documents register | Live |
+| Observations with photographs and pins on the sheet; punch list; field report written from a visit's observations | Live |
+| Note pads (handwritten, live across devices) | Live |
+| Pay applications (G702/G703 layout, retainage steps, stored material) | Live |
+| Setting a contract up in the app, with a pasted schedule of values | Live (2026-11-19) |
+| Construction schedule against pay applications | Live |
+| Contract library | Live |
 | Submittal cover sheet | Live |
-| Document creation (field reports, ASIs, RFI responses, PRs, CCDs) | Live |
-| Form template editor | Live |
-| Firm branding in Settings | Live |
-| Requests & issues list in Settings, with "Suggest or report" in the sidebar; holds the wishlist | Live |
-| Markups: freehand, arrow, box, cloud, note, dimension; per-sheet scale; bring forward | Live (needs migration 0015) |
-| Reduce heavy sheets at upload (images replaced in place, scans redrawn) | Live |
-| Download a record set, or the package for one set or revision | Live |
-| Sheet viewer on a phone: pinch, wheel, drag, sheet index, full screen | Live |
-| Start a template from a firm PDF | In progress (engine done; editor button next) |
-| ASI and PR packages | Planned |
-| Pay applications | Planned |
-| Punch list (schema in 0015; no UI yet) | Planned |
-| Field report photos | Planned |
-| Project manual under Drawings | Planned |
-| Contract library | Planned |
+| Firm branding in Settings; Requests & issues list | Live |
+| File storage on Cloudflare R2, with copies to the project's CA folder | Live, prototype (needs the Cloudflare setup in docs/SETUP.md) |
+| Field mode: take a project to the field, work with no signal, changes sent on return | Live; the app itself now opens with no signal (2026-11-19). Awaiting a check on the iPhone |
+| Offline search across sheets | Planned |
 | Submittal register, resubmittals, consultant routing | Planned |
 | AI access to project content | Planned |
 
