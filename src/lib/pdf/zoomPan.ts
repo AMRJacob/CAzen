@@ -276,39 +276,76 @@ export function usePageZoom(
 const MAX_CANVAS_PIXELS = 16_000_000
 
 /**
- * Draw a PDF page into a canvas at the size it is being shown, a moment after that size settles.
+ * The whole page is drawn somewhat finer than the screen needs at 100%, so the first step or two
+ * of zooming in is already sharp with nothing redrawn at all.
+ */
+const BASE_OVERSAMPLE = 1.5
+
+/** Device pixels per PDF point the whole-page canvas is drawn at. */
+function baseScaleOf(page: PDFPageProxy, cssWidth: number): number {
+  const base = page.getViewport({ scale: 1 })
+  const ratio = Math.min(window.devicePixelRatio || 1, 2)
+  const budget = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height))
+  return Math.min((cssWidth * ratio * BASE_OVERSAMPLE) / base.width, budget)
+}
+
+/**
+ * Draw a PDF page into a canvas, once, at the size it is shown at 100%.
  *
- * The cap matters more than it looks: a D-size sheet at 400% on a 3x screen asks for something
- * near 80 megapixels, and rather than being slow, Safari returns a blank canvas. Holding the area
- * down keeps the drawing on screen — at the cost of sharpness past the point where the cap bites,
- * which is what the detail layer below exists to give back.
+ * It is not drawn again when the zoom changes. It used to be, and that was the blink on a dense
+ * sheet: resizing a canvas empties it, so every zoom step wiped the drawing white and then spent
+ * a second or two — longer the more hatching there was — drawing all of it again, most of it off
+ * screen. The page drawn here is what is always underneath; sharpness when zoomed in is the
+ * detail layer's job, which draws only what is on screen and never takes the old picture away
+ * before the new one is ready.
+ *
+ * When the size does change (the window, the fold of a phone), the new picture is made off screen
+ * and swapped in whole. Only the very first drawing of a page goes straight to the screen, so a
+ * heavy sheet can be seen arriving rather than waited for.
  */
 export function usePageRender(
   canvas: React.RefObject<HTMLCanvasElement | null>,
   page: PDFPageProxy | null,
   cssWidth: number,
-  zoom: number,
   ready: boolean,
 ) {
+  const shown = useRef<PDFPageProxy | null>(null)
   useEffect(() => {
     if (!page || !ready || !canvas.current) return
     let task: { cancel: () => void } | null = null
+    let gone = false
+    const first = shown.current !== page
     const timer = window.setTimeout(() => {
-      const base = page.getViewport({ scale: 1 })
-      const ratio = Math.min(window.devicePixelRatio || 1, 2)
-      const wanted = (cssWidth * Math.max(1, zoom) * ratio) / base.width
-      const budget = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height))
-      const vp = page.getViewport({ scale: Math.min(wanted, budget) })
+      const vp = page.getViewport({ scale: baseScaleOf(page, cssWidth) })
       const c = canvas.current
       if (!c) return
-      c.width = Math.floor(vp.width)
-      c.height = Math.floor(vp.height)
-      const t = page.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport: vp })
+      const w = Math.floor(vp.width), h = Math.floor(vp.height)
+      if (!first && c.width === w && c.height === h) return
+      if (first) {
+        c.width = w
+        c.height = h
+        shown.current = page
+        const t = page.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport: vp })
+        task = t
+        t.promise.catch(() => { if (shown.current === page) shown.current = null })
+        return
+      }
+      const off = document.createElement('canvas')
+      off.width = w
+      off.height = h
+      const t = page.render({ canvas: off, canvasContext: off.getContext('2d')!, viewport: vp })
       task = t
-      t.promise.catch(() => {})
-    }, 140)
-    return () => { window.clearTimeout(timer); task?.cancel() }
-  }, [page, ready, cssWidth, zoom, canvas])
+      t.promise.then(() => {
+        if (gone || !canvas.current) return
+        // Resizing and drawing happen in the same task, so no frame ever shows it empty.
+        canvas.current.width = w
+        canvas.current.height = h
+        canvas.current.getContext('2d')!.drawImage(off, 0, 0)
+        off.width = off.height = 0
+      }).catch(() => {})
+    }, first ? 0 : 140)
+    return () => { gone = true; window.clearTimeout(timer); task?.cancel() }
+  }, [page, ready, cssWidth, canvas])
 }
 
 /**
@@ -339,6 +376,8 @@ export function useDetailRender(
     if (!page || !ready) return
     let task: { cancel: () => void } | null = null
     let drawnFor = ''
+    /** The view a detail is being drawn for but isn't on screen yet. */
+    let making = ''
     let settleAt = 0
     let last = ''
 
@@ -346,6 +385,8 @@ export function useDetailRender(
       const c = detail.current
       if (c) c.style.display = 'none'
       drawnFor = ''
+      making = ''
+      task?.cancel()
     }
 
     const tick = () => {
@@ -358,9 +399,8 @@ export function useDetailRender(
       const ratio = Math.min(window.devicePixelRatio || 1, 2)
       const pageScale = cssWidth / base.width            // CSS px per PDF point at 100%
       const wanted = pageScale * v.zoom * ratio          // device px per PDF point now
-      const budget = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height))
-      // Below the cap the whole page is already as sharp as the screen can show.
-      if (wanted <= budget * 1.02) { if (drawnFor) hide(); return }
+      // At or below what the whole page was drawn at, it is already as sharp as the screen shows.
+      if (wanted <= baseScaleOf(page, cssWidth) * 1.02) { if (drawnFor) hide(); return }
 
       const rect = area.getBoundingClientRect()
       const height = cssWidth / (base.width / base.height)
@@ -383,7 +423,7 @@ export function useDetailRender(
       const key = [Math.round(left), Math.round(top), Math.round(right), Math.round(bottom), v.zoom.toFixed(3)].join(',')
       const now = Date.now()
       if (key !== last) { last = key; settleAt = now; return }
-      if (key === drawnFor || now - settleAt < 150) return
+      if (key === drawnFor || key === making || now - settleAt < 90) return
 
       const scale = Math.min(wanted, Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, ((right - left) / pageScale) * ((bottom - top) / pageScale))))
       const vp = page.getViewport({ scale })
@@ -393,27 +433,40 @@ export function useDetailRender(
       const h = Math.floor(((bottom - top) / pageScale) * scale)
       if (w < 1 || h < 1) return
 
+      // Drawn off screen and put in place whole. The detail already showing — or the page
+      // beneath it — stays exactly as it is until then, so zooming never blanks anything: the
+      // picture is soft for a moment and then it is sharp.
       task?.cancel()
-      c.width = w
-      c.height = h
-      c.style.display = 'block'
-      c.style.left = `${left}px`
-      c.style.top = `${top}px`
-      c.style.width = `${right - left}px`
-      c.style.height = `${bottom - top}px`
-      drawnFor = key
+      making = key
+      const off = document.createElement('canvas')
+      off.width = w
+      off.height = h
       const t = page.render({
-        canvas: c,
-        canvasContext: c.getContext('2d')!,
+        canvas: off,
+        canvasContext: off.getContext('2d')!,
         viewport: vp,
         // Slide the page under the canvas so only this rectangle lands on it.
         transform: [1, 0, 0, 1, -sx, -sy],
       })
       task = t
-      t.promise.catch(() => { if (drawnFor === key) drawnFor = '' })
+      t.promise.then(() => {
+        if (making !== key || !detail.current) return
+        const d = detail.current
+        d.width = w
+        d.height = h
+        d.getContext('2d')!.drawImage(off, 0, 0)
+        d.style.left = `${left}px`
+        d.style.top = `${top}px`
+        d.style.width = `${right - left}px`
+        d.style.height = `${bottom - top}px`
+        d.style.display = 'block'
+        drawnFor = key
+        making = ''
+        off.width = off.height = 0
+      }).catch(() => { if (making === key) making = '' })
     }
 
-    const timer = window.setInterval(tick, 120)
+    const timer = window.setInterval(tick, 60)
     return () => { window.clearInterval(timer); task?.cancel(); hide() }
   }, [page, ready, cssWidth, detail, box, view])
 }

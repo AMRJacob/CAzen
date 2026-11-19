@@ -11,6 +11,30 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 11:20 CST
+
+**Zooming a dense sheet no longer blanks it.** Jacob reported C-101 going white for a second or
+two on every zoom. Cause, in `src/lib/pdf/zoomPan.ts`: `usePageRender` re-drew the *whole page*
+on every zoom change, and resizing a canvas empties it — so each step wiped the sheet and spent
+seconds redrawing all of it, hatching and all, even when the new size was identical to the old.
+Now the whole page is drawn once, at 1.5× what the screen needs at 100%, and not again for zoom.
+Sharpness when zoomed in is the detail layer's alone; it draws only what is on screen, off
+screen, and is swapped in whole, so the picture goes from soft to sharp and is never taken away.
+
+Measured with `checks/t_zoom.py` on a D-size sheet of 26,880 hatch lines at a quarter CPU speed,
+three zoom steps: the drawing was missing from the page for 2.1 s, 4.3 s and 1.9 s before, and
+0 ms after. Longest frozen frame 947 ms → 436 ms. Time until the zoomed view is sharp is about
+the same (1.5–1.8 s at that throttle) — that is pdf.js walking every hatch line, and is the next
+thing to attack if it still feels slow on the device (a pre-rasterised tile pyramid for dense
+sheets is the known answer). Not measured on C-101 itself or on the iPhone.
+
+**Markup: Delete, and no more keep/scratch switch.** Delete or Backspace removes the selected
+markup (Backspace used to go back a sheet). The bookmark toggle is gone; everything drawn is
+kept, and leaving markup asks once in a bar at the foot — Keep / Discard — with Undo after a
+discard or a delete (also Ctrl/Cmd+Z). `checks/t_markup.py`.
+
+---
+
 # Checkpoint — 2026-11-19, 10:35 CST
 
 Two requests from Jacob after the first check-in, both shipped to `main`.

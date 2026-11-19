@@ -33,7 +33,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra }: {
   const [error, setError] = useState<string | null>(null)
 
   const { zoom, width, height, fit, zoomAbout, view } = usePageZoom(scroller, pageEl, aspect)
-  usePageRender(canvas, page, width, zoom, !busy)
+  usePageRender(canvas, page, width, !busy)
   // Past the point where one canvas can hold the whole sheet sharply, the part on screen is
   // drawn again from the original vectors over the top of it.
   const detail = useRef<HTMLCanvasElement>(null)
