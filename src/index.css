@@ -2863,3 +2863,16 @@ a.ov-card:hover { border-color: var(--moss); }
   .nbd-box.d0:not(:has(.nbd-card, .nbd-box)) .nbd-box-head { padding-bottom: 9px; }
   .nbd-ghost { max-width: 70vw; font-size: 15px; }
 }
+
+/* ---------- Opened from the home screen: the page runs to the top of the glass ----------
+   With the status bar translucent the page is laid out from the very top, under the clock and
+   the camera. Ordinary pages start their content below that; the sheet viewer and the
+   notebooks already do. The clock is drawn in white by the phone, so the strip behind it is
+   shaded just enough for it to be read against a pale page. */
+@media (display-mode: standalone) {
+  .content { padding-top: calc(20px + env(safe-area-inset-top)); }
+  body::before {
+    content: ''; position: fixed; z-index: 500; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
+    background: linear-gradient(rgba(43, 45, 44, 0.62), rgba(43, 45, 44, 0.3)); pointer-events: none;
+  }
+}

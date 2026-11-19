@@ -15,7 +15,11 @@
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- "black-translucent": opened from the home screen, the page runs up under the clock and the
+         camera instead of stopping at a blank band beneath them. The page keeps its own content
+         clear of them with the safe-area insets (index.css). Read when the icon is added, so an
+         icon already on a home screen keeps the old setting until it is removed and added again. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>CAzen</title>
   </head>
   <body>

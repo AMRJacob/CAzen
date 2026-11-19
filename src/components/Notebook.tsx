@@ -19,7 +19,7 @@ import {
 } from '../lib/visits'
 import { addPerson, asLine, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
 import { metresBetween, placeAt, weatherAt } from '../lib/weather'
-import { readPref, writePref } from '../lib/prefs'
+import { readPref } from '../lib/prefs'
 import { useAuth } from '../lib/auth'
 import { useFirm } from '../lib/firm'
 import { message } from '../lib/errors'
@@ -42,7 +42,6 @@ import type { Project } from '../lib/types'
 /** What the writing lines look like, as on the sketch pads: ruled, squared, dotted or plain. */
 const PAPERS = ['lines', 'grid', 'dots', 'blank'] as const
 type Paper = typeof PAPERS[number]
-const PAPER_NAME: Record<Paper, string> = { lines: 'Ruled', grid: 'Grid', dots: 'Dots', blank: 'Blank' }
 const paperKey = (kind: VisitKind) => `cazen.pref.notebookPaper.${kind}`
 
 const BOOK: Record<VisitKind, { title: string; page: string; exportAs: string }> = {
@@ -72,8 +71,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   /** null is the contents page. */
   const [at, setAt] = useState<string | null>(null)
   const [turn, setTurn] = useState<'fwd' | 'back'>('fwd')
-  const [paper, setPaper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
-  const nextPaper = () => { const n = PAPERS[(PAPERS.indexOf(paper) + 1) % PAPERS.length]; setPaper(n); writePref(paperKey(kind), n) }
+  const [paper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
   const [error, setError] = useState<string | null>(null)
   /** A page about to be taken out, with the observations made on it. */
   const [tear, setTear] = useState<{ page: SiteVisit; own: Observation[] } | null>(null)
@@ -139,15 +137,14 @@ export function Notebook({ project, kind, pages, onPages }: {
     return () => window.removeEventListener('keydown', key)
   })
 
+  /** The open page's own ways of adding to itself, for the corner menu to call. */
+  const adds = useRef<PageAdds>({})
   const turnBar = (
     <BookMenu
-      count={page ? `${pages.length - i} of ${pages.length}` : null}
+      visit={kind === 'visit'} adds={adds}
       onNew={() => void newPage()}
-      paper={PAPER_NAME[paper]} onPaper={nextPaper}
-      onContents={page ? () => go(null, 'back') : undefined}
-      onBack={page ? () => go(i > 0 ? pages[i - 1].id : null, 'back') : undefined}
-      onForward={page && i < pages.length - 1 ? () => go(pages[i + 1].id, 'fwd') : undefined}
-      onClose={() => navigate('/project')} />
+      // Out of a page is back to the book's contents; the contents page has its own way out.
+      onClose={() => go(null, 'back')} />
   )
 
   return (
@@ -180,7 +177,7 @@ export function Notebook({ project, kind, pages, onPages }: {
           touched, and by itself after a few seconds. */}
       {error && <button className="notice error nb-error" onClick={() => setError(null)} title="Dismiss">{error}<span aria-hidden="true"> ×</span></button>}
       {page ? (
-        <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
+        <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar} adds={adds}
           until={nextStart(pages, page)}
           earlier={pages.filter((x) => x.id !== page.id).flatMap((x) => linesOf(x.names))}
           observations={observations} types={types}
@@ -259,17 +256,18 @@ export function Notebook({ project, kind, pages, onPages }: {
  * done from here, a new page first. It puts itself away once something is chosen, or after a
  * few seconds of not being used.
  */
-function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper, onPaper }: {
-  count: string | null
-  /** The paper in use, and the way to the next kind. */
-  paper: string
-  onPaper: () => void
+/** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
+interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void }
+
+function BookMenu({ onNew, onClose, adds, visit }: {
+  /** A site visit has photographs and observations; a meeting does not. */
+  visit: boolean
   onNew: () => void
-  onContents?: () => void
-  onBack?: () => void
-  onForward?: () => void
   onClose: () => void
+  /** The page's own ways of adding to itself, read when the menu is used. */
+  adds: React.RefObject<PageAdds>
 }) {
+
   const [open, setOpen] = useState(false)
   const timer = useRef<number | null>(null)
   const rest = useCallback((ms: number) => {
@@ -299,12 +297,13 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
         <Mark size={30} />
       </button>
       <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
+        {/* What can be added to this page, where the thumb already is. The parts a page does
+            not have — a meeting has no photographs or observations — are not offered. */}
+        {spot('Note', I(<><path d="M5 5h14v10H9l-4 4V5Z" /><path d="M9 9h6M9 12h4" /></>), () => adds.current?.note?.())}
+        {spot('Sketch', I(<><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4Z" /><path d="M14 7l3 3" /></>), () => adds.current?.sketch?.())}
+        {visit && spot('Photo', I(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7l1.5-3h5L16 7" /><circle cx="12" cy="13.5" r="3.2" /></>), () => adds.current?.photo?.())}
+        {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds.current?.observation?.())}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
-        {spot('Contents', I(<><path d="M5 6h14M5 12h14M5 18h9" /></>), onContents)}
-        {spot('Back', I(<path d="M15 6l-6 6 6 6" />), onBack, true)}
-        {count && <span className="nb-menu-count">{count}</span>}
-        {spot('Forward', I(<path d="M9 6l6 6-6 6" />), onForward, true)}
-        {spot(paper, I(<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M7 8h10M7 12h10M7 16h10" /></>), onPaper, true)}
         {spot('Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
       </div>
     </nav>
@@ -319,11 +318,12 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
  * photographs above the observations. A meeting's page is the same sheet without the right-hand
  * column. Everything is on the one page; nothing is behind a tab.
  */
-function Page({ project, page, turn, bar, until, earlier, observations, types, onObserved, onChanged, onTear, onTrouble }: {
+function Page({ project, page, turn, bar, adds, until, earlier, observations, types, onObserved, onChanged, onTear, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
   bar: React.ReactNode
+  adds: React.RefObject<PageAdds>
   /** When the next page of this book was started, if there is one: what was seen after that is its. */
   until: number | null
   /** Attendee lines from the book's other pages. */
@@ -433,6 +433,19 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
     void lookUpWeather()
   }, [visit, page.weather, lookUpWeather])
 
+  // What the corner menu can add to this page. Set after every render, so the menu always
+  // calls the page as it is now; cleared when the page is put away.
+  const root = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    adds.current = {
+      note: () => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() },
+      sketch: () => { void draw() },
+      photo: visit ? () => camera.current?.click() : undefined,
+      observation: visit ? () => setObserving('new') : undefined,
+    }
+  })
+  useEffect(() => () => { adds.current = {} }, [adds])
+
   async function draw() {
     try {
       let p = pad
@@ -528,7 +541,7 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
   const at = viewing ? page.photos.indexOf(viewing.path) : -1
 
   return (
-    <article className={`nb-paper nb-page nb-turn-${turn}`}>
+    <article ref={root} className={`nb-paper nb-page nb-turn-${turn}`}>
       <section className="nb-z nb-z-head">
         <h1>{longDay(page.visited_on)}</h1>
         <div className="nb-head-fields">

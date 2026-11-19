@@ -11,6 +11,33 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:35 CST
+
+**A notebook page's corner menu adds to the page** (Jacob, 16:33: the sketch, photo and
+observation buttons must be obvious on a phone; use the CA menu — take out the browsing
+arrows, the ruled-sheet button and Contents, and put in the adds). The menu on a page is now
+**Note, Sketch, Photo, Observation, New page, Close**; a meeting page has Note, Sketch, New
+page, Close. Note puts the cursor in the note box; Sketch opens the pad; Photo opens the
+camera; Observation opens the observation form. **Close on a page now goes to the book's
+contents** (it left the notebook altogether); the contents page's own × leaves the book. That
+is mine: with Contents taken out there was otherwise no way from a page to the other pages
+but the arrow keys. The paper setting (ruled / grid / dots / blank) has no button any more
+and stays as each device last had it. Driven on a phone: each of the four adds does what it
+says; the bar fits a 402 px screen.
+
+**Opened from the home screen, the page runs under the camera** (Jacob, 16:29 and 16:34: the
+outer screen of the iPhone Duo keeps a margin under the camera; he uses Chrome and opens the
+app from the home screen). The home-screen status bar setting is changed from "default" to
+"black-translucent", which is what lets a page lay out from the top of the glass; ordinary
+pages start their content below the clock, and a soft shade sits behind the clock because the
+phone draws it in white. **None of this could be seen from here**: no Duo, no iPhone. It
+applies to every iPhone, not the Duo alone. The setting is read when the icon is added, so
+**it changes nothing until the icon is removed from the home screen and added again**. Whether
+an icon added from Chrome on iOS honours this setting the way one added from Safari does was
+not looked up.
+
+---
+
 # Checkpoint — 2026-11-19, 16:30 CST
 
 **The notes board on a phone: topics are bubbles, notes are full width** (Jacob, 16:28: he
