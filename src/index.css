@@ -1523,8 +1523,12 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   -webkit-user-select: none; user-select: none;
 }
 .pad-ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.ground-line { stroke: #e3eaf0; stroke-width: 1; fill: none; }
-.ground-dot { fill: #d2dde7; }
+/* Ruled-paper blue, at full strength. The slider scales the opacity down from here, so this
+   has to be a line somebody can actually see — it was #e3eaf0, which is paper with a hint of
+   blue in it, and no amount of opacity makes almost-white visible on almost-white. It stays
+   well lighter than ink, so writing always reads over it. */
+.ground-line { stroke: #5d89b0; stroke-width: 1; fill: none; }
+.ground-dot { fill: #4e7da6; }
 .pad-hl path { opacity: 0.45; }
 
 .pad-texts { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
