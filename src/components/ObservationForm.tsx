@@ -1,4 +1,7 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { SheetSpot } from './SheetSpot'
+import { byTrade, colourOf, listCustomTags, type Tag } from '../lib/tags'
+import { useFirm } from '../lib/firm'
 import { Photos } from './Photos'
 import { today } from '../lib/dates'
 import { message } from '../lib/errors'
@@ -51,6 +54,18 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
   const [dueOn, setDueOn] = useState(existing?.due_on ?? '')
   const [photos, setPhotos] = useState<string[]>(existing?.photos ?? [])
   const [more, setMore] = useState(!!(existing?.area || existing?.trade || existing?.due_on))
+  // Where on the drawings it is: given by the sheet it was raised from, already on the
+  // observation, or chosen here with "Tag to drawing".
+  const [spot, setSpot] = useState<{ sheetId: string; revisionId: string; region: { x: number; y: number }; number?: string } | null>(
+    pin ?? (existing?.sheet_id && existing.region ? { sheetId: existing.sheet_id, revisionId: existing.revision_id ?? '', region: existing.region } : null))
+  const [spotting, setSpotting] = useState(false)
+  const [tagging, setTagging] = useState(false)
+  const [tagTrade, setTagTrade] = useState<string | null>(null)
+  const { firm } = useFirm()
+  const [custom, setCustom] = useState<Tag[]>([])
+  useEffect(() => { if (firm) listCustomTags(firm.id).then(setCustom).catch(() => setCustom([])) }, [firm])
+  const groups = useMemo(() => byTrade(custom), [custom])
+  const tradeColour = colourOf(trade, custom)
   const [busy, setBusy] = useState(false)
   const [kept, setKept] = useState(0)
   const titleBox = useRef<HTMLInputElement | null>(null)
@@ -66,6 +81,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
         type_id: typeId, title: title.trim(), detail: detail.trim() || null,
         area: area.trim() || null, trade: trade.trim() || null,
         status, observed_on: observedOn, due_on: dueOn || null, photos,
+        sheet_id: spot?.sheetId ?? null, revision_id: spot?.revisionId || null, region: spot?.region ?? null,
       }
       if (existing) {
         onSaved(await editObservation(existing, patch))
@@ -81,9 +97,9 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
           observedOn,
           dueOn: patch.due_on,
           photos,
-          sheetId: pin?.sheetId ?? null,
-          revisionId: pin?.revisionId ?? null,
-          region: pin?.region ?? null,
+          sheetId: spot?.sheetId ?? null,
+          revisionId: spot?.revisionId || null,
+          region: spot?.region ?? null,
         })
         await saveObservation(row)
         if (typeId) writePref(LAST_TYPE, typeId)
@@ -114,6 +130,47 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); void save(!existing && !pin && kept > 0) } }}
           placeholder="Sealant missing at the head of the storefront" />
       </label>
+
+      {/* What kind of thing it is, by the trade that owns it. A tag names the observation when it
+          has no name yet, and says whose it is either way. */}
+      <div className="obs-tagrow">
+        <button type="button" className="chip obs-tag-open" onClick={() => setTagging(!tagging)}>
+          {tradeColour && <span className="tag-dot" style={{ background: tradeColour }} />}
+          {trade || 'Tag'}
+        </button>
+        <button type="button" className="chip" onClick={() => setSpotting(true)}>
+          {spot ? `On ${spot.number ?? 'a drawing'} — move` : 'Tag to drawing'}
+        </button>
+        {spot && !pin && <button type="button" className="link" onClick={() => setSpot(null)}>Take off the drawing</button>}
+      </div>
+      {tagging && (
+        <div className="obs-tags">
+          <div className="obs-tag-trades">
+            {groups.map((g) => (
+              <button key={g.trade} type="button" className={`chip${(tagTrade ?? trade) === g.trade ? ' on' : ''}`} onClick={() => setTagTrade(g.trade)}>
+                <span className="tag-dot" style={{ background: g.colour }} />{g.trade}
+              </button>
+            ))}
+          </div>
+          {groups.filter((g) => g.trade === (tagTrade ?? trade)).map((g) => (
+            <div key={g.trade} className="obs-tag-issues">
+              {g.tags.map((t) => (
+                <button key={t.label} type="button" className="chip" style={{ borderColor: g.colour }}
+                  onClick={() => {
+                    setTrade(g.trade)
+                    setMore(true)
+                    // The tag is what was seen until somebody says more; it never overwrites what was typed.
+                    if (!title.trim()) setTitle(t.label)
+                    else if (!title.toLowerCase().includes(t.label.toLowerCase())) setTitle(`${t.label} — ${title.trim()}`)
+                    setTagging(false)
+                    titleBox.current?.focus()
+                  }}>{t.label}</button>
+              ))}
+              <button type="button" className="chip" onClick={() => { setTrade(g.trade); setMore(true); setTagging(false) }}>Just {g.trade}</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <label className="stack">More, if it needs it
         <textarea rows={3} value={detail} onChange={(e) => setDetail(e.target.value)} />
@@ -153,6 +210,10 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
       )}
 
       {pin && <p className="muted small">Pinned to the sheet it was raised from.</p>}
+      {spotting && (
+        <SheetSpot project={project} start={spot ? { sheetId: spot.sheetId, region: spot.region } : null}
+          onPick={(s) => { setSpot(s); setSpotting(false) }} onClose={() => setSpotting(false)} />
+      )}
 
       <div className="actions">
         <button className="primary" disabled={!title.trim() || busy} onClick={() => void save()}>

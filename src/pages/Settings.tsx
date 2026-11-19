@@ -1,3 +1,4 @@
+import { addCustomTag, byTrade, listCustomTags, removeCustomTag, TagsNotSetUp, type Tag } from '../lib/tags'
 import { PageTitle } from '../components/PageTitle'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -192,6 +193,8 @@ export default function Settings() {
         <Link className="primary-lite" to="/templates">Open form templates</Link>
       </div>
 
+      <TagSettings firmId={firm.id} />
+
       <div className="settings-grid drawings-settings">
         <div className="card">
           <h2>Sheet order</h2>
@@ -382,6 +385,58 @@ function StorageCard({ firm, isAdmin, onSaved }: { firm: Firm; isAdmin: boolean;
           {saved && <span className="muted small">{saved}</span>}
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * The issue tags observations are raised under: the built-in ones by trade, and the firm's own.
+ * A firm's tag can sit under an existing trade or bring a new trade, with its own colour.
+ */
+function TagSettings({ firmId }: { firmId: string }) {
+  const [custom, setCustom] = useState<Tag[]>([])
+  const [missing, setMissing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [f, setF] = useState({ trade: '', label: '', colour: '#3a6ea5' })
+  const load = () => listCustomTags(firmId).then((t) => { setCustom(t); setMissing(false) })
+    .catch((e) => { if (e instanceof TagsNotSetUp) setMissing(true); else setError((e as Error).message) })
+  useEffect(() => { void load() }, [firmId])   // eslint-disable-line react-hooks/exhaustive-deps
+  const groups = byTrade(custom)
+  const known = groups.find((g) => g.trade.toLowerCase() === f.trade.trim().toLowerCase())
+
+  return (
+    <div className="card">
+      <h2>Observation tags</h2>
+      <p className="muted small">The kinds of issue an observation can be tagged with, by trade. A trade’s colour is the colour of its pins on the drawings. Yours are added to the built-in ones.</p>
+      <div className="tag-groups">
+        {groups.map((g) => (
+          <div key={g.trade} className="tag-group">
+            <span className="tag-group-name"><span className="tag-dot" style={{ background: g.colour }} />{g.trade}</span>
+            {g.tags.map((t) => (
+              <span key={t.label} className={`tag${t.own ? ' tag-own' : ''}`}>{t.label}
+                {t.own && <button className="link" aria-label={`Remove ${t.label}`} onClick={() => removeCustomTag(t.own!).then(load).catch((e) => setError((e as Error).message))}>×</button>}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+      {missing ? (
+        <p className="small notice warn">Adding your own tags needs one table that is not in the database yet (migration 0036). The built-in tags work without it.</p>
+      ) : (
+        <form className="inline-form tag-new" onSubmit={async (e) => {
+          e.preventDefault()
+          try { await addCustomTag(firmId, { ...f, colour: known ? null : f.colour }); setF({ ...f, label: '' }); await load() }
+          catch (err) { if (err instanceof TagsNotSetUp) setMissing(true); else setError((err as Error).message) }
+        }}>
+          <input value={f.trade} onChange={(e) => setF({ ...f, trade: e.target.value })} placeholder="Trade" list="tag-trades" aria-label="Trade" />
+          <datalist id="tag-trades">{groups.map((g) => <option key={g.trade} value={g.trade} />)}</datalist>
+          <input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="Tag, e.g. Firestopping missing" aria-label="Tag" />
+          {!known && f.trade.trim() && <input type="color" value={f.colour} onChange={(e) => setF({ ...f, colour: e.target.value })} aria-label="Colour for this trade" />}
+          <button disabled={!f.trade.trim() || !f.label.trim()}>Add tag</button>
+        </form>
+      )}
+      {error && <div className="notice error">{error}</div>}
     </div>
   )
 }

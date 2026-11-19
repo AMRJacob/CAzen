@@ -1,3 +1,4 @@
+import { colourOf } from '../lib/tags'
 import { useCallback, useEffect, useState } from 'react'
 import { ObservationForm } from './ObservationForm'
 import { listObservations, listTypes, nameOf, watchObservations, type Observation, type ObservationType } from '../lib/observations'
@@ -56,9 +57,9 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
       )}
 
       {all.map((o) => (
-        <button key={o.id} className={`obs-pin obs-pin-${o.status}`}
-          style={{ left: `${(o.region?.x ?? 0) * 100}%`, top: `${(o.region?.y ?? 0) * 100}%` }}
-          title={o.title}
+        <button key={o.id} className={`obs-pin obs-pin-${o.status}${o.trade ? ' obs-pin-trade' : ''}`}
+          style={{ left: `${(o.region?.x ?? 0) * 100}%`, top: `${(o.region?.y ?? 0) * 100}%`, ...(colourOf(o.trade) ? { background: colourOf(o.trade)! } : {}) }}
+          title={[o.trade, o.title].filter(Boolean).join(' — ')}
           onClick={() => setOpen(o)}>
           <span>{nameOf(o, types)}</span>
         </button>

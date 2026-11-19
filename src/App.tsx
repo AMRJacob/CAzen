@@ -6,6 +6,7 @@ import { FirmProvider } from './lib/firm'
 import { ProjectProvider, useProject } from './lib/project'
 import { Logo } from './components/Logo'
 import { PhoneNav } from './components/PhoneNav'
+import { Shelf } from './components/Shelf'
 import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import { useFullscreen } from './lib/fullscreen'
@@ -114,7 +115,8 @@ function Shell({ offline = false }: { offline?: boolean }) {
           {nav.map((group) => (
             <div key={group.label} className="nav-group">
               <span className="nav-group-label">{group.label}</span>
-              {group.items.map((n) => (
+              {/* The notebooks are not three more links: they are the books, on their table. */}
+              {group.label === 'Notebooks' ? <Shelf small /> : group.items.map((n) => (
                 <NavLink key={n.to} to={n.to}>{n.label}</NavLink>
               ))}
             </div>

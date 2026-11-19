@@ -672,33 +672,3 @@ function Names({ projectId, names, onChange, onTrouble }: {
     </section>
   )
 }
-
-// ---------- The table ----------
-
-/**
- * The way in: a table top with the three books lying on it, one above the other — field notes,
- * meeting notes, observations — each its own colour with its initials on the cover.
- */
-export function Shelf({ project }: { project: Project | null }) {
-  const navigate = useNavigate()
-  const books: { mono: string; name: string; to: string; tone: string; line: string }[] = [
-    { mono: 'Fn', name: 'Field notes', to: '/field-notes/reports', tone: 'fn', line: 'Site visits' },
-    { mono: 'Mn', name: 'Meeting notes', to: '/field-notes/meetings', tone: 'mn', line: 'Meetings' },
-    { mono: 'Ob', name: 'Observations', to: '/field-notes/observations', tone: 'ob', line: 'Everything observed, and the punch list' },
-  ]
-  return (
-    <div className="nb-table" role="list" aria-label="Notebooks">
-      {books.map((b) => (
-        <button key={b.mono} role="listitem" className={`nb-tome nb-tome-${b.tone}`} disabled={!project}
-          onClick={() => navigate(b.to)} aria-label={`Open ${b.name}`}>
-          <span className="nb-tome-band" aria-hidden="true" />
-          <span className="nb-tome-mono" aria-hidden="true">{b.mono}</span>
-          <span className="nb-tome-text">
-            <span className="nb-tome-name">{b.name}</span>
-            <span className="nb-tome-line">{project ? `${project.number} · ${b.line}` : 'Choose a project'}</span>
-          </span>
-        </button>
-      ))}
-    </div>
-  )
-}

@@ -13,6 +13,7 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_markup.py        # Delete, undo, and the question on leaving markup
     python3 t_zoom.py 4        # zoom a hatch-heavy sheet at a quarter CPU speed: how long the drawing is gone, time to sharp
     python3 t_pr.py            # price a proposal request, decide it, roll it into a change order
+    python3 t_tag.py           # issue tags by trade, and tagging an observation to a drawing
     python3 t_sched.py         # read a scanned schedule (scan.pdf), tie it to pay lines, keep it
     node --experimental-strip-types notes.test.ts      # where a typed note is filed
     node --experimental-strip-types schedule.test.ts   # the schedule reader and the tie suggestions

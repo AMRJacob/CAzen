@@ -13,7 +13,8 @@ import {
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
-import { Notebook, Shelf } from '../components/Notebook'
+import { Notebook } from '../components/Notebook'
+import { Shelf } from '../components/Shelf'
 import { listVisits, type SiteVisit, type VisitKind } from '../lib/visits'
 import { Photos } from '../components/Photos'
 import { today } from '../lib/dates'
@@ -72,7 +73,7 @@ function Books() {
         {current ? <>{current.number} {current.name} · </> : null}
         Open a book and turn to today’s page.
       </p>
-      <Shelf project={current} />
+      <Shelf job={current?.number} />
     </section>
   )
 }

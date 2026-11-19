@@ -11,6 +11,37 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:50 CST
+
+**The notebooks are the sidebar menu.** Jacob marked up the Notebooks page: he does not need the
+page, the table with the three books should be the menu. `Shelf` moved to its own small file
+(`src/components/Shelf.tsx`, so the lazy notebook chunk is not pulled into the first screen) and
+is rendered, small, in place of the three text links; the open book is lifted. The page at
+`/field-notes` is still what the phone's menu opens, since a phone has no sidebar.
+
+**Observations can be tagged to a drawing from the form.** *Tag to drawing* in `ObservationForm`
+opens `SheetSpot` (`src/components/SheetSpot.tsx`): the project's sheets, searchable; then the
+sheet, touched once where it was seen; *Tag it here*. It writes the same `sheet_id`,
+`revision_id` and `region` a pin placed on the sheet does, so it shows as a pin in the viewer.
+It can be moved or taken off.
+
+**Issue tags by trade.** `src/lib/tags.ts`: seventeen trades, each with a fixed colour and a few
+built-in issues (Glazing: sealant missing, glass damaged, hardware adjust…). Picking one sets the
+observation's trade and names it if it has no name. A pin wears its trade's colour; a closed one
+is faded. No new column: the tag is the trade plus the title.
+
+**Custom tags in Settings** — built, waiting on the database. Settings → Observation tags lists
+the built-in tags and adds the firm's own (trade, label, and a colour for a new trade), kept in
+`observation_tags`. **Migration 0036 is not applied**: the confirmation was cancelled by the
+client half a second after it was sent, twice. Until it is, the settings card says so and the
+built-in tags work.
+
+Verified with `checks/t_tag.py`: the three books in the sidebar; tag Glazing → Sealant missing;
+tag to A-101 at a touched point; saved with trade, sheet and region; the pin appears on the sheet
+at that point in the glazing colour; Settings shows the seventeen trades and the note.
+
+---
+
 # Checkpoint — 2026-11-19, 14:15 CST
 
 **The still picture of a pad was wrong in two ways, both since the ink engine.** Jacob sent the
