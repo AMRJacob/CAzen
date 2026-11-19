@@ -36,6 +36,11 @@ Activities table is gone.)
   is paid under — it is what lets the page compare what the schedule says is done with what
   has been billed. In the chart it is now called *Pay lines* and lives in the row's editor.
 
+**Re-read is now a button.** Jacob could not find it: it only appeared after Ctrl-clicking
+rows. *Re-read titles and dates* sits on the Drawings toolbar beside *Sheet order*; it turns on
+a mode where a plain click selects a sheet (Shift-click a run, *Select all*), then *Re-read
+their title and date*. Ctrl-click and right-click still work without it.
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

@@ -86,6 +86,8 @@ export default function Documents() {
   const lastPick = useRef<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [rereading, setRereading] = useState(false)
+  /** In this mode a plain click on a sheet selects it instead of opening it. */
+  const [selecting, setSelecting] = useState(false)
   function pick(id: string, range: boolean, inOrder: string[]) {
     setPicked((was) => {
       const next = new Set(was)
@@ -217,6 +219,11 @@ export default function Documents() {
             </label>
             {asOf && <button onClick={() => setAsOf('')}>Show current</button>}
             <button onClick={() => setOrdering(!ordering)}>{ordering ? 'Close sheet order' : 'Sheet order'}</button>
+            {/* The way in to anything done to several sheets at once. Ctrl- and Shift-click do the
+                same without it, but nobody finds a thing that only appears after they have used it. */}
+            <button className={selecting ? 'on' : ''} aria-pressed={selecting} onClick={() => { setSelecting(!selecting); if (selecting) setPicked(new Set()) }}>
+              {selecting ? 'Done selecting' : 'Re-read titles and dates'}
+            </button>
           </div>
 
           {ordering && (
@@ -279,11 +286,13 @@ export default function Documents() {
             <div className="card muted">No drawings yet. Upload the bid or permit set to start.</div>
           ) : (
             <>
-            {picked.size > 0 && (
+            {(picked.size > 0 || selecting) && (
               <div className="pick-bar">
-                <strong>{picked.size} {picked.size === 1 ? 'sheet' : 'sheets'} selected</strong>
-                <button className="primary-lite" onClick={() => setRereading(true)}>Re-read titles and dates</button>
-                <button className="link" onClick={() => setPicked(new Set())}>Clear</button>
+                <strong>{picked.size ? `${picked.size} ${picked.size === 1 ? 'sheet' : 'sheets'} selected` : 'Click the sheets to re-read'}</strong>
+                {selecting && <span className="muted small">A click selects; Shift-click takes everything between.</span>}
+                <button className="link" onClick={() => setPicked(new Set(groups.flatMap((g) => g.items.map((i) => i.sheet_id))))}>Select all {groups.reduce((n, g) => n + g.items.length, 0)}</button>
+                {picked.size > 0 && <button className="primary" onClick={() => setRereading(true)}>Re-read {picked.size === 1 ? 'its' : 'their'} title and date</button>}
+                <button className="link" onClick={() => { setPicked(new Set()); setSelecting(false) }}>{selecting ? 'Cancel' : 'Clear'}</button>
               </div>
             )}
             <table className="register sizable" ref={cols.table}>
@@ -306,7 +315,7 @@ export default function Documents() {
                   <Fragment key={g.key}>
                     <tr className="group"><td colSpan={7}>{g.label}</td></tr>
                     {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} order={order} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })}
-                      picked={picked.has(s.sheet_id)} anyPicked={picked.size > 0}
+                      picked={picked.has(s.sheet_id)} anyPicked={picked.size > 0} selecting={selecting}
                       onPick={(range) => pick(s.sheet_id, range, groups.flatMap((x) => x.items.map((i) => i.sheet_id)))}
                       onMenu={(x, y) => setMenu({ x, y })} />)}
                   </Fragment>
@@ -328,7 +337,7 @@ export default function Documents() {
       )}
       {rereading && current && firm && (
         <SheetReread project={current} firmId={firm.id} sheets={sheets.filter((s) => picked.has(s.sheet_id))}
-          onDone={(changed) => { setRereading(false); if (changed) { setPicked(new Set()); load() } }} />
+          onDone={(changed) => { setRereading(false); if (changed) { setPicked(new Set()); setSelecting(false); load() } }} />
       )}
       {viewing && (
         <SheetViewer project={current} sheets={viewSheets} start={viewing.start} highlight={viewing.highlight} onClose={() => setViewing(null)} onSheetChanged={load} />
@@ -424,9 +433,9 @@ function DownloadSet({ project, order, label, date, gather, className }: {
   )
 }
 
-function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, anyPicked, onPick, onMenu }: {
+function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, anyPicked, selecting, onPick, onMenu }: {
   sheet: CurrentSheet; project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void; onOpen: (v: ViewSheet) => void
-  picked: boolean; anyPicked: boolean; onPick: (range: boolean) => void; onMenu: (x: number, y: number) => void
+  picked: boolean; anyPicked: boolean; selecting: boolean; onPick: (range: boolean) => void; onMenu: (x: number, y: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
@@ -482,7 +491,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
       <tr className={`opens${editing ? ' editing' : ''}${picked ? ' picked' : ''}`} tabIndex={0} role="button" aria-label={`Open ${sheet.number}`} aria-selected={picked}
         onClick={(e) => {
           if (editing || (e.target as HTMLElement).closest('button, a')) return
-          if (e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onPick(e.shiftKey); return }
+          if (selecting || e.ctrlKey || e.metaKey || e.shiftKey) { e.preventDefault(); onPick(e.shiftKey); return }
           onOpen(toView(sheet))
         }}
         onContextMenu={(e) => {
