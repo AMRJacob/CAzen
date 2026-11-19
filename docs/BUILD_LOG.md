@@ -11,6 +11,35 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:30 CST
+
+**The notes board on a phone: topics are bubbles, notes are full width** (Jacob, 16:28: he
+likes the dragging and its speed; the text is cramped on an ordinary phone). Below 620 px:
+
+- The topics are a row of **bubbles** under the tray, each with a count of what is in it. A
+  card is dropped on a bubble to file it — a short drag to a large target. Subcategories that
+  hold something get a smaller, dashed bubble. Tapping a bubble scrolls to its notes.
+- The bubbles stay at the top of the screen while the notes section is on it (`position:
+  sticky`), so a card picked up far down the list still has every topic within reach.
+- Under them the notes are listed by topic in **one column at full width**: a card is 302 px
+  of a 402 px screen where it was about 150. Topic names are small capitals; a topic with
+  nothing in it is one line.
+- The desk layout is unchanged (a grid of boxes, no bubbles).
+- `checks/t_board.py`, phone, by touch: two cards dropped on the Structure and Envelope
+  bubbles file there and the bubbles then read 1 each.
+
+**Asked, not changed — the outer screen of the iPhone Duo** (16:29: the app leaves the margin
+under the camera open; can it be fixed for this phone). The page already asks for the whole
+screen (`viewport-fit=cover`) and keeps its controls clear of the camera with the safe-area
+insets. As a home-screen app it is set to the "default" status bar, which keeps a band at the
+top for the clock; "black-translucent" would let the page run under it, at the cost of white
+status text over a light page on every iPhone, and takes effect only after the icon is
+removed and added again. Which of these he is seeing — Safari or the home-screen app, and
+which way up — is not known, and there is no way from here to see that screen. Apple's
+guidance for the Duo was found but not read in detail. Nothing was changed.
+
+---
+
 # Checkpoint — 2026-11-19, 16:23 CST
 
 **A page's notes are cards and boxes** (Jacob, 16:11: forget tagging while typing and the

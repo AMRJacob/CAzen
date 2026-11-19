@@ -2831,3 +2831,35 @@ a.ov-card:hover { border-color: var(--moss); }
   .nb-page .nbd-card { background: #fffdf5; }
   .nb-page .nb-pad { border-radius: 10px; }
 }
+
+/* ---------- The notes board on a phone ----------
+   Two columns of boxes left each note a few words wide. On a phone the topics are a row of
+   bubbles to drop onto, and the notes are listed under their topics at the full width. */
+.nbd-bubbles { display: none; }
+@media (max-width: 619px) {
+  .nbd-bubbles { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nbd-bubble { margin: 0; padding: 8px 13px; border-radius: 999px; border: 1.5px solid #c9d2cb; background: #fff; color: var(--ink); font-size: 14px; font-weight: 500; line-height: 1.2; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; touch-action: manipulation; }
+  .nbd-bubble.sub { font-weight: 400; background: #f3f6f2; border-style: dashed; }
+  .nbd-bubble-n { font-size: 12px; font-weight: 500; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--moss-soft); color: #3f5a48; display: inline-grid; place-items: center; }
+  .nbd-bubble.over { background: var(--moss); border-color: var(--moss); color: #fff; transform: scale(1.08); box-shadow: none; }
+  .nbd-bubble.over .nbd-bubble-n { background: rgba(255, 255, 255, 0.25); color: #fff; }
+  /* They stay at the top of the screen for as long as the notes are on it, so a card picked up
+     far down the list still has every topic within reach — and nothing jumps when it is. */
+  .nbd-bubbles { position: sticky; top: 0; z-index: 6; margin: 0 -6px; padding: 8px 6px; background: rgba(255, 255, 255, 0.96); border-radius: 12px; }
+  .nbd.dragging .nbd-bubbles { box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16); }
+  .nbd.dragging .nbd-bubble { border-color: var(--moss); }
+
+  .nbd-board { grid-template-columns: 1fr; gap: 10px; }
+  .nbd-tray { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .nbd-tray .nbd-card { max-width: none; }
+  .nbd-card { padding: 11px 6px 11px 13px; }
+  .nbd-card-text { font-size: 15.5px; line-height: 1.4; }
+  .nbd-box-head { padding: 9px 6px 4px 13px; }
+  .nbd-box-name { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; font-weight: 600; color: #5f6660; }
+  .nbd-box.d1 .nbd-box-name, .nbd-box.d2 .nbd-box-name { font-size: 11.5px; }
+  .nbd-box-in { padding: 4px 8px 9px; gap: 6px; }
+  /* An empty topic is one line, not a box waiting. */
+  .nbd-box.d0:not(:has(.nbd-card, .nbd-box)) .nbd-box-in { display: none; }
+  .nbd-box.d0:not(:has(.nbd-card, .nbd-box)) .nbd-box-head { padding-bottom: 9px; }
+  .nbd-ghost { max-width: 70vw; font-size: 15px; }
+}

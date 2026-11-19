@@ -13,6 +13,8 @@ import { addBox, addLoose, LOOSE, looseAt, move, readBoard, remove, rename, writ
  */
 
 const key = (p: Path) => p.join('.')
+/** How many notes are in a topic, at any depth. */
+const count = (n: Note): number => n.kids.reduce((t, k) => t + (k.kids.length ? count(k) : 1), 0)
 const pathOf = (s: string | undefined | null): Path | null => (s == null ? null : s === '' ? [] : s.split('.').map(Number))
 
 export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next: string) => void }) {
@@ -114,7 +116,7 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
     // A line with lines under it is a box; at the top of the board every line is one.
     if (node.kids.length || depth === 0 || fresh.includes(`${k}:${node.text}`) || (editing === k && fresh.includes(`${k}:`))) {
       return (
-        <div key={k} className={`nbd-box d${Math.min(depth, 2)}${held?.over === k ? ' over' : ''}${lifted ? ' lifted' : ''}`} data-drop={k}>
+        <div key={k} className={`nbd-box d${Math.min(depth, 2)}${held?.over === k ? ' over' : ''}${lifted ? ' lifted' : ''}`} data-drop={k} data-box={k}>
           <div className="nbd-box-head" {...grab(path, node.text)}>
             {words(path, node, "nbd-box-name")}
             <button className="nbd-x" aria-label={`Add a subcategory to ${node.text}`} title="Add a subcategory" onClick={() => { const at = key([...path, node.kids.length]); set(addBox(board, path, 'New category')); setFresh((f) => [...f, `${at}:`]); setEditing(at) }}>+</button>
@@ -147,6 +149,25 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       <div className={`nbd-tray${held?.over === 'tray' ? ' over' : ''}${tray.length ? '' : ' bare'}`} data-drop="tray">
         {tray.length ? tray.map((n, i) => item(n, [loose, i], 1))
           : <span className="nbd-empty">{held ? 'Drop here to take it back out' : 'What you type lands here'}</span>}
+      </div>
+
+      {/* On a phone: every topic as a small bubble, close to hand. A card is dropped on a
+          bubble to file it — a short drag to a big target — and the notes themselves are
+          listed below at full width, where they can be read. While a card is in the hand the
+          bubbles stay at the top of the screen however far the page has been scrolled. */}
+      <div className="nbd-bubbles" aria-label="Topics">
+        {board.flatMap((n, i) => (i === loose ? [] : [
+          <button key={key([i])} type="button" className={`nbd-bubble${held?.over === key([i]) ? ' over' : ''}`} data-drop={key([i])}
+            onClick={() => root.current?.querySelector(`[data-box="${key([i])}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            {n.text}{count(n) > 0 && <span className="nbd-bubble-n">{count(n)}</span>}
+          </button>,
+          ...n.kids.flatMap((kid, j) => (kid.kids.length ? [
+            <button key={key([i, j])} type="button" className={`nbd-bubble sub${held?.over === key([i, j]) ? ' over' : ''}`} data-drop={key([i, j])}
+              onClick={() => root.current?.querySelector(`[data-box="${key([i, j])}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+              {kid.text}<span className="nbd-bubble-n">{count(kid)}</span>
+            </button>,
+          ] : [])),
+        ]))}
       </div>
 
       <div className={`nbd-board${held?.over === '' ? ' over' : ''}`} data-drop="">

@@ -29,8 +29,14 @@ def run(name,kw,touch):
     print(name,'— boxes:',pg.locator('.nbd-box.d0 > .nbd-box-head .nbd-box-name').all_inner_texts(),'| outline box on the page:',pg.locator('.nb-z-notes textarea').count())
     for t in ('Anchor bolts out of plumb at grid C','Sealant missing at storefront'): pg.fill('.nbd-type input',t); pg.keyboard.press('Enter'); pg.wait_for_timeout(250)
     print('  typed, in the tray:',pg.locator('.nbd-tray .nbd-card-text').all_inner_texts())
-    drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-box.d0:has(> .nbd-box-head :text("Structure")) .nbd-box-in')
-    drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-box.d0:has(> .nbd-box-head :text("Envelope")) .nbd-box-in')
+    if touch:
+        print('  bubbles:',[t.replace('\n',' ') for t in pg.locator('.nbd-bubble').all_inner_texts()],'| card is',round(pg.locator('.nbd-tray .nbd-card').first.bounding_box()['width']),'px wide of 402')
+        drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-bubble:has-text("Structure")'); drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-bubble:has-text("Envelope")')
+        print('  after: bubbles',[t.replace('\n',' ') for t in pg.locator('.nbd-bubble').all_inner_texts()],'| filed card width',round(pg.locator('.nbd-board .nbd-card').first.bounding_box()['width']))
+    else:
+        drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-box.d0:has(> .nbd-box-head :text("Structure")) .nbd-box-in')
+        drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-box.d0:has(> .nbd-box-head :text("Envelope")) .nbd-box-in')
+    pg.locator('.nbd').scroll_into_view_if_needed(); pg.screenshot(path='board_%s_b.png'%name)
     print('  dragged into Structure and Envelope → saved outline:',repr(saved[-1]) if saved else None, '| tray now:',pg.locator('.nbd-tray .nbd-card').count()); pg.screenshot(path='board_%s.png'%name)
     if not touch:
         pg.click('.nbd-box.d0:has(> .nbd-box-head :text("Envelope")) > .nbd-box-head button[title="Add a subcategory"]'); pg.keyboard.type('Storefront'); pg.keyboard.press('Enter'); pg.wait_for_timeout(300)
