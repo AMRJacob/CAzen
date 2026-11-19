@@ -2678,3 +2678,14 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .sv-page button.obs-pin-catcher:hover,
 .sv-page button.obs-pin-catcher:active,
 .sv-page button.obs-pin-catcher:focus { background: rgba(95, 122, 97, 0.06); border: none; border-radius: 0; padding: 0; box-shadow: none; outline: none; }
+/* No signal, and not on this device: there is nothing to open. */
+.projects tr.p-away { opacity: 0.42; cursor: default; pointer-events: none; filter: grayscale(1); }
+.projects tr.p-away td.p-state { display: block; }
+@media (min-width: 620px) { .projects tr.p-away td.p-state { display: table-cell; } }
+/* Over everything, the viewer and the notebooks included: it is about all of them. */
+.offline-notice {
+  position: fixed; z-index: 300; left: 50%; transform: translateX(-50%);
+  top: calc(10px + env(safe-area-inset-top)); width: max-content; max-width: calc(100vw - 24px);
+  padding: 10px 16px; border-radius: 10px; font-size: 14px; line-height: 1.35; text-align: center;
+  background: #7a2a1e; color: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}

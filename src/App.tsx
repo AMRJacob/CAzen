@@ -1,3 +1,4 @@
+import { OfflineNotice } from './components/OfflineNotice'
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { isConfigured } from './lib/supabase'
@@ -104,6 +105,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
       {/* On a phone the sidebar gives up its strip of screen to the drawing, and this takes
           over: a corner mark that opens a bar of destinations. */}
       {!offline && <PhoneNav />}
+      {!offline && <OfflineNotice />}
       <aside className="sidebar">
         {/* The wordmark is the way home, as it is on every site. */}
         <div className="sidebar-logo">

@@ -125,6 +125,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const gesture = useRef<{ dist: number; mid: { x: number; y: number }; view: View } | null>(null)
   const penAt = useRef(0)
   const palms = useRef<Set<number>>(new Set())
+  /** The one finger that is drawing, when fingers draw: a second one landing makes it a pinch. */
+  const firstFinger = useRef<{ id: number; x: number; y: number } | null>(null)
   /** Lays one finished stroke onto the paper without redrawing the rest. */
   const ink = useRef<PadInk | null>(null)
   const took = useCallback((api: PadInk) => { ink.current = api }, [])
@@ -309,6 +311,27 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       return
     }
 
+    // When fingers draw, one finger draws and two move the paper. The second finger landing
+    // is what says which it was: whatever the first had begun — a stroke, a box, a selection —
+    // is dropped unsaved, and both become the pinch. Nobody draws with two fingers at once.
+    if (read === 'finger' && fingerDraws) {
+      const first = firstFinger.current
+      if ((first && first.id !== e.pointerId) || fingers.current.size > 0) {
+        if (first) {
+          if (drawing.current === first.id) { forget(); drawing.current = null; wetRef.current = null; erasing.current = new Set(); showWet() }
+          if (grab.current?.id === first.id) { grab.current = null; setMarquee(null) }
+          if (boxFrom.current?.id === first.id) { boxFrom.current = null; setBox(null) }
+          fingers.current.set(first.id, { x: first.x, y: first.y })
+          firstFinger.current = null
+        }
+        fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        gesture.current = null
+        capture(e)
+        return
+      }
+      firstFinger.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
+    }
+
     const draws = read === 'pen' || read === 'mouse' || fingerDraws
     if (!draws) {
       fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -351,6 +374,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     if (e.pointerType === 'pen') penAt.current = Date.now()
     // Still writing: whatever the browser said, the pen is clearly still on the glass.
     if (doubt.current && drawing.current === e.pointerId) forget()
+    if (firstFinger.current?.id === e.pointerId) firstFinger.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
     if (fingers.current.has(e.pointerId)) { moveFingers(e); return }
     if (grab.current?.id === e.pointerId) {
       const g = grab.current, p = at(e)
@@ -423,6 +447,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    * the pointer ours after it crosses anything, so leave has no job to do.
    */
   function up(e: React.PointerEvent) {
+    if (firstFinger.current?.id === e.pointerId) firstFinger.current = null
     palms.current.delete(e.pointerId)
     handIds.current.delete(e.pointerId)
     if (e.pointerType === 'pen') penAt.current = Date.now()
@@ -473,6 +498,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   useEffect(() => () => { if (doubt.current) clearTimeout(doubt.current) }, [])
 
   function cancelled(e: React.PointerEvent) {
+    if (firstFinger.current?.id === e.pointerId) firstFinger.current = null
     if (grab.current?.id === e.pointerId) { grab.current = null; setMarquee(null); return }
     if (boxFrom.current?.id === e.pointerId) { boxFrom.current = null; setBox(null); return }
     palms.current.delete(e.pointerId)
@@ -946,7 +972,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           </label>
           <p className="muted small padpop-note">
             {fingerDraws
-              ? 'A finger draws. Two fingers pinch to zoom, and a palm is ignored.'
+              ? 'One finger draws. Two fingers move the paper and pinch to zoom, and a palm is ignored.'
               : 'The pen draws. One finger moves the canvas, two pinch to zoom, and a palm is ignored.'}
             {touch && <> Last touch: <strong>{touch.read}</strong>{touch.across > 0 ? `, ${touch.across}px across` : ''}.</>}
           </p>

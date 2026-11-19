@@ -67,6 +67,15 @@ export default function Home() {
   // "Checked yesterday" becomes "not up to date" by the clock alone, so the clock is looked at.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t) }, [])
+  // With no signal, a project that is not on this device cannot be opened to anything but
+  // empty pages. It is shown, greyed, and does nothing — which says why it is not there.
+  const [online, setOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const now = () => setOnline(navigator.onLine)
+    window.addEventListener('online', now); window.addEventListener('offline', now)
+    return () => { window.removeEventListener('online', now); window.removeEventListener('offline', now) }
+  }, [])
+  const away = (p: Project) => !online && !heldIds.has(p.id)
   /** A held project being asked about: update it, take more of it, or let it go. */
   const [keeping, setKeeping] = useState<Project | null>(null)
   const [trouble, setTrouble] = useState<string | null>(null)
@@ -76,7 +85,7 @@ export default function Home() {
   const [asking, setAsking] = useState<{ project: Project; plans: Plan[] | null } | null>(null)
   // A hold asks first: it says how much would come down, and nothing does until it is chosen.
   async function take(p: Project) {
-    if (loading_[p.id]) return
+    if (loading_[p.id] || away(p)) return
     if (heldIds.has(p.id)) { setKeeping(p); return }
     setTrouble(null)
     setAsking({ project: p, plans: null })
@@ -189,17 +198,18 @@ export default function Home() {
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
               <tr key={p.id}
-                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] || (notes[p.id] && isStale(notes[p.id], now)) ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}`}
+                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] || (notes[p.id] && isStale(notes[p.id], now)) ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}${away(p) ? ' p-away' : ''}`}
+                aria-disabled={away(p) || undefined}
                 style={loading_[p.id] ? { '--p-fill': `${loading_[p.id].total ? Math.round(loading_[p.id].done / loading_[p.id].total * 100) : 3}%` } as React.CSSProperties : undefined}
-                tabIndex={0} role="button" aria-label={`Open ${p.number} ${p.name}`}
+                tabIndex={away(p) ? -1 : 0} role="button" aria-label={away(p) ? `${p.number} ${p.name} is not on this device` : `Open ${p.number} ${p.name}`}
                 onPointerDown={(e) => holdStart(e, p)} onPointerMove={holdMove} onPointerUp={holdEnd} onPointerCancel={holdEnd} onPointerLeave={holdEnd}
                 onContextMenu={(e) => { e.preventDefault(); if (Date.now() - pressed.current > 800) void take(p) }}
                 onClick={(e) => {
                   // The press that took it to the field is not also a tap that opens it.
-                  if (Date.now() - pressed.current < 800) return
+                  if (Date.now() - pressed.current < 800 || away(p)) return
                   if (!(e.target as HTMLElement).closest('button, a')) open(p)
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(p) } }}>
+                onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !away(p)) { e.preventDefault(); open(p) } }}>
                 <td className="p-number">{p.number}</td>
                 <td className="p-name">{p.name}{p.status === 'archived' && <> <span className="tag muted">archived</span></>}</td>
                 <td className="p-who">{p.owner_name ?? ''}</td>
@@ -208,6 +218,7 @@ export default function Home() {
                 <td className="p-field p-state">
                   {loading_[p.id]
                     ? `Bringing it to this device… ${loading_[p.id].total ? `${loading_[p.id].done} of ${loading_[p.id].total} sheets` : ''}`
+                    : away(p) ? 'Not on this device — needs a connection'
                     : [
                         notes[p.id] && (isStale(notes[p.id], now)
                           ? `On this device · not updated since ${ago(checkedAt(notes[p.id]), now)}`

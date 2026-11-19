@@ -70,7 +70,12 @@ export function db(): Promise<IDBDatabase> {
       }
       if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', { keyPath: 'key' })
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      // A newer copy of CAzen in another tab wants to add to this database. Let go of it, or
+      // that tab waits on this one for ever; the next thing asked for here opens it again.
+      req.result.onversionchange = () => { req.result.close(); open = null }
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error ?? new Error('This browser would not open local storage.'))
     req.onblocked = () => reject(new Error('CAzen is open in another tab; close it and try again.'))
   })

@@ -11,6 +11,36 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:52 CST
+
+Four more from Jacob on the phone (15:44–15:50).
+
+- **Field notes "isn't even loading"**, then "it did after a refresh". Not reproduced. The
+  likely cause is the pace of today's releases: a copy of the app opened before a release asks
+  for a page file that the release replaced. The app reloads itself once when that happens;
+  that it did not here is **not explained**. One related thing changed: a copy of the app
+  still open in another tab no longer blocks a newer copy from upgrading the device's
+  database (`onversionchange` closes the old connection).
+- **Sketch pad, drawing with a finger: two fingers pan and zoom.** With "a finger draws" on,
+  every touch drew, so a second finger started a second stroke. Now the second finger landing
+  drops whatever the first had begun — unsaved — and the two move and pinch the paper; one
+  finger alone draws as before. `checks/t_twofinger.py`: one stroke kept; a two-finger spread
+  and drag keeps no stroke and changes zoom and position; the next single finger draws again.
+- **No signal: projects not on the device are greyed and cannot be opened** (project list).
+  They read "Not on this device — needs a connection". Downloaded ones are unaffected; when
+  the signal returns the grey goes. `t_keep.py`.
+- **Signal lost while inside a project that is not on the device**: a notice across the top
+  of every screen, the sheet viewer and notebooks included — "Not connected to the internet.
+  Connect to the internet to keep working." It goes when the connection is back. A downloaded
+  project shows nothing and carries on. `checks/t_notice.py`. It is a notice, not a lock: the
+  screen underneath can still be touched.
+- **Not done — "when traveling back to the projects page in the phone app it needs to be the
+  same landing page and the original page with the simpler view"** (15:48). The page shown on
+  arriving and the page gone back to are the same page in the code; what differed on his
+  phone is not known, and nothing was changed for it.
+
+---
+
 # Checkpoint — 2026-11-19, 15:42 CST
 
 **Markups can be moved, and notes reshaped** (Jacob, 15:40–15:41: drag an item to move it,

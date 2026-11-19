@@ -7,7 +7,8 @@ revs=[{'id':R1,'sheet_id':S1,'issuance_id':I1,'revision_index':0,'revision_label
 def sheets_h(req):
     if req.method=='HEAD': return None
     return sheets
-extra={'sheets':lambda r: sheets,'sheet_revisions':lambda r: revs,'issuances':[{'id':I1,'project_id':PROJ,'kind':'bid_set','number':'1','title':'Bid Set','issued_on':'2026-09-01'}]}
+P2='33333333-3333-4333-8333-333333333334'
+extra={'projects':FIX['projects']+[dict(FIX['projects'][0],id=P2,number='2402',name='Not Downloaded Clinic')],'sheets':lambda r: sheets,'sheet_revisions':lambda r: revs,'issuances':[{'id':I1,'project_id':PROJ,'kind':'bid_set','number':'1','title':'Bid Set','issued_on':'2026-09-01'}]}
 pdf=open('sheet.pdf','rb').read(); fetched=[]
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(**PHONE); install(ctx,extra); signed_in(ctx)
@@ -38,6 +39,11 @@ with sync_playwright() as p:
     print('signal found, nothing pressed:',cls(),'|',st(),'| fetched by itself:',sorted(fetched))
     held=pg.evaluate("new Promise(r=>{const q=indexedDB.open('cazen');q.onsuccess=()=>{const g=q.result.transaction('files').objectStore('files').getAllKeys();g.onsuccess=()=>r(g.result.map(k=>k.split('/').pop()))}})")
     print('drawings on the device now:',sorted(held),'(superseded A-101 dropped:', 'A-101.pdf' not in held,')')
+    # a second project that was never downloaded, and no signal
+    ctx.set_offline(True); pg.wait_for_timeout(500); rws=pg.evaluate("[...document.querySelectorAll('tr.opens')].map(r=>[r.querySelector('.p-name').innerText,r.className.replace('opens','').trim(),r.querySelector('.p-state').innerText])"); print('no signal:',rws)
+    other=pg.locator('tr.opens.p-away'); 
+    if other.count(): pg.evaluate("document.querySelector('tr.p-away').click()"); pg.wait_for_timeout(300); print('   greyed project: clicking does nothing, still on the list:',pg.url.endswith('#/'),'| pointer-events:',pg.evaluate("getComputedStyle(document.querySelector('tr.p-away')).pointerEvents"))
+    ctx.set_offline(False); pg.wait_for_timeout(600); print('signal back — greyed rows:',pg.locator('tr.p-away').count())
     hold(); pg.wait_for_selector('.take-remove'); print('held again:',pg.inner_text('.take-card h3'),'|',[t.split('\n')[0] for t in pg.locator('.take-choices button').all_inner_texts()]); pg.screenshot(path='keep_sheet.png')
     pg.tap('.take-remove'); pg.wait_for_timeout(800)
     left=pg.evaluate("new Promise(r=>{const q=indexedDB.open('cazen');q.onsuccess=()=>{const t=q.result.transaction(['files','sheets','meta']);const a=t.objectStore('files').count(),b=t.objectStore('sheets').count(),c=t.objectStore('meta').count();t.oncomplete=()=>r([a.result,b.result,c.result])}})")
