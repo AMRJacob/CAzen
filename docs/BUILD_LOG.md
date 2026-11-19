@@ -36,9 +36,10 @@ observations; and the menu item as a book you open and flip through, full screen
   opens the template form filled from the page.
 - `site_visits` gained `kind` ('visit' | 'meeting') in migration 0033 before it was ever applied.
   `SiteVisits.tsx` (the four-zone screen) is removed.
-- **Migration 0033 is still not applied to production**: the database's confirmation prompt
-  timed out a second time. Until it is, each book opens the old list page (`Book` falls back to
-  `Reports`).
+- **Migration 0033 was applied to production on 2026-11-19 at about 10:13 CST**, with Jacob's
+  confirmation, after two earlier prompts timed out. Checked in the database: 15 columns, row
+  level security on, `member_rows` on `is_member(project_id)`, no rows. The books fall back to
+  the old list page (`Book` → `Reports`) only on a database without the table.
 
 **Panning and zooming stopped dropping frames.** Three causes in `src/lib/pdf/zoomPan.ts`: a
 React re-render of the whole viewer per wheel notch (zoom state now follows 140 ms after the
