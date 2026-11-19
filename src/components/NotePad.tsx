@@ -183,6 +183,54 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     return Math.max(e.width || 0, e.height || 0) > PALM_ACROSS ? 'palm' : 'finger'
   }
 
+  /**
+   * Hand, anywhere on the pad.
+   *
+   * `readTouch` only ever saw contacts that landed on the drawing. The tools, the menu and
+   * everything else in the overlay were left to the browser, so a palm resting across them
+   * pressed buttons, took focus and dragged selections about in the middle of a word. The
+   * same question is now asked of every contact before it reaches anything: a touch that is
+   * palm-sized, or any touch at all while the pen is writing, is hand and is stopped here.
+   */
+  function handy(e: React.PointerEvent): boolean {
+    if (e.pointerType !== 'touch') return false
+    if (Date.now() - penAt.current < 1200) return true
+    return Math.max(e.width || 0, e.height || 0) > PALM_ACROSS
+  }
+
+  /**
+   * Taken at the capture phase, before the drawing or any button hears about it. Telling the
+   * browser as well matters twice over: an unclaimed contact is one iOS may hand to a system
+   * gesture, which cancels the pen mid-stroke, and a pointerdown that is spoken for does not
+   * come back later as a click.
+   */
+  const handAt = useRef(0)
+  const meantAt = useRef(0)
+  function shield(e: React.PointerEvent) {
+    if (!handy(e)) {
+      if (e.type === 'pointerdown') meantAt.current = Date.now()
+      return
+    }
+    if (e.type === 'pointerdown') handAt.current = Date.now()
+    e.stopPropagation()
+    if (e.cancelable) e.preventDefault()
+  }
+
+  /**
+   * A click with nothing behind it.
+   *
+   * A spoken-for pointerdown should not come back as a click, but that is a promise about the
+   * contact, not about the hand: it is the last contact that counts. So a click is let through
+   * only when something deliberate — a pen, a mouse, a fingertip — went down after the hand
+   * last did. Writing with the palm resting and then tapping a tool with the pen is deliberate,
+   * and goes through.
+   */
+  function noClick(e: React.MouseEvent) {
+    if (handAt.current <= meantAt.current) return
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
   function down(e: React.PointerEvent) {
     const read = readTouch(e)
     setTouch({ read, across: Math.round(Math.max(e.width || 0, e.height || 0)) })
@@ -489,7 +537,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const nib = tool === 'highlight' ? highlight : colour
   const inky = tool === 'pen' || tool === 'pencil'
   return (
-    <div className="padview">
+    <div className="padview"
+      onPointerDownCapture={shield} onPointerMoveCapture={shield} onPointerUpCapture={shield}
+      onClickCapture={noClick}>
       {/* The drawing surface is the screen. `touch-action: none` has to be on this element and
           everything in it: iOS reads it from whatever the pointer actually lands on, and a
           child left at the default lets the system claim the gesture and cancel the stroke a
