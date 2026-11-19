@@ -223,7 +223,7 @@ export default function Home() {
                 <td className="p-field p-state">
                   {loading_[p.id]
                     ? `Bringing it to this device… ${loading_[p.id].total ? `${loading_[p.id].done} of ${loading_[p.id].total} sheets` : ''}`
-                    : away(p) ? 'Not on this device — needs a connection'
+                    : away(p) ? `Not on this device — needs a connection${waiting[p.id] ? ` · ${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} will be sent then` : ''}`
                     : [
                         notes[p.id] && (isStale(notes[p.id], now)
                           ? `On this device · not updated since ${ago(checkedAt(notes[p.id]), now)}`

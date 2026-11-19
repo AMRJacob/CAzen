@@ -214,8 +214,17 @@ export function drain(): Promise<{ sent: number; failed: number }> {
   draining = (async () => {
     let sent = 0, failed = 0
     if (!navigator.onLine) return { sent, failed }
-    const jobs = (await all<Queued>('outbox')).sort((a, b) => a.at - b.at)
+    // Round after round until a round finds nothing new. A change queued while a round was
+    // under way is not on that round's list, and nothing else was going to come back for it:
+    // the last stroke of a quick sketch, or the second half of a two-part change, sat unsent
+    // until something unrelated happened to push the queue.
+    const tried = new Set<string>()
+    let stalled = false
+    for (let round = 0; round < 50 && !stalled; round++) {
+    const jobs = (await all<Queued>('outbox')).sort((a, b) => a.at - b.at).filter((q) => !tried.has(q.id))
+    if (!jobs.length) break
     for (const q of jobs) {
+      tried.add(q.id)
       const isFile = q.job.kind === 'file.put'
       // A file storage has refused is asked for again, but not every four seconds.
       if (isFile && q.tries > 0 && Date.now() - (q.tried_at ?? 0) < Math.min(300_000, 15_000 * 2 ** (q.tries - 1))) {
@@ -238,8 +247,10 @@ export function drain(): Promise<{ sent: number; failed: number }> {
         await put('outbox', { ...q, tries: q.tries + 1, tried_at: Date.now(), last_error: (e as Error)?.message ?? String(e) })
         // A file that storage would not take — full, too large — holds up nothing but itself.
         if (isFile && !offlineish(e)) { failed++; continue }
+        stalled = true
         break // the network, most likely: keep the rest in order and try again later
       } finally { sending = null }
+    }
     }
     return { sent, failed }
   })()

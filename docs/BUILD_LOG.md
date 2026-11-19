@@ -11,6 +11,58 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:23 CST
+
+**A page's notes are cards and boxes** (Jacob, 16:11: forget tagging while typing and the
+bulleted list on the page; a board of topics, each typed item a box dragged into the category
+or subcategory it belongs in; keep the bullet list for the preview / PDF page).
+`src/components/NoteBoard.tsx`, `src/lib/noteBoard.ts`; the Tag/Add box built at 15:56 and the
+outline box on the page are both gone from the notebook page.
+
+- A note is typed and becomes a card in a tray. The page's categories are boxes. A card is
+  dragged into a box; **+** on a box makes a subcategory inside it; a card dropped on another
+  card makes that card a box; a box is dragged with everything in it; a card dragged back to
+  the tray is unfiled. Double-click changes words; × removes (asking first if anything is
+  under it); *+ Category* adds a box. Works with a mouse and with a finger.
+- **Nothing about what is stored changed.** The notes are still the numbered outline the report
+  prints — the board reads it as a tree and writes it back (1. / a. / i.) — so the report page
+  shows the bullet list as before, and pages written before today open as boxes with their
+  lines as cards. What is still in the tray is stored under a heading "Unsorted", which
+  **prints as a heading in the report** while anything is in it.
+- **It is a board, not a free canvas**: boxes sit in a grid and cards stack inside them; there
+  is no panning, zooming or placing things where you like. "Make it like its own pad" could
+  mean that; positions would need somewhere to be stored, and this needed nothing new.
+- An empty subcategory looks like a box only until the page is reopened; after that it is a
+  card until something is dropped on it (the outline cannot tell an empty heading from a line).
+- Bold / italic / underline and the outline keys are no longer on the notebook page; they are
+  on the report's page. The guess at a category from the words is no longer used.
+- `checks/board.test.ts` (11 cases), `checks/t_board.py` (desk with a mouse, phone with touch).
+
+**Tearing out a page takes its sketch and photographs with it** (Jacob, 16:13: they are not
+reachable anywhere else; offer to delete or keep the observations). `src/lib/tearOut.ts`. The
+question is now a sheet saying what goes; if observations were made on the page, a box —
+unticked — offers to delete them too. Used by *Tear out* on the page and by the contents
+page's right-click. The photograph files are deleted from storage at once, which needs a
+connection; with none they are removed from the device only. `checks/t_tear.py`.
+
+**On a phone each section of a notebook page is its own box** (Jacob, 16:15): head, attendees,
+notes, sketch, photographs, observations — white, rounded, the same inset, 12 px apart, below
+760 px wide. Measured: six boxes, each 354 px of a 402 px screen.
+
+**The outbox left the last change unsent** — found by the tear-out check, which saw the sketch
+deleted and the page not. A change queued while a send was already running was not on that
+run's list and nothing came back for it until some later change or the project list's timer.
+Present since the outbox was written; it would have held back the last stroke of a quick
+sketch or the second of two quick edits. `drain` now goes round again until a round finds
+nothing new.
+
+With no signal, a project that is not on the device but has changes waiting now says how many
+will be sent when there is a connection. (It is still greyed and cannot be opened — which
+means **notebooks work with no signal only in a project that has been downloaded**, a
+narrowing of what was built at 14:39 that follows from the 15:49 instruction.)
+
+---
+
 # Checkpoint — 2026-11-19, 16:10 CST
 
 **Each project has a front page** (Jacob, 16:01: a landing page with a project summary, to

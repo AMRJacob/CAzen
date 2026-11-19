@@ -2776,3 +2776,58 @@ a.ov-card:hover { border-color: var(--moss); }
 @keyframes p-bounce { 0% { transform: scale(1); } 40% { transform: scale(0.965); } 100% { transform: scale(1); } }
 .projects tr.p-tapped { animation: p-bounce 0.22s ease-out; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) { .projects tr.p-tapped { animation: none; } }
+
+/* ---------- Notes as cards and boxes ---------- */
+.nbd { display: flex; flex-direction: column; gap: 10px; min-height: 0; touch-action: pan-y; }
+.nbd.dragging { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.nbd-type { display: flex; gap: 8px; align-items: center; padding: 6px 6px 6px 12px; border: 1.5px solid #cfd6d0; border-radius: 12px; background: #fff; }
+.nbd-type:focus-within { border-color: var(--moss); box-shadow: 0 0 0 3px var(--moss-soft); }
+.nb-paper .nbd-type input { flex: 1; min-width: 0; border: none; background: none; font: inherit; font-size: 16.5px; padding: 6px 0; outline: none; }
+.nbd-type button { margin: 0; flex: none; padding: 7px 16px; border-radius: 999px; font-size: 14px; }
+.nbd-tray { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; min-height: 46px; border: 1.5px dashed #cfd6d0; border-radius: 12px; align-items: flex-start; }
+.nbd-tray.bare { align-items: center; }
+.nbd-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; align-items: start; padding: 2px; border-radius: 12px; }
+.nbd-box { background: rgba(255, 255, 255, 0.78); border: 1.5px solid #c9d2cb; border-radius: 12px; min-width: 0; }
+.nbd-box.d1 { background: #f3f6f2; border-color: #d5ddd6; border-radius: 10px; width: 100%; }
+.nbd-box.d2 { background: #e9efe8; border-radius: 8px; width: 100%; }
+.nbd-box-head { display: flex; align-items: center; gap: 2px; padding: 7px 6px 5px 11px; cursor: grab; touch-action: none; }
+.nbd-box-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.nbd-box.d1 .nbd-box-name, .nbd-box.d2 .nbd-box-name { font-size: 13.5px; font-weight: 500; }
+.nbd-box-in { display: flex; flex-direction: column; gap: 5px; padding: 3px 7px 8px; min-height: 30px; }
+.nbd-card { display: flex; align-items: flex-start; gap: 2px; padding: 7px 4px 7px 10px; background: #fffdf5; border: 1px solid #ddd6bd; border-radius: 8px; box-shadow: 0 1px 2px rgba(43, 45, 44, 0.07); cursor: grab; touch-action: none; max-width: 100%; }
+.nbd-card-text { flex: 1; min-width: 0; font-size: 14.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.nbd-tray .nbd-card { max-width: 320px; }
+.nbd .nbd-x { flex: none; border: none; background: none; padding: 0 6px; margin: 0; font-size: 16px; line-height: 1.2; color: #a4aaa3; border-radius: 6px; cursor: pointer; }
+.nbd .nbd-x:hover { color: var(--ink); background: rgba(43, 45, 44, 0.07); }
+.nbd-empty { font-size: 12.5px; color: #9aa09a; padding: 2px 4px; }
+.nbd .over { border-color: var(--moss); box-shadow: 0 0 0 3px var(--moss-soft); }
+.nbd-tray.over, .nbd-board.over { box-shadow: inset 0 0 0 2px var(--moss-soft); border-color: var(--moss); }
+.nbd .lifted { opacity: 0.35; }
+.nbd-new { justify-self: start; align-self: start; border: 1.5px dashed #c9d2cb; background: none; color: #6f766f; border-radius: 12px; padding: 9px 14px; font-size: 13.5px; }
+.nbd-edit { font: inherit; border: 1px solid var(--moss); border-radius: 6px; padding: 2px 6px; background: #fff; min-width: 0; width: 100%; }
+.nbd-ghost { position: fixed; z-index: 400; pointer-events: none; transform: translate(-50%, -60%) rotate(-2deg); max-width: 240px; padding: 8px 12px; background: #fffdf5; border: 1.5px solid var(--moss); border-radius: 8px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (pointer: coarse) { .nbd .nbd-x { padding: 4px 9px; font-size: 18px; } .nbd-card { padding: 10px 4px 10px 12px; } }
+@media (max-width: 619px) { .nbd-board { grid-template-columns: 1fr 1fr; gap: 8px; } }
+
+.nb-tearout { z-index: 95; }
+.nb-tear-obs { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 2px; font-size: 14.5px; line-height: 1.35; }
+.nb-tear-obs input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+
+/* ---------- A notebook page on a phone: one clean box a section ----------
+   Stacked top to bottom the sections ran into each other, told apart only by a hairline. Each
+   is a card of its own now, with the same inset and the same space between. */
+@media (max-width: 759px) {
+  .nb-page .nb-z {
+    background: #fff; border: 1px solid #dfe4df; border-radius: 14px;
+    padding: 14px 14px 16px; margin: 0 0 12px; box-shadow: 0 1px 2px rgba(43, 45, 44, 0.05);
+    border-top: 1px solid #dfe4df;
+  }
+  .nb-page .nb-z + .nb-z { border-top: 1px solid #dfe4df; }
+  .nb-page .nb-z-top { margin-bottom: 10px; }
+  .nb-page .nb-z-top h2 { margin: 0; }
+  .nb-page .nb-z-head { padding-top: 16px; }
+  .nb-page .nb-head-actions { margin-top: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .nb-page .nbd-type, .nb-page .nbd-box { background: #fbfaf6; }
+  .nb-page .nbd-card { background: #fffdf5; }
+  .nb-page .nb-pad { border-radius: 10px; }
+}

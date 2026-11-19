@@ -1,11 +1,10 @@
-import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mark } from './Logo'
 import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
-import { OutlineTools } from './OutlineTools'
-import { outlineKey } from '../lib/outline'
+import { NoteBoard } from './NoteBoard'
+import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
 import { getPad, listMarks, newPad, type NotePad as Pad, type PadMark } from '../lib/pads'
@@ -15,11 +14,10 @@ import {
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
 import {
-  canHoldLocation, clockTime, coverOf, longDay, removeVisit, setVisit, shortDay, startVisit,
+  canHoldLocation, clockTime, coverOf, longDay, setVisit, shortDay, startVisit,
   type SiteVisit, type VisitKind,
 } from '../lib/visits'
 import { addPerson, asLine, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
-import { catchAll, fileNote, guessCategory, headingsOf, unfileNote } from '../lib/noteSort'
 import { metresBetween, placeAt, weatherAt } from '../lib/weather'
 import { readPref, writePref } from '../lib/prefs'
 import { useAuth } from '../lib/auth'
@@ -77,6 +75,21 @@ export function Notebook({ project, kind, pages, onPages }: {
   const [paper, setPaper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
   const nextPaper = () => { const n = PAPERS[(PAPERS.indexOf(paper) + 1) % PAPERS.length]; setPaper(n); writePref(paperKey(kind), n) }
   const [error, setError] = useState<string | null>(null)
+  /** A page about to be taken out, with the observations made on it. */
+  const [tear, setTear] = useState<{ page: SiteVisit; own: Observation[] } | null>(null)
+  const [tearObs, setTearObs] = useState(false)
+  async function tearNow() {
+    if (!tear) return
+    const { page: gone, own } = tear
+    setTear(null)
+    try {
+      await tearOut(project, gone, tearObs ? own : [])
+      if (tearObs) setObservations((all) => all.filter((o) => !own.some((x) => x.id === o.id)))
+      onPages(pages.filter((x) => x.id !== gone.id))
+      if (at === gone.id) go(null, 'back')
+    } catch (e) { setError(message(e)) }
+    setTearObs(false)
+  }
   /** The page a right-click on the contents is asking about, and where the menu goes. */
   const [tearing, setTearing] = useState<{ id: string; x: number; y: number } | null>(null)
   useEffect(() => {
@@ -139,6 +152,30 @@ export function Notebook({ project, kind, pages, onPages }: {
 
   return (
     <div className={`nb nb-${kind} nb-rule-${paper}`}>
+      {tear && (
+        <div className="take-ask nb-tearout" role="dialog" aria-label="Tear out this page" onClick={() => setTear(null)}>
+          <div className="take-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Tear out {shortDay(tear.page.visited_on)}{tear.page.title ? ` · ${tear.page.title}` : ''}?</h3>
+            <p className="muted small">
+              The page goes, and with it {[
+                tear.page.pad_id ? 'its sketch' : '',
+                tear.page.photos.length ? `its ${tear.page.photos.length} ${tear.page.photos.length === 1 ? 'photograph' : 'photographs'}` : '',
+              ].filter(Boolean).join(' and ') || 'its notes'} — they are not kept anywhere else. This cannot be undone.
+            </p>
+            {tear.own.length > 0 && (
+              <label className="nb-tear-obs">
+                <input type="checkbox" checked={tearObs} onChange={(e) => setTearObs(e.target.checked)} />
+                <span>Also delete the {tear.own.length} {tear.own.length === 1 ? 'observation' : 'observations'} made on this page
+                  <span className="muted small"> — left unticked, {tear.own.length === 1 ? 'it stays' : 'they stay'} on the Observations list</span></span>
+              </label>
+            )}
+            <div className="take-choices">
+              <button className="take-remove" onClick={() => void tearNow()}><strong>Tear it out</strong></button>
+            </div>
+            <button className="link" onClick={() => { setTear(null); setTearObs(false) }}>Keep the page</button>
+          </div>
+        </div>
+      )}
       {/* At the foot of the page, out of the way of the bar and the way out; it goes when
           touched, and by itself after a few seconds. */}
       {error && <button className="notice error nb-error" onClick={() => setError(null)} title="Dismiss">{error}<span aria-hidden="true"> ×</span></button>}
@@ -149,7 +186,7 @@ export function Notebook({ project, kind, pages, onPages }: {
           observations={observations} types={types}
           onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
           onChanged={(v) => onPages(pages.map((x) => (x.id === v.id ? v : x)))}
-          onRemoved={() => { onPages(pages.filter((x) => x.id !== page.id)); go(null, 'back') }}
+          onTear={(pg, own) => setTear({ page: pg, own })}
           onTrouble={setError} />
       ) : (
         <article key="contents" className={`nb-paper nb-contents nb-turn-${turn}`}>
@@ -201,8 +238,9 @@ export function Notebook({ project, kind, pages, onPages }: {
                 <button role="menuitem" onClick={() => { setTearing(null); go(p.id, 'fwd') }}>Open</button>
                 <button role="menuitem" className="danger" onClick={() => {
                   setTearing(null)
-                  if (!window.confirm('Delete this page? Its sketch, photographs and observations are kept.')) return
-                  removeVisit(p.id).then(() => onPages(pages.filter((x) => x.id !== p.id))).catch((e) => setError(message(e)))
+                  const from = startOf(p), to = nextStart(pages, p)
+                  const made = (o: Observation) => Date.parse(o.created_at) || Date.parse(`${o.observed_on}T12:00:00`)
+                  setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => made(o) >= from && (to === null || made(o) < to)) : [] })
                 }}>Delete this page</button>
               </div>
             )
@@ -281,7 +319,7 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
  * photographs above the observations. A meeting's page is the same sheet without the right-hand
  * column. Everything is on the one page; nothing is behind a tab.
  */
-function Page({ project, page, turn, bar, until, earlier, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
+function Page({ project, page, turn, bar, until, earlier, observations, types, onObserved, onChanged, onTear, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
@@ -294,12 +332,12 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
   types: ObservationType[]
   onObserved: (o: Observation) => void
   onChanged: (v: SiteVisit) => void
-  onRemoved: () => void
+  /** Asked to take this page out: the book asks what goes with it. */
+  onTear: (page: SiteVisit, own: Observation[]) => void
   onTrouble: (m: string) => void
 }) {
   const visit = page.kind === 'visit'
   const [notes, setNotes] = useState(page.notes ?? '')
-  const notesBox = useRef<HTMLTextAreaElement | null>(null)
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
   const [drawing, setDrawing] = useState(false)
@@ -519,8 +557,7 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
         <div className="nb-head-actions">
           <button className="primary-lite" onClick={() => { if (notes !== (page.notes ?? '')) change({ notes }); setExporting(true) }}>{BOOK[page.kind].exportAs}</button>
           <button className="link danger-link" onClick={() => {
-            if (!window.confirm('Tear this page out? Its sketch, photographs and observations are kept.')) return
-            removeVisit(page.id).then(onRemoved).catch((e) => onTrouble(message(e)))
+            onTear(page, own)
           }}>Tear out</button>
         </div>
       </section>
@@ -529,20 +566,9 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
       <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
 
       <section className="nb-z nb-z-notes">
-        <QuickNote notes={notes} onFiled={(next) => { setNotes(next); change({ notes: next }) }} />
-        <div className="nb-z-top"><h2>Notes</h2><OutlineTools textarea={notesBox} value={notes} onChange={setNotes} /></div>
-        <textarea ref={notesBox} className="nb-write nb-outline nb-ruled" value={notes} aria-label="Notes, organised"
-          onChange={(e) => setNotes(e.target.value)}
-          onKeyDown={(e) => {
-            const ta = e.currentTarget
-            outlineKey({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, isComposing: e.nativeEvent.isComposing, preventDefault: () => e.preventDefault() }, ta, (next) => {
-              // Written and placed in one go: a caret put back a frame later lets the next
-              // letter typed land where the caret used to be.
-              flushSync(() => setNotes(next.value))
-              ta.setSelectionRange(next.start, next.end)
-            })
-          }}
-          onBlur={() => { if (notes !== (page.notes ?? '')) change({ notes }) }} />
+        <div className="nb-z-top"><h2>Notes</h2></div>
+        {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
+        <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
       </section>
 
       <section className="nb-z nb-z-sketch">
@@ -657,94 +683,6 @@ function Page({ project, page, turn, bar, until, earlier, observations, types, o
 }
 
 // ---------- Typing as it comes ----------
-
-/**
- * A note, typed the way it is thought of — and filed where it belongs.
- *
- * Walking a site, things are noticed in the order they are passed, not the order a report lists
- * them. So there is one place to type, always the same, and the page's categories beside it.
- * As the words go in, the category they point at lights up; Enter keeps the note under it. A
- * different category can be tapped before Enter, or after — the last note moves. Nothing has to
- * be decided first, and nothing has to be tidied afterwards.
- */
-function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) => void }) {
-  const headings = headingsOf(notes)
-  const [text, setText] = useState('')
-  const [picked, setPicked] = useState<number | null>(null)
-  const [last, setLast] = useState<{ heading: number; text: string } | null>(null)
-  const box = useRef<HTMLTextAreaElement | null>(null)
-  /** The list of tags, open. It is asked for with the Tag button and put away by choosing or by touching anything else. */
-  const [tagging, setTagging] = useState(false)
-  const wrap = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!tagging) return
-    const away = (e: Event) => { if (!wrap.current?.contains(e.target as Node)) setTagging(false) }
-    document.addEventListener('pointerdown', away, true)
-    return () => document.removeEventListener('pointerdown', away, true)
-  }, [tagging])
-
-  useEffect(() => {
-    const el = box.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 128)}px`
-  }, [text])
-
-  const guessed = guessCategory(text, headings)
-  // Words that point nowhere go under the catch-all, not under whatever was used last.
-  const active = Math.min(picked ?? (guessed >= 0 ? guessed : catchAll(headings)), Math.max(0, headings.length - 1))
-
-  function keep() {
-    const said = text.trim()
-    if (!said) return
-    onFiled(fileNote(notes, active, said))
-    setLast({ heading: active, text: said })
-    setText('')
-    setPicked(null)
-    box.current?.focus()
-  }
-
-  function choose(i: number) {
-    // With words in the box the tap says where they will go; with none, it moves the last note.
-    if (text.trim() || !last) { setPicked(i); box.current?.focus(); return }
-    if (i === last.heading) return
-    onFiled(fileNote(unfileNote(notes, last.heading, last.text), i, last.text))
-    setLast({ ...last, heading: i })
-  }
-
-  const short = (h: string) => h.replace(/\s*\(.*\)\s*$/, '')
-  const typing = !!text.trim()
-  // Where it is going, or where the last one went: said in a few quiet words, not a row of chips.
-  const under = typing ? active : last ? last.heading : null
-
-  return (
-    <div className="nb-quick" ref={wrap}>
-      <textarea ref={box} rows={2} value={text} aria-label="Type a note"
-        placeholder="Type it as you see it"
-        enterKeyHint="done" autoCapitalize="sentences"
-        onChange={(e) => { setText(e.target.value); if (last) setLast(null) }}
-        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); keep() } }} />
-      <div className="nb-quick-foot">
-        {under !== null && headings[under] !== undefined && (
-          <span className="nb-quick-say">{typing ? 'Under' : 'Filed under'} {short(headings[under])}</span>
-        )}
-        <button className={`nb-quick-tag${picked !== null && typing ? ' on' : ''}`} aria-haspopup="listbox" aria-expanded={tagging}
-          disabled={!headings.length || (!typing && !last)}
-          title={typing ? 'Choose what this note is filed under' : last ? 'Move the note just added' : 'Type a note first'}
-          onClick={() => setTagging(!tagging)}>Tag</button>
-        <button className="primary-lite nb-quick-keep" disabled={!typing} onClick={keep}>Add</button>
-        {tagging && (
-          <div className="nb-quick-tags" role="listbox" aria-label={typing ? 'File it under' : 'Move the last note to'}>
-            {headings.map((h, i) => (
-              <button key={i} role="option" aria-selected={i === under} className={i === under ? 'on' : ''}
-                onClick={() => { choose(i); setTagging(false) }}>{short(h)}</button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 /** When a page was started, as a moment: its day and its time, or the start of its day. */
 function startOf(v: SiteVisit): number {
