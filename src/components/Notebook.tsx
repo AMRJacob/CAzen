@@ -1,9 +1,11 @@
+import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mark } from './Logo'
 import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
 import { OutlineTools } from './OutlineTools'
+import { outlineKey } from '../lib/outline'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
 import { getPad, listMarks, newPad, type NotePad as Pad, type PadMark } from '../lib/pads'
@@ -75,6 +77,14 @@ export function Notebook({ project, kind, pages, onPages }: {
   const [paper, setPaper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
   const nextPaper = () => { const n = PAPERS[(PAPERS.indexOf(paper) + 1) % PAPERS.length]; setPaper(n); writePref(paperKey(kind), n) }
   const [error, setError] = useState<string | null>(null)
+  /** The page a right-click on the contents is asking about, and where the menu goes. */
+  const [tearing, setTearing] = useState<{ id: string; x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!tearing) return
+    const away = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.('.nb-tear')) setTearing(null) }
+    window.addEventListener('pointerdown', away, true)
+    return () => window.removeEventListener('pointerdown', away, true)
+  }, [tearing])
   const [observations, setObservations] = useState<Observation[]>([])
   const [types, setTypes] = useState<ObservationType[]>([])
 
@@ -127,6 +137,7 @@ export function Notebook({ project, kind, pages, onPages }: {
       {error && <div className="notice error nb-error">{error}</div>}
       {page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
+          until={nextStart(pages, page)}
           earlier={pages.filter((x) => x.id !== page.id).flatMap((x) => linesOf(x.names))}
           observations={observations} types={types}
           onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
@@ -156,7 +167,9 @@ export function Notebook({ project, kind, pages, onPages }: {
               const photos = p.photos.length + photosOf(seen).length
               return (
                 <li key={p.id}>
-                  <button onClick={() => go(p.id, 'fwd')}>
+                  <button onClick={() => go(p.id, 'fwd')}
+                    // A right-click on a page in the contents offers to take it out of the book.
+                    onContextMenu={(e) => { e.preventDefault(); setTearing({ id: p.id, x: e.clientX, y: e.clientY }) }}>
                     {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
                     <span className="nb-toc-day">{shortDay(p.visited_on)}</span>
                     <span className="nb-toc-title">{p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
@@ -172,6 +185,21 @@ export function Notebook({ project, kind, pages, onPages }: {
               )
             })}
           </ol>
+          {tearing && (() => {
+            const p = pages.find((x) => x.id === tearing.id)
+            if (!p) return null
+            return (
+              <div className="padctx nb-tear" role="menu" style={{ left: Math.min(tearing.x, window.innerWidth - 250), top: Math.min(tearing.y, window.innerHeight - 110) }}>
+                <span className="nb-tear-say">{shortDay(p.visited_on)} · {p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
+                <button role="menuitem" onClick={() => { setTearing(null); go(p.id, 'fwd') }}>Open</button>
+                <button role="menuitem" className="danger" onClick={() => {
+                  setTearing(null)
+                  if (!window.confirm('Delete this page? Its sketch, photographs and observations are kept.')) return
+                  removeVisit(p.id).then(() => onPages(pages.filter((x) => x.id !== p.id))).catch((e) => setError(message(e)))
+                }}>Delete this page</button>
+              </div>
+            )
+          })()}
         </article>
       )}
     </div>
@@ -246,11 +274,13 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
  * photographs above the observations. A meeting's page is the same sheet without the right-hand
  * column. Everything is on the one page; nothing is behind a tab.
  */
-function Page({ project, page, turn, bar, earlier, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
+function Page({ project, page, turn, bar, until, earlier, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
   bar: React.ReactNode
+  /** When the next page of this book was started, if there is one: what was seen after that is its. */
+  until: number | null
   /** Attendee lines from the book's other pages. */
   earlier: string[]
   observations: Observation[]
@@ -395,6 +425,12 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
   }
 
   const seen = visit ? onDay(observations, page.visited_on) : []
+  // On the page itself: what was seen while this page was the one being written, and then —
+  // under a line — what was seen before it and is still open.
+  const began = startOf(page)
+  const madeAt = (o: Observation) => { const t = Date.parse(o.created_at); return Number.isNaN(t) ? Date.parse(`${o.observed_on}T12:00:00`) : t }
+  const own = visit ? observations.filter((o) => madeAt(o) >= began && (until === null || madeAt(o) < until)).sort((a, b) => madeAt(a) - madeAt(b)) : []
+  const before = visit ? observations.filter((o) => madeAt(o) < began && o.status !== 'closed').sort((a, b) => madeAt(b) - madeAt(a)) : []
   const cover = visit ? coverOf(page, photosOf(seen)) : null
 
   if (drawing && pad) {
@@ -488,6 +524,15 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
         <div className="nb-z-top"><h2>Notes</h2><OutlineTools textarea={notesBox} value={notes} onChange={setNotes} /></div>
         <textarea ref={notesBox} className="nb-write nb-outline nb-ruled" value={notes} aria-label="Notes, organised"
           onChange={(e) => setNotes(e.target.value)}
+          onKeyDown={(e) => {
+            const ta = e.currentTarget
+            outlineKey({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, isComposing: e.nativeEvent.isComposing, preventDefault: () => e.preventDefault() }, ta, (next) => {
+              // Written and placed in one go: a caret put back a frame later lets the next
+              // letter typed land where the caret used to be.
+              flushSync(() => setNotes(next.value))
+              ta.setSelectionRange(next.start, next.end)
+            })
+          }}
           onBlur={() => { if (notes !== (page.notes ?? '')) change({ notes }) }} />
       </section>
 
@@ -527,18 +572,33 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
       {visit && (
         <section className="nb-z nb-z-seen">
           <div className="nb-z-top">
-            <h2>Observations{seen.length ? ` · ${seen.length}` : ''}</h2>
+            <h2>Observations{own.length ? ` · ${own.length}` : ''}</h2>
             <button className="primary-lite" onClick={() => setObserving('new')}>New observation</button>
           </div>
-          {!seen.length ? <p className="nb-none">None on this day yet.</p> : (
+          {!own.length && <p className="nb-none">None on this page yet.</p>}
+          {(own.length > 0 || before.length > 0) && (
             <ul className="nb-seen">
-              {seen.map((o) => (
+              {own.map((o) => (
                 <li key={o.id}>
                   <button onClick={() => setObserving(o)}>
                     {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
                     <span className="nb-seen-text">
                       <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
                       <span className="muted small">{[STATUS_LABELS[o.status], o.area, o.trade].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {/* What was seen before this page was started and is not yet closed: on the page
+                  so it can be walked and followed up, under a line so it is not taken for new. */}
+              {before.length > 0 && <li className="nb-seen-rule" role="separator">Previous observations · {before.length}</li>}
+              {before.map((o) => (
+                <li key={o.id} className="nb-seen-old">
+                  <button onClick={() => setObserving(o)}>
+                    {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
+                    <span className="nb-seen-text">
+                      <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
+                      <span className="muted small">{[shortDay(o.observed_on), STATUS_LABELS[o.status], o.area, o.trade].filter(Boolean).join(' · ')}</span>
                     </span>
                   </button>
                 </li>
@@ -675,6 +735,18 @@ function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) 
       </div>
     </div>
   )
+}
+
+/** When a page was started, as a moment: its day and its time, or the start of its day. */
+function startOf(v: SiteVisit): number {
+  const t = Date.parse(`${v.visited_on}T${v.visited_at ?? '00:00:00'}`)
+  return Number.isNaN(t) ? 0 : t
+}
+/** The start of the page that follows this one in the book, if any. */
+function nextStart(pages: SiteVisit[], page: SiteVisit): number | null {
+  const mine = startOf(page)
+  const later = pages.filter((p) => p.id !== page.id).map(startOf).filter((t) => t > mine)
+  return later.length ? Math.min(...later) : null
 }
 
 // ---------- Who was there ----------

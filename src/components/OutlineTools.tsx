@@ -1,4 +1,6 @@
 import { useRef, type ReactElement } from 'react'
+import { flushSync } from 'react-dom'
+import { shift } from '../lib/outline'
 
 /**
  * The toolbar over an outline field.
@@ -94,6 +96,14 @@ export function OutlineTools({ textarea, value, onChange }: {
     // Pressing a button moves focus off the box, so where the cursor was is remembered.
     const start = ta ? ta.selectionStart : last.current.start
     const end = ta ? ta.selectionEnd : last.current.end
+    // In and out a level are the outline's own business: the line takes the marker of the
+    // level it lands on (1. → a. → i.) and the numbering around it is put right.
+    if (edit === PROMOTE || edit === DEMOTE) {
+      const next = shift(value, start, end, edit === DEMOTE ? 1 : -1)
+      flushSync(() => onChange(next.value))
+      if (ta) { ta.focus(); ta.setSelectionRange(next.start, next.end) }
+      return
+    }
     const from = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
     const toEnd = value.indexOf('\n', end)
     const to = toEnd === -1 ? value.length : toEnd

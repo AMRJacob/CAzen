@@ -1,5 +1,7 @@
+import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { OutlineTools } from '../components/OutlineTools'
+import { outlineKey } from '../lib/outline'
 import { Link } from 'react-router-dom'
 import { PLACEHOLDER_BRAND, loadBrand, type Brand } from '../lib/brand'
 import { isConfigured } from '../lib/supabase'
@@ -367,19 +369,12 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
   )
 }
 
-/** Tab / Shift+Tab indent or outdent the current line(s) by two spaces in outline fields. */
+/** Enter carries the bullet on; Tab and Shift+Tab move the line in or out, marker and all. */
 function indentKeys(e: React.KeyboardEvent<HTMLTextAreaElement>, onChange: (v: string) => void) {
-  if (e.key !== 'Tab') return
-  e.preventDefault()
   const ta = e.currentTarget
-  const { selectionStart: s, selectionEnd: end, value } = ta
-  const lineStart = value.lastIndexOf('\n', s - 1) + 1
-  const block = value.slice(lineStart, end)
-  const next = block.split('\n').map((l) => (e.shiftKey ? l.replace(/^ {1,2}/, '') : '  ' + l)).join('\n')
-  onChange(value.slice(0, lineStart) + next + value.slice(end))
-  const delta = next.length - block.length
-  requestAnimationFrame(() => {
-    ta.selectionStart = Math.max(lineStart, s + (e.shiftKey ? Math.max(-2, delta) : 2))
-    ta.selectionEnd = end + delta
+  outlineKey({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, isComposing: e.nativeEvent.isComposing, preventDefault: () => e.preventDefault() }, ta, (next) => {
+    // Written and placed in one go, so the next letter typed lands after the new marker.
+    flushSync(() => onChange(next.value))
+    ta.setSelectionRange(next.start, next.end)
   })
 }

@@ -2725,3 +2725,8 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .padctx button:disabled { color: var(--faint); }
 .padctx button.danger { color: #a23a2a; }
 .padctx kbd { font: inherit; font-size: 11.5px; color: var(--muted); }
+
+/* The line between what was seen on this page and what was seen before it. */
+.nb-seen-rule { list-style: none; margin: 10px 0 4px; padding: 8px 0 0; border-top: 1.5px solid #cfd6d0; font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; color: #8a8f88; }
+.nb-seen-old { opacity: 0.78; }
+.nb-tear-say { padding: 6px 10px 4px; font-size: 12px; color: var(--muted); }

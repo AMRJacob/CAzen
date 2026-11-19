@@ -11,6 +11,37 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:06 CST
+
+Three on the notebook page (Jacob, 15:58–16:03).
+
+- **The notes box keeps the outline going** (`src/lib/outline.ts`, used by the notebook's
+  notes and by every outline field on a form). Enter starts the next item at the same level
+  with the next number or letter; Enter on an item with nothing in it steps back out a level,
+  and at the top level ends the list. Tab / Shift+Tab and the toolbar's in and out buttons
+  give the line the marker of the level it lands on — **1. then a. then i.**, then the same
+  with brackets — and a plain line moved in under a list joins it. After any of these the
+  numbering around it is put right. Bullets (-) stay bullets; plain lines are never numbered
+  by Enter. Before: Enter gave a bare new line, and in/out moved the indent and left "2."
+  sitting a level down.
+  **The 1. / a. / i. order was taken from the app's own templates and renderer, not from
+  Jacob's old meeting notes, which he pointed to and which were not opened.**
+  `checks/outline.test.ts` (20 cases), and typed for real in `checks/t_page.py`. The caret is
+  now placed in the same step as the text (it was a frame later, and a letter typed quickly
+  landed in the wrong place — found by that check).
+- **Observations on a page** (Jacob: they show on every field note — is it because they are
+  not marked complete? No: a page listed everything observed on its *day*, and his four pages
+  are all today's). A page now lists what was made while it was the page being written —
+  from the page's own start time until the next page was started — and then, under a line
+  reading **Previous observations**, everything made before that which is not closed, newest
+  first, each with its day. There is still no link in the database between an observation and
+  a page; it goes by time. The contents page's counts and the exported report still go by
+  day, unchanged.
+- **Right-click a page in a notebook's contents → Open / Delete this page** (asks first; the
+  page's sketch, photographs and observations are kept, as with *Tear out* on the page).
+
+---
+
 # Checkpoint — 2026-11-19, 16:01 CST
 
 **The pad at a desk** (Jacob, 15:56).
