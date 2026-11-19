@@ -11,6 +11,34 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:01 CST
+
+**The pad at a desk** (Jacob, 15:56).
+
+- **Text can be moved.** A text box's own pointer handling kept every press for typing, so
+  Select never saw it. Two ways now: with *Select*, a text box is picked up and dragged like a
+  stroke; with the text tool in hand (or while typing), each box has a round ✥ grip at its top
+  left to drag it by.
+- **The wheel zooms, about the pointer; the wheel pressed down drags the paper** — as on a
+  sheet. Before, the wheel moved the paper up and down and only Ctrl + wheel zoomed. A
+  trackpad's two-finger swipe still moves the paper and its pinch still zooms; a swipe is told
+  from a wheel by arriving in small steps (under 40) or sideways. **That threshold is a
+  guess** and was tried only with a synthetic wheel. The listener is now attached directly so
+  Ctrl + wheel no longer zooms the whole browser page as well. Only the main mouse button
+  draws.
+- **Right-click menu on the pad**: on a mark — Cut, Copy, Paste, Duplicate, Delete; on bare
+  paper — Paste, when something has been copied. Paste puts the copy's top-left corner where
+  the menu was opened. Ctrl/Cmd + X, C, V, D do the same. What is copied is kept for as long
+  as the app is open, so it can be pasted onto another pad; it is not the system clipboard.
+  Pasted and duplicated marks arrive selected, with Select in hand, ready to be placed, and
+  Undo removes them.
+- `checks/t_padmenu.py` (1440 px): wheel in and back out returns to the same scale; middle
+  drag of 80, 50 moves the view by exactly that and draws nothing; the menu's five actions
+  change the mark count 1 → 2 → 3 → 2 → 3 → 2 with the server told each time; a text box
+  dragged by its grip, and by its body with Select, is saved at its new place.
+
+---
+
 # Checkpoint — 2026-11-19, 15:56 CST
 
 **The note box on field notes and meeting notes: words, then Tag and Add** (Jacob, 15:55, with

@@ -2710,3 +2710,18 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .nb-quick-tags button:hover { background: var(--wash); }
 .nb-quick-tags button.on { background: var(--moss-soft); font-weight: 500; }
 @media (pointer: coarse) { .nb-quick-tag, .nb-quick-foot .nb-quick-keep { padding: 8px 18px; font-size: 14.5px; } .nb-quick-tags button { padding: 12px 12px; } }
+
+/* ---------- The pad: moving text, and the right-click menu ---------- */
+/* With Select in hand a text box is a thing to pick up, not a thing to type in. */
+.pad-texts.selecting .pad-textbox { pointer-events: none; }
+.pad-textgrip.move { left: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%; cursor: move; display: none; place-items: center; font-size: 17px; line-height: 1; color: rgba(43, 45, 44, 0.8); }
+.pad-textbox.shown .pad-textgrip.move { display: grid; }
+.padctx {
+  position: fixed; z-index: 90; min-width: 176px; padding: 5px; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+}
+.padctx button { display: flex; justify-content: space-between; align-items: center; gap: 18px; border: none; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 14px; color: var(--ink); }
+.padctx button:hover:not(:disabled) { background: var(--wash); }
+.padctx button:disabled { color: var(--faint); }
+.padctx button.danger { color: #a23a2a; }
+.padctx kbd { font: inherit; font-size: 11.5px; color: var(--muted); }

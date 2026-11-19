@@ -100,6 +100,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [mine, setMine] = useState<string[]>([])
   /** What undo took off the page, newest last, for redo to put back. Anything new empties it. */
   const [undone, setUndone] = useState<PadMark[]>([])
+  /** A text box being dragged by its move grip. */
+  const carrying = useRef<{ id: string; x: number; y: number; gx: number; gy: number } | null>(null)
+  /** The right-click menu: where it is on the glass, and where that is on the paper. */
+  const [ctx, setCtx] = useState<{ x: number; y: number; at: { x: number; y: number }; onMark: boolean } | null>(null)
   const [view, setView] = useState<View>({ scale: 600, x: 40, y: 40 })
   /** Whether the bar is out of the mark at all, and which panel is hanging off it. */
   const [open, setOpen] = useState(false)
@@ -181,11 +185,18 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       // Heard before the notebook behind the pad, which would otherwise turn its own page back.
       if (e.key === 'Escape') { e.stopImmediatePropagation(); if (picked.length) setPicked([]); else onClose() }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && picked.length) { e.preventDefault(); void removePicked() }
+      else if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const k = e.key.toLowerCase()
+        if (k === 'c' && picked.length) { e.preventDefault(); copyPicked() }
+        else if (k === 'x' && picked.length) { e.preventDefault(); copyPicked(); void removePicked() }
+        else if (k === 'v' && clipboard.length) { e.preventDefault(); void paste() }
+        else if (k === 'd' && picked.length) { e.preventDefault(); void duplicatePicked() }
+      }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, editing, picked])
+  }, [onClose, editing, picked, marks, page, tool])
 
   const here = marks.filter((m) => m.page === page)
 
@@ -331,6 +342,17 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       }
       firstFinger.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
     }
+
+    // The wheel pressed down is a hand on the paper: it drags it, and draws nothing.
+    if (read === 'mouse' && e.button === 1) {
+      fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      gesture.current = null
+      capture(e)
+      return
+    }
+    // Only the main button draws; the right one asks for the menu.
+    if (read === 'mouse' && e.button !== 0) return
+    if (ctx) setCtx(null)
 
     const draws = read === 'pen' || read === 'mouse' || fingerDraws
     if (!draws) {
@@ -621,6 +643,43 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     try { await removeMarks(ids) } catch (e) { complain(message(e)); load() }
   }
 
+  // The right-click menu goes when anything that is not the menu is pressed.
+  useEffect(() => {
+    if (!ctx) return
+    const away = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.('.padctx')) setCtx(null) }
+    window.addEventListener('pointerdown', away, true)
+    return () => window.removeEventListener('pointerdown', away, true)
+  }, [ctx])
+
+  /** Copies of marks laid on this page, moved by an amount, and picked up so they can be placed. */
+  async function lay(copies: PadMark[], dx: number, dy: number) {
+    if (!copies.length) return
+    const made: PadMark[] = copies.map((m) => ({
+      ...m, id: crypto.randomUUID(), pad_id: pad.id, project_id: pad.project_id, page,
+      geometry: shifted(m.geometry, dx, dy), created_at: new Date().toISOString(),
+    }))
+    setMarks((all) => [...all, ...made])
+    setMine((m) => [...m, ...made.map((x) => x.id)])
+    setUndone([])
+    setPicked(made.map((m) => m.id))
+    if (tool !== 'select') setTool('select')
+    try {
+      for (const m of made) await addMark({ id: m.id, pad_id: m.pad_id, project_id: m.project_id, page: m.page, kind: m.kind, geometry: m.geometry, style: m.style, body: m.body })
+    } catch (e) { complain(message(e)); load() }
+  }
+  const copyPicked = () => { if (chosenNow().length) clipboard = chosenNow().map((m) => structuredClone(m)) }
+  const chosenNow = () => marks.filter((m) => m.page === page && picked.includes(m.id))
+  /** A little down and to the right, so the copy is seen to be one. */
+  const duplicatePicked = () => lay(chosenNow(), 0.03, 0.03)
+  /** What was copied, with its top-left corner where the menu was asked for — or nudged, from the keyboard. */
+  function paste(where?: { x: number; y: number }) {
+    if (!clipboard.length) return
+    if (!where) return lay(clipboard, 0.03, 0.03)
+    const boxes = clipboard.map(boxOf)
+    const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y))
+    return lay(clipboard, where.x - x, where.y - y)
+  }
+
   async function placeText(p: { x: number; y: number; w: number; h?: number }) {
     try {
       const saved = await addMark({
@@ -716,22 +775,40 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    * trackpad, or holding ctrl, zooms — the convention everywhere else, and a trackpad pinch
    * arrives as a wheel event with ctrlKey set.
    */
-  function wheel(e: React.WheelEvent) {
-    const box = frame.current?.getBoundingClientRect()
-    if (!box) return
-    if (!e.ctrlKey && !e.metaKey) {
-      setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
-      return
+  /*
+   * The wheel, as on a sheet: it zooms, about the pointer. Pressing the wheel and dragging
+   * moves the paper. A trackpad's two-finger swipe still moves it and its pinch still zooms —
+   * a swipe is told from a wheel by coming in small steps or sideways.
+   *
+   * Listened for directly rather than through React, whose wheel listener cannot stop the
+   * browser: with Ctrl held the whole page zoomed along with the paper.
+   */
+  useEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const box = el.getBoundingClientRect()
+      const lines = e.deltaMode === 1
+      const swipe = !e.ctrlKey && !e.metaKey && !lines && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40)
+      if (swipe) {
+        setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
+        return
+      }
+      const step = lines ? e.deltaY * 16 : e.deltaY
+      // A pinch arrives as small steps with Ctrl; a wheel as big ones. Each notch is about a sixth.
+      const k = e.ctrlKey && Math.abs(step) < 40 ? clamp(1 - step * 0.01, 0.8, 1.25) : Math.exp(-step * 0.0016)
+      setView((v) => {
+        const scale = clamp(v.scale * k, 60, 12000)
+        const grew = scale / v.scale
+        const px = e.clientX - box.left
+        const py = e.clientY - box.top
+        return { scale, x: px - (px - v.x) * grew, y: py - (py - v.y) * grew }
+      })
     }
-    const k = clamp(1 - e.deltaY * 0.01, 0.8, 1.25)
-    setView((v) => {
-      const scale = clamp(v.scale * k, 60, 12000)
-      const grew = scale / v.scale
-      const px = e.clientX - box.left
-      const py = e.clientY - box.top
-      return { scale, x: px - (px - v.x) * grew, y: py - (py - v.y) * grew }
-    })
-  }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [])
 
   const strokes = here.filter((m) => m.kind !== 'text')
   const texts = here.filter((m) => m.kind === 'text')
@@ -753,20 +830,26 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           everything in it: iOS reads it from whatever the pointer actually lands on, and a
           child left at the default lets the system claim the gesture and cancel the stroke a
           few samples in — which looks exactly like a pen that does not work. */}
-      <div className="padview-frame" ref={frame} onWheel={wheel}
+      <div className="padview-frame" ref={frame}
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onPointerCancel={cancelled}
         onContextMenu={(e) => {
           // A right-click picks what is under it, whatever tool is in hand, and its settings open.
           e.preventDefault()
-          const hit = markAt(at(e))
+          const where = at(e)
+          const hit = markAt(where)
           setPicked(hit ? (picked.includes(hit.id) ? picked : [hit.id]) : [])
-        }}>
+          // On something: what can be done with it. On bare paper: paste, if there is anything to.
+          if (hit || clipboard.length) setCtx({ x: e.clientX, y: e.clientY, at: where, onMark: !!hit })
+          else setCtx(null)
+        }}
+        // The wheel pressed down drags the paper, and must not start the browser's own scrolling.
+        onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}>
         <PadSurface
           marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
           onReady={took} />
 
-        <div className="pad-texts" style={{
+        <div className={`pad-texts${tool === 'select' ? ' selecting' : ''}`} style={{
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale / TEXT_UNIT})`,
         }}>
           {texts.map((m) => {
@@ -815,6 +898,24 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
                     setMarks((all) => all.map((x) => (x.id === m.id ? { ...x, body } : x)))
                     setMarkBody(m.id, body).catch((err) => complain(message(err)))
                   }}>{m.body ?? ''}</div>
+                {/* Taken hold of here, the box goes where it is dragged. */}
+                <span className="pad-textgrip move" title="Drag to move this text" aria-label="Move this text"
+                  onPointerDown={(e) => {
+                    e.stopPropagation(); e.preventDefault()
+                    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                    carrying.current = { id: m.id, x: e.clientX, y: e.clientY, gx: g.x, gy: g.y }
+                  }}
+                  onPointerMove={(e) => {
+                    const c = carrying.current
+                    if (!c || c.id !== m.id) return
+                    const geometry = { ...g, x: c.gx + (e.clientX - c.x) / viewRef.current.scale, y: c.gy + (e.clientY - c.y) / viewRef.current.scale }
+                    setMarks((all) => all.map((x) => (x.id === m.id ? { ...x, geometry } : x)))
+                  }}
+                  onPointerUp={() => {
+                    if (carrying.current?.id !== m.id) return
+                    carrying.current = null
+                    setMarkGeometry(m.id, m.geometry).catch((err) => complain(message(err)))
+                  }}>✥</span>
                 <span className="pad-textgrip e" title="Drag to change where the text wraps" {...grip('e')} />
                 <span className="pad-textgrip se" title="Drag to resize" {...grip('se')} />
                 {/* Type size: dragged up for larger, down for smaller. */}
@@ -850,6 +951,20 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         </div>
       </div>
 
+      {ctx && (
+        <div className="padctx" role="menu" style={{ left: Math.min(ctx.x, window.innerWidth - 190), top: Math.min(ctx.y, window.innerHeight - (ctx.onMark ? 232 : 60)) }}
+          onPointerDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+          {ctx.onMark && <>
+            <button role="menuitem" onClick={() => { copyPicked(); void removePicked(); setCtx(null) }}>Cut<kbd>Ctrl X</kbd></button>
+            <button role="menuitem" onClick={() => { copyPicked(); setCtx(null) }}>Copy<kbd>Ctrl C</kbd></button>
+          </>}
+          <button role="menuitem" disabled={!clipboard.length} onClick={() => { void paste(ctx.at); setCtx(null) }}>Paste<kbd>Ctrl V</kbd></button>
+          {ctx.onMark && <>
+            <button role="menuitem" onClick={() => { void duplicatePicked(); setCtx(null) }}>Duplicate<kbd>Ctrl D</kbd></button>
+            <button role="menuitem" className="danger" onClick={() => { void removePicked(); setCtx(null) }}>Delete<kbd>Del</kbd></button>
+          </>}
+        </div>
+      )}
       {picked.length > 0 && (
         <div className="padsel" role="toolbar" aria-label="What is selected" onPointerDown={(e) => e.stopPropagation()}>
           <span className="padsel-count">{picked.length} selected</span>
@@ -1017,6 +1132,12 @@ const icon = {
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n))
 
 /** The box a mark sits in, in page units, with a little air round a stroke. */
+/**
+ * What was last copied on a pad. Kept outside any one pad, so something drawn on one page of
+ * notes can be pasted onto another. It lasts as long as the app is open.
+ */
+let clipboard: PadMark[] = []
+
 function boxOf(m: PadMark): { x: number; y: number; w: number; h: number } {
   const g = m.geometry as { points?: InkPoint[]; x?: number; y?: number; w?: number; h?: number }
   if (!g.points) return { x: g.x ?? 0, y: g.y ?? 0, w: g.w ?? 0.2, h: Math.max(g.h ?? 0, 0.05) }
