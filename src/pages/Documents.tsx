@@ -107,6 +107,25 @@ export default function Documents() {
     lastPick.current = id
   }
   const [ordering, setOrdering] = useState(false)
+  // The search row and the column headings stay at the top of the window while the list scrolls
+  // under them. The headings sit below the search row (and the selection bar, when it is up),
+  // so their heights are measured and handed to the stylesheet.
+  const pageBox = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const box = pageBox.current
+    if (!box || typeof ResizeObserver === 'undefined') return
+    const measure = () => {
+      const h = (sel: string) => Math.round(box.querySelector<HTMLElement>(sel)?.getBoundingClientRect().height ?? 0)
+      box.style.setProperty('--docs-tools-h', `${h('.toolbar')}px`)
+      box.style.setProperty('--docs-pick-h', `${h('.pick-bar')}px`)
+    }
+    const watch = new ResizeObserver(measure)
+    watch.observe(box)
+    const seen = new MutationObserver(() => { measure(); for (const el of box.querySelectorAll('.toolbar, .pick-bar')) watch.observe(el) })
+    seen.observe(box, { childList: true, subtree: true })
+    measure()
+    return () => { watch.disconnect(); seen.disconnect() }
+  }, [])
 
   const order = effectiveOrder(firm?.discipline_order, current?.discipline_order)
 
@@ -181,7 +200,7 @@ export default function Documents() {
   }
 
   return (
-    <section {...pageDropProps} className={`docs-page${phoneTools ? ' tools-open' : ''}${pageDrag ? ' page-drop' : ''}`}>
+    <section ref={pageBox} {...pageDropProps} className={`docs-page${phoneTools ? ' tools-open' : ''}${pageDrag ? ' page-drop' : ''}`}>
       <div className="page-head">
         <div>
           <PageTitle>Drawings</PageTitle>

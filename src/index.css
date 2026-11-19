@@ -2876,3 +2876,21 @@ a.ov-card:hover { border-color: var(--moss); }
     background: linear-gradient(rgba(43, 45, 44, 0.62), rgba(43, 45, 44, 0.3)); pointer-events: none;
   }
 }
+
+/* ---------- Drawings at a desk: the search row and the column headings stay put ----------
+   A set is a few hundred sheets. Scrolled halfway down there was no search box, no way to
+   start selecting, and no saying which column was which. */
+@media (min-width: 761px) {
+  .docs-page .toolbar {
+    position: sticky; top: 0; z-index: 9; background: var(--paper);
+    margin-top: 0; margin-bottom: 0; padding: 10px 0; box-shadow: 0 1px 0 var(--line);
+  }
+  .docs-page .pick-bar { position: sticky; top: var(--docs-tools-h, 0px); z-index: 8; background: var(--paper); }
+  /* "hidden" makes the table its own scrolling box, and a heading then sticks to the table
+     instead of the window. "clip" cuts off the same overflow without doing that. */
+  .docs-page table.register { overflow: clip; }
+  .docs-page table.register thead th {
+    position: sticky; top: calc(var(--docs-tools-h, 0px) + var(--docs-pick-h, 0px)); z-index: 7;
+    background: var(--paper); box-shadow: 0 1px 0 var(--line);
+  }
+}

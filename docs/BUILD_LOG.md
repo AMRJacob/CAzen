@@ -42,6 +42,16 @@ sheet). Space-and-drag still pans; a trackpad's swipe still moves the sheet and 
 zooms. The hint under the zoom buttons says so. `t_template.py` wheels in over the title
 block and middle-drags.
 
+Jacob, 16:38: **on the Drawings page at a desk, the search row and the column headings stay
+at the top while the list scrolls.** The row with search, *Set as of*, *Sheet order* and
+*Re-read titles and dates* sticks to the top of the window; the selection bar, when it is up,
+sticks under it; the column headings stick under those. The headings' offset is measured from
+the rows above them. The table's `overflow: hidden` had to become `clip`, or the headings
+stuck to the table rather than the window. Above 760 px only; the phone layout is untouched.
+`checks/t_sticky.py`, 120 sheets, scrolled 3,000 px: search row at 0, headings at 63, and at
+110 with the selection bar between. Sets and revisions, and the project manual's list, were
+not given the same treatment.
+
 ---
 
 # Checkpoint — 2026-11-19, 16:30 CST
