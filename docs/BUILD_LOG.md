@@ -43,6 +43,20 @@ for this entry are stamped 11:27–11:31 CST.)
 - **Notebooks menu.** Sidebar books shorter (54×68) with a soft shadow. The Notebooks page is
   gone: `/field-notes` opens the field notes; on a phone the bottom bar says "Field notes" and
   Meeting notes and Observations are under More.
+- **Pad text.** Jacob could not see what he typed on the pad, though the thumbnail showed it.
+  The text layer was laid out in page units — type 0.03 px high, scaled up by a transform —
+  and a browser asked for type that small may draw nothing. The layer is now laid out ×1000
+  (30 px type) and scaled down (`TEXT_UNIT`). **Not seen failing here:** the test browser drew
+  the old text; the cause is inferred from his report and the 0.03 px size.
+  The text tool now drags out a box (a tap still gives the usual width); typing wraps at the
+  box's edge and the box grows downward; with the text tool chosen every box shows a side grip
+  (wrap width) and a corner grip (width and height), saved by `setMarkGeometry`. The box is an
+  editable block, not a textarea. The thumbnail wraps text to the box width, approximately.
+  `checks/t_text.py`.
+- **Redo in the pad**, beside undo: what undo removed goes back under the same id; anything
+  new drawn empties it. On phones the bar's keys are 33 px so ten fit.
+- **Notebook menu**: the mark fades away while the menu is open, as on the pad; a touch
+  anywhere else closes it (it also still closes by itself after a few seconds).
 - **Asked, not built: Google Photos behind Library.** Google's own documentation says the
   Library API now reaches only what an app itself created and that choosing from a person's
   library goes through the Photos Picker API (OAuth, a picking session, then download). It

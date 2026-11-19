@@ -200,6 +200,14 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
     timer.current = window.setTimeout(() => setOpen(false), ms)
   }, [])
   useEffect(() => { if (open) rest(4200); return () => { if (timer.current !== null) window.clearTimeout(timer.current) } }, [open, rest])
+  // With the mark gone while the menu is open, a touch anywhere else is what puts it away.
+  const nav = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => { if (!nav.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
   const I = (d: React.ReactNode) => (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
   )
@@ -209,7 +217,7 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
     </button>
   )
   return (
-    <nav className={`nb-menu${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
+    <nav ref={nav} className={`nb-menu${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
       <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => setOpen(!open)}>
         <Mark size={30} />
       </button>

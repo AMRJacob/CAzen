@@ -33,7 +33,7 @@ export interface NotePad {
 
 export type MarkGeometry =
   | { points: InkPoint[] }
-  | { x: number; y: number; w: number }
+  | { x: number; y: number; w: number; h?: number }
 
 export interface PadMark {
   id: string
@@ -125,6 +125,12 @@ export async function addMark(mark: {
 /** The one thing that is edited rather than added: what a text box says. */
 export async function setMarkBody(id: string, body: string): Promise<void> {
   const { error } = await db().from('pad_marks').update({ body }).eq('id', id)
+  if (error) throw error
+}
+
+/** A text box made wider, narrower or taller: where it wraps is part of what was written. */
+export async function setMarkGeometry(id: string, geometry: MarkGeometry): Promise<void> {
+  const { error } = await db().from('pad_marks').update({ geometry }).eq('id', id)
   if (error) throw error
 }
 
