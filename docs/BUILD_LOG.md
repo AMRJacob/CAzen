@@ -33,6 +33,15 @@ With *Select* chosen in the markup palette:
 and saved shifted by exactly that; a click saves nothing; a corner drag resizes the box and
 the note; the note's pointer is kept; double-click opens the note's words.
 
+Jacob, 15:42: **notes are sized by the sheet, not the screen.** A note's words were 13 px on
+every screen, so on a phone, where the whole sheet is under 400 px wide, they were enormous
+against the drawing. The words, their box's padding and least size, and the dimension figures
+are now a fraction of the sheet's width (1.08% — what 13 px is on a 1200 px sheet), via
+container units on the page. Measured: the same note's text takes 4.0–4.1% of the sheet's
+height at 1440, 1920 and 402 px wide (it is 4 px tall on the phone at fit, and is read by
+zooming in). A browser without container units keeps 13 px. iOS's own text enlargement is
+switched off for the layer; **not seen on the iPhone**.
+
 ---
 
 # Checkpoint — 2026-11-19, 15:36 CST
