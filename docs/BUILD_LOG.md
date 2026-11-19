@@ -11,6 +11,27 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 13:10 CST
+
+**Proposal requests, answered.** Each PR in the change register now carries, on its own line,
+the contractor's price, the owner's decision (awaiting / approved / not accepted) and the change
+order it is rolled into, chosen from the project's change orders. A strip above the register
+says where the PRs stand in money: awaiting a price, priced and awaiting a decision, approved
+but not yet in a change order, and in change orders. A change order's row totals the PRs it
+covers. An approved PR with no change order is flagged.
+
+- No schema change: price and decision are `pr.price` and `pr.decision` in the PR's own
+  `issued_forms.values`; the link is the existing `issued_form_links` (`coverWith` / `uncover`),
+  now also reachable from the PR's side. `prPrice`, `prDecision`, `setPrResponse`, `prStanding`
+  in `src/lib/issued.ts`; `PrResponse` in `src/pages/CaLogs.tsx`.
+- Not done: the price does not yet flow into the pay application's change-order lines or the
+  contract sum — those are still entered on the pay application.
+
+Verified with `checks/t_pr.py`: price two PRs (one a credit), approve one, decline one, roll the
+approved one into CO-001; the strip and the CO row follow at each step.
+
+---
+
 # Checkpoint — 2026-11-19, 12:50 CST
 
 **Notebooks, to Jacob's drawn layout.** He marked up a screenshot: the menu area is called

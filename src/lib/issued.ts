@@ -247,3 +247,50 @@ export async function documentForIssuance(args: {
   })
   if (error) throw error
 }
+
+// ---------- A proposal request, after it comes back ----------
+
+/**
+ * What the owner said to a priced proposal request. With no price yet it is simply waiting on
+ * the contractor; "pending" with a price is waiting on the owner.
+ */
+export type PrDecision = 'pending' | 'approved' | 'rejected'
+
+/**
+ * The price and the decision live with the proposal request's own values, beside what it was
+ * issued with, so a PR filed from an upload and one written here are answered the same way.
+ */
+export const prPrice = (row: IssuedForm): number | null => {
+  const raw = row.values?.['pr.price']
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+export const prDecision = (row: IssuedForm): PrDecision => {
+  const v = row.values?.['pr.decision']
+  return v === 'approved' || v === 'rejected' ? v : 'pending'
+}
+
+export async function setPrResponse(row: IssuedForm, patch: { price?: number | null; decision?: PrDecision }): Promise<Record<string, string>> {
+  const values = { ...(row.values ?? {}) }
+  if ('price' in patch) { if (patch.price == null) delete values['pr.price']; else values['pr.price'] = String(patch.price) }
+  if (patch.decision) values['pr.decision'] = patch.decision
+  const { error } = await db().from('issued_forms').update({ values }).eq('id', row.id)
+  if (error) throw error
+  return values
+}
+
+/** Where the project's proposal requests stand, in money. */
+export function prStanding(rows: RegisterRow[]) {
+  const out = { unpriced: 0, deciding: 0, approvedLoose: 0, inOrders: 0, rejected: 0, count: 0 }
+  for (const r of rows) {
+    if (r.kind !== 'pr') continue
+    out.count++
+    const price = prPrice(r), decision = prDecision(r)
+    if (decision === 'rejected') { out.rejected += price ?? 0; continue }
+    if (r.rolledInto) { out.inOrders += price ?? 0; continue }
+    if (price == null) { out.unpriced++; continue }
+    if (decision === 'approved') out.approvedLoose += price; else out.deciding += price
+  }
+  return out
+}

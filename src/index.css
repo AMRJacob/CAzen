@@ -2084,3 +2084,19 @@ label.stack select, .obs-row select, .obs-more select {
 }
 /* Nothing floats over an open book: the corner mark is for the app, and this is the book. */
 body:has(.nb) .phone-nav { display: none; }
+
+/* ---------- Proposal requests, answered ---------- */
+.pr-standing { display: flex; flex-wrap: wrap; gap: 6px 26px; margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+.pr-standing strong { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pr-standing .due strong { color: #9a5b00; }
+.register tr.pr-response td { border-top: none; padding-top: 0; padding-bottom: 12px; }
+.pr-answer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 13px; }
+.pr-answer label { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.pr-answer input.cell { width: 130px; text-align: right; font-variant-numeric: tabular-nums; }
+.pr-answer select { font: inherit; font-size: 13px; padding: 5px 26px 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); max-width: 240px; }
+.pr-decide { display: flex; gap: 4px; }
+.pr-decide .chip { padding: 4px 11px; font-size: 12.5px; }
+.pr-decide .chip.on.pr-approved { background: var(--moss); border-color: var(--moss); color: #fff; }
+.pr-decide .chip.on.pr-rejected { background: var(--danger-soft, #f6e3df); border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
+.pr-flag { color: #9a5b00; font-size: 12.5px; }
+@media (pointer: coarse) { .pr-decide .chip { padding: 8px 13px; font-size: 13.5px; } }

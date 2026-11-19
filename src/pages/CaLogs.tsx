@@ -2,7 +2,9 @@ import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
-import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, uncover, type MissingChangeDocument, type RegisterRow } from '../lib/issued'
+import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, setPrResponse, uncover, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
+import { money as asMoney } from '../lib/money'
+import { money as readMoney } from '../lib/sovPaste'
 import { openFile, type ProjectStore } from '../lib/files'
 import { listIssuanceSheets } from '../lib/sheets'
 import type { BundleSheet } from '../lib/pdf/bundle'
@@ -85,6 +87,14 @@ export default function CaLogs() {
 
   // Proposal requests no change order has taken up yet, for the attach picker.
   const loose = useMemo(() => (rows ?? []).filter((r) => r.kind === 'pr' && !r.rolledInto), [rows])
+  const orders = useMemo(() => (rows ?? []).filter((r) => r.kind === 'change_order')
+    .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true })), [rows])
+  const standing = useMemo(() => prStanding(rows ?? []), [rows])
+  /** A price or a decision changed on screen first, then kept; the list is not fetched again for it. */
+  const patchRow = useCallback((id: string, values: Record<string, string>) => {
+    setRows((all) => (all ?? []).map((r) => (r.id === id ? { ...r, values }
+      : r.covers?.some((c) => c.id === id) ? { ...r, covers: r.covers.map((c) => (c.id === id ? { ...c, values } : c)) } : r)))
+  }, [])
 
   if (writing) {
     return (
@@ -152,6 +162,14 @@ export default function CaLogs() {
         </div>
       )}
       {error && <div className="notice error">{error}</div>}
+      {standing.count > 0 && (
+        <div className="pr-standing" aria-label="Where the proposal requests stand">
+          <span><strong>{standing.unpriced}</strong> awaiting a price</span>
+          <span><strong>{asMoney(standing.deciding)}</strong> priced, awaiting a decision</span>
+          <span className={standing.approvedLoose ? 'due' : ''}><strong>{asMoney(standing.approvedLoose)}</strong> approved, not yet in a change order</span>
+          <span><strong>{asMoney(standing.inOrders)}</strong> in change orders</span>
+        </div>
+      )}
       {!rows ? <p className="muted">Loading…</p>
         : !listed.length ? <div className="card muted">Nothing issued yet.</div> : (
         <table className="register">
@@ -160,7 +178,7 @@ export default function CaLogs() {
           </thead>
           <tbody>
             {listed.map((r) => (
-              <Row key={r.id} row={r} project={current} loose={loose}
+              <Row key={r.id} row={r} project={current} loose={loose} orders={orders} onValues={patchRow}
                 attaching={attaching === r.id}
                 onAttach={() => setAttaching(attaching === r.id ? null : r.id)}
                 onChanged={load} onError={setError} />
@@ -172,7 +190,10 @@ export default function CaLogs() {
   )
 }
 
-function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
+function Row({ row, project, loose, orders, onValues, attaching, onAttach, onChanged, onError }: {
+  /** The project's change orders, for a proposal request to be rolled into. */
+  orders: RegisterRow[]
+  onValues: (id: string, values: Record<string, string>) => void
   row: RegisterRow
   project: { id: string; name: string } | null
   loose: RegisterRow[]
@@ -198,7 +219,9 @@ function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
         <td className="col-title">
           {subject}
           {row.kind === 'change_order' && row.covers?.length ? (
-            <span className="covers"> covers {row.covers.map((c) => c.number ?? '—').join(', ')}</span>
+            <span className="covers"> covers {row.covers.map((c) => c.number ?? '—').join(', ')}
+              {row.covers.some((c) => prPrice(c) != null) && <> · {asMoney(row.covers.reduce((n, c) => n + (prPrice(c) ?? 0), 0))}</>}
+            </span>
           ) : null}
           {row.kind === 'pr' && row.rolledInto ? (
             <span className="covers"> in {row.rolledInto.number ?? 'a change order'}</span>
@@ -214,6 +237,12 @@ function Row({ row, project, loose, attaching, onAttach, onChanged, onError }: {
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
         </td>
       </tr>
+
+      {row.kind === 'pr' && (
+        <tr className="pr-response"><td /><td colSpan={4}>
+          <PrResponse row={row} orders={orders} onValues={onValues} onChanged={onChanged} onError={onError} />
+        </td></tr>
+      )}
 
       {showing && row.issuance_id && (
         <tr className="confirm-row"><td colSpan={5}>
@@ -305,6 +334,64 @@ function IssuedSheets({ issuanceId, project, onError }: {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+
+/**
+ * What came back on a proposal request: the contractor's price, the owner's answer, and the
+ * change order it ends up in. A PR is a question; this is the answer, kept on the same line.
+ */
+function PrResponse({ row, orders, onValues, onChanged, onError }: {
+  row: RegisterRow
+  orders: RegisterRow[]
+  onValues: (id: string, values: Record<string, string>) => void
+  onChanged: () => void
+  onError: (m: string) => void
+}) {
+  const price = prPrice(row)
+  const decision = prDecision(row)
+  const [typed, setTyped] = useState(price == null ? '' : asMoney(price))
+
+  async function keep(patch: { price?: number | null; decision?: PrDecision }) {
+    try { onValues(row.id, await setPrResponse(row, patch)) } catch (e) { onError(message(e)) }
+  }
+  function priceDone() {
+    const n = typed.trim() ? readMoney(typed) : null
+    if (typed.trim() && n == null) { setTyped(price == null ? '' : asMoney(price)); return }
+    if (n !== price) void keep({ price: n })
+    setTyped(n == null ? '' : asMoney(n))
+  }
+  const CHOICES: [PrDecision, string][] = [['pending', price == null ? 'Awaiting price' : 'Awaiting decision'], ['approved', 'Approved'], ['rejected', 'Not accepted']]
+
+  return (
+    <div className="pr-answer">
+      <label>Price
+        <input className="cell" inputMode="decimal" value={typed} placeholder="when it comes back"
+          aria-label={`Price for ${row.number ?? 'this proposal request'}`}
+          onChange={(e) => setTyped(e.target.value)} onBlur={priceDone}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+      </label>
+      <div className="pr-decide" role="radiogroup" aria-label="The owner’s decision">
+        {CHOICES.map(([d, label]) => (
+          <button key={d} role="radio" aria-checked={decision === d} className={`chip pr-${d}${decision === d ? ' on' : ''}`}
+            onClick={() => { if (decision !== d) void keep({ decision: d }) }}>{label}</button>
+        ))}
+      </div>
+      <label>Change order
+        <select value={row.rolledInto?.id ?? ''} aria-label={`Change order for ${row.number ?? 'this proposal request'}`}
+          onChange={async (e) => {
+            try {
+              if (e.target.value) await coverWith(row.project_id, e.target.value, [row.id]); else await uncover([row.id])
+              onChanged()
+            } catch (err) { onError(message(err)) }
+          }}>
+          <option value="">{orders.length ? 'Not in one yet' : 'None written yet'}</option>
+          {orders.map((o) => <option key={o.id} value={o.id}>{o.number ?? 'Change order'}{o.title ? ` · ${o.title}` : ''}</option>)}
+        </select>
+      </label>
+      {decision === 'approved' && !row.rolledInto && <span className="pr-flag">Approved — not in a change order yet</span>}
     </div>
   )
 }
