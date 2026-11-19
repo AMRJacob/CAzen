@@ -89,6 +89,9 @@ export default function Documents() {
   const [rereading, setRereading] = useState(false)
   /** In this mode a plain click on a sheet selects it instead of opening it. */
   const [selecting, setSelecting] = useState(false)
+  /** On a phone: the search box, and the rest of the toolbar, are each shown only when asked for. */
+  const [phoneSearch, setPhoneSearch] = useState(false)
+  const [phoneTools, setPhoneTools] = useState(false)
   function pick(id: string, range: boolean, inOrder: string[]) {
     setPicked((was) => {
       const next = new Set(was)
@@ -175,7 +178,7 @@ export default function Documents() {
   }
 
   return (
-    <section {...pageDropProps} className={pageDrag ? 'page-drop' : ''}>
+    <section {...pageDropProps} className={`docs-page${phoneTools ? ' tools-open' : ''}${pageDrag ? ' page-drop' : ''}`}>
       <div className="page-head">
         <div>
           <PageTitle>Drawings</PageTitle>
@@ -202,6 +205,30 @@ export default function Documents() {
       )}
 
       {error && <div className="notice error">{error}</div>}
+
+      {/* On a phone the top of the page is one short row: which list, a search button, and the
+          rest of the controls behind the dots. The full tabs and toolbar are the desk's. */}
+      <div className="docs-mini">
+        <div className="docs-mini-tabs" role="tablist">
+          <button role="tab" aria-selected={view === 'sheets'} className={view === 'sheets' ? 'on' : ''} onClick={() => setView('sheets')}>Sheets</button>
+          <button role="tab" aria-selected={view === 'sets'} className={view === 'sets' ? 'on' : ''} onClick={() => setView('sets')}>Sets and revisions</button>
+        </div>
+        <button className={`docs-mini-key${phoneSearch || query ? ' on' : ''}`} aria-label="Search the drawings" aria-expanded={phoneSearch}
+          onClick={() => { setView('sheets'); setPhoneSearch(!phoneSearch) }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg>
+        </button>
+        <button className={`docs-mini-key${phoneTools ? ' on' : ''}`} aria-label="More options" aria-expanded={phoneTools}
+          onClick={() => { setView('sheets'); setPhoneTools(!phoneTools) }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
+        </button>
+      </div>
+      {phoneSearch && view === 'sheets' && (
+        <div className="docs-mini-search">
+          <input autoFocus type="search" enterKeyHint="search" value={query} placeholder="Sheet number, title or words on a drawing"
+            onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+          <button aria-label="Close the search" onClick={() => { setQuery(''); setPhoneSearch(false) }}>×</button>
+        </div>
+      )}
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={view === 'sheets'} className={view === 'sheets' ? 'on' : ''} onClick={() => setView('sheets')}>Current sheets</button>

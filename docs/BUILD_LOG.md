@@ -75,6 +75,14 @@ lifts. Tried in the test browser with synthetic touches: straight down and down-
 move the page only; a clearly sideways drag moves the list 220 px and the page not at all; an
 exact 45° diagonal moved neither. Real fingers on iOS not tried.
 
+**Drawings on a phone has one short row at the top** (Jacob, 14:23): *Sheets | Sets and
+revisions*, a search button that opens a box to type in, and three dots. The dots are mine —
+Jacob asked for only the first two — and show the rest of the toolbar (set as of, sheet
+order, re-read, download) so those are not lost on a phone. The first sheet starts 236 px down
+the screen. The desk page is unchanged, and so is the corner menu.
+Before this Jacob asked for the corner menu to become contextual per page, then for the page's
+controls to go under More, then cancelled both; that work was discarded unpushed.
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

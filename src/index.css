@@ -2555,3 +2555,26 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 }
 /* The browser scrolls these down; sideways is PanX's, and only when it is meant. */
 @media (max-width: 760px) { .pan-x { touch-action: pan-y; overscroll-behavior-x: contain; } }
+
+/* ---------- Drawings on a phone: one short row at the top ---------- */
+.docs-mini, .docs-mini-search { display: none; }
+@media (max-width: 760px) {
+  .docs-mini { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; }
+  .docs-mini-tabs { display: flex; flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .docs-mini-tabs button { flex: 1; min-width: 0; padding: 9px 8px; border: none; border-radius: 0; background: none; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .docs-mini-tabs button.on { background: var(--moss-soft); color: var(--ink); font-weight: 500; }
+  .docs-mini-key { flex: none; width: 42px; height: 40px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); }
+  .docs-mini-key.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .docs-mini-search { display: flex; gap: 6px; margin: 0 0 10px; }
+  .docs-mini-search input { flex: 1; min-width: 0; font-size: 16px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .docs-mini-search button { flex: none; width: 42px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 20px; }
+  .docs-page > .tabs, .docs-page .toolbar, .docs-page .set-actions { display: none; }
+  .docs-page.tools-open .toolbar, .docs-page.tools-open .set-actions { display: flex; }
+  .docs-page.tools-open .toolbar > input.grow { display: none; }
+  .docs-page .page-head { margin-bottom: 8px; }
+}
+@media (max-width: 760px) {
+  /* "Sheets" is short; the room goes to the longer label so neither is cut. */
+  .docs-mini-tabs button:first-child { flex: 0 0 auto; padding: 9px 16px; }
+  .docs-mini-tabs button { font-size: 13.5px; }
+}
