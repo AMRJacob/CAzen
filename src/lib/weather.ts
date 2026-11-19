@@ -13,7 +13,6 @@
  * The phrasing follows how these reports are already written: "Overcast, Lower 40s°F".
  */
 
-const AGENT = 'CAzen construction administration (cazen.app)'
 
 /** A band rather than a number, which is what a field report says. */
 export function temperatureBand(f: number): string {
@@ -34,15 +33,14 @@ function condition(text: string | null | undefined): string {
 interface Observation { time: string; text: string; tempF: number | null }
 
 async function json(url: string, signal?: AbortSignal): Promise<any> {
-  const r = await fetch(url, {
-    signal,
-    headers: { Accept: 'application/geo+json', 'X-CAzen': AGENT },
-  })
+  // Nothing but Accept. A header of our own turns this into a request the browser must ask
+  // permission for first, and the weather service does not grant it — so the lookup failed
+  // before it was ever sent, silently, every time.
+  const r = await fetch(url, { signal, headers: { Accept: 'application/geo+json' } })
   if (!r.ok) throw new Error(`Weather service returned ${r.status}`)
   return r.json()
 }
 
-/** The station list for a point, nearest first. */
 async function stationsNear(lat: number, lon: number, signal?: AbortSignal): Promise<string[]> {
   const point = await json(`https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`, signal)
   const list = await json(point?.properties?.observationStations, signal)

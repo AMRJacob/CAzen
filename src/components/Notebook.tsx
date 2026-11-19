@@ -293,7 +293,7 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
    * project is. Asked once, for a page that has none; the field stays the user's to overwrite.
    */
   const [asking, setAsking] = useState(false)
-  const lookUpWeather = useCallback(async () => {
+  const lookUpWeather = useCallback(async (byHand = false) => {
     setAsking(true)
     try {
       const here = await new Promise<{ lat: number; lon: number } | null>((done) => {
@@ -308,6 +308,8 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
       const found = await weatherAt(lat, lon, when)
       if (found) change({ weather: found })
       else if (lat == null) onTrouble('No location to look the weather up for: the phone would not give one and the project has none set.')
+      // Asked for by hand and nothing came back: say so, so it isn't a button that does nothing.
+      else if (byHand) onTrouble('The weather service had no observation for here at that time. It covers the United States and the last six days.')
     } finally { setAsking(false) }
   }, [project.latitude, project.longitude, page.visited_on, page.visited_at, change, onTrouble])
   /**
@@ -437,7 +439,7 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
               placeholder={asking ? 'Looking up the weather…' : 'Weather'}
               onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
           )}
-          {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather()} title="Look the weather up from where you are">↻</button>}
+          {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather(true)} title="Look the weather up from where you are">↻</button>}
         </div>
         {canHoldLocation() && (
           <div className="nb-head-fields nb-where">

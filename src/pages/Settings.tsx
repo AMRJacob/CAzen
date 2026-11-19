@@ -1,3 +1,4 @@
+import { addToProject, invite, listFirmPeople, listProjectAccess, PROJECT_ROLES, removeFromFirm, removeFromProject, setFirmRole, type FirmPerson, type ProjectRole } from '../lib/access'
 import { addCustomTag, byTrade, listCustomTags, removeCustomTag, TagsNotSetUp, type Tag } from '../lib/tags'
 import { PageTitle } from '../components/PageTitle'
 import { useEffect, useRef, useState } from 'react'
@@ -225,6 +226,12 @@ export default function Settings() {
       <Group id="storage" title="File storage" hint="How much is used, and the limits">
       <StorageCard firm={firm} isAdmin={isAdmin} onSaved={reload} />
       </Group>
+
+      {isAdmin && (
+        <Group id="access" title="People and access" hint="Invite by email; who is on which project">
+          <Access firmId={firm.id} me={session?.user.id ?? ''} />
+        </Group>
+      )}
 
       <Group id="requests" title="Requests and issues" hint="The wishlist and bug reports">
       <FeedbackList />
@@ -475,5 +482,133 @@ function Group({ id, title, hint, open = false, children }: { id: string; title:
       <summary><span className="set-group-title">{title}</span><span className="set-group-hint">{hint}</span></summary>
       {isOpen && <div className="set-group-body">{children}</div>}
     </details>
+  )
+}
+
+
+/**
+ * Who has access, and to what. Owners and admins see every project, so they have nothing to
+ * tick; everyone else is on exactly the projects ticked here. Inviting someone emails them a
+ * link to choose a password and puts them on the projects chosen in the same step.
+ */
+function Access({ firmId, me }: { firmId: string; me: string }) {
+  const { projects } = useProject()
+  const [people, setPeople] = useState<FirmPerson[] | null>(null)
+  const [on, setOn] = useState<Map<string, Set<string>>>(new Map())
+  const [error, setError] = useState<string | null>(null)
+  const [said, setSaid] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [role, setRole] = useState<ProjectRole>('architect')
+  const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState<string | null>(null)
+  const active = projects.filter((p) => p.status !== 'archived')
+
+  const load = async () => {
+    try {
+      const [p, a] = await Promise.all([listFirmPeople(firmId), listProjectAccess(projects.map((x) => x.id))])
+      setPeople(p); setOn(a); setError(null)
+    } catch (e) { setError((e as Error).message) }
+  }
+  useEffect(() => { void load() }, [firmId, projects.length])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function toggle(person: FirmPerson, projectId: string, want: boolean) {
+    // Shown first, kept after; put back if the server says no.
+    setOn((m) => { const n = new Map(m); const s = new Set(n.get(person.user_id) ?? []); if (want) s.add(projectId); else s.delete(projectId); n.set(person.user_id, s); return n })
+    try { if (want) await addToProject(projectId, person.user_id); else await removeFromProject(projectId, person.user_id) }
+    catch (e) { setError((e as Error).message); void load() }
+  }
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true); setError(null); setSaid(null)
+    try {
+      const r = await invite(firmId, email.trim(), picked, role)
+      setSaid(r.invited
+        ? `Invitation sent to ${email.trim()}. They choose a password from the link, and will see ${picked.length ? `${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : 'no projects until they are added to one'}.`
+        : `${email.trim()} already has an account${picked.length ? ` and has been added to ${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : ''}.`)
+      setEmail(''); setPicked([])
+      await load()
+    } catch (err) { setError((err as Error).message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="access">
+      <form className="card access-invite" onSubmit={send}>
+        <h2>Invite someone</h2>
+        <div className="inline-form">
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" aria-label="Email" />
+          <select value={role} onChange={(e) => setRole(e.target.value as ProjectRole)} aria-label="Their part on the projects">
+            {(Object.keys(PROJECT_ROLES) as ProjectRole[]).map((r) => <option key={r} value={r}>{PROJECT_ROLES[r]}</option>)}
+          </select>
+          <button className="primary" disabled={busy || !email.trim()}>{busy ? 'Sending…' : 'Send invitation'}</button>
+        </div>
+        <div className="access-projects">
+          {active.map((p) => (
+            <label key={p.id} className="check small">
+              <input type="checkbox" checked={picked.includes(p.id)} onChange={(e) => setPicked((v) => (e.target.checked ? [...v, p.id] : v.filter((x) => x !== p.id)))} />
+              {p.number} {p.name}
+            </label>
+          ))}
+        </div>
+        {said && <p className="small ok-text">{said}</p>}
+      </form>
+
+      {error && <div className="notice error">{error}</div>}
+      {!people ? <p className="muted">Loading…</p> : (
+        <table className="access-table">
+          <thead><tr><th>Person</th><th>In the firm</th><th>Projects</th><th /></tr></thead>
+          <tbody>
+            {people.map((p) => {
+              const all = p.role === 'owner' || p.role === 'admin'
+              const theirs = on.get(p.user_id) ?? new Set<string>()
+              return [
+                <tr key={p.user_id}>
+                  <td><strong>{p.full_name || p.email}</strong>{p.full_name && <div className="muted small">{p.email}</div>}
+                    {!p.last_seen && <div className="muted small">Invited — has not signed in yet</div>}</td>
+                  <td>
+                    {p.role === 'owner' || p.user_id === me ? <span className="tag">{p.role}</span> : (
+                      <select value={p.role} aria-label={`Role of ${p.email}`} onChange={async (e) => {
+                        try { await setFirmRole(firmId, p.user_id, e.target.value as 'admin' | 'member'); await load() } catch (err) { setError((err as Error).message) }
+                      }}>
+                        <option value="member">Member — sees assigned projects</option>
+                        <option value="admin">Admin — sees everything, manages access</option>
+                      </select>
+                    )}
+                  </td>
+                  <td>
+                    {all ? <span className="muted small">Every project</span> : (
+                      <button className="link" onClick={() => setOpen(open === p.user_id ? null : p.user_id)}>
+                        {theirs.size ? `${theirs.size} of ${active.length}` : 'None yet'} — {open === p.user_id ? 'done' : 'change'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="right">
+                    {p.role !== 'owner' && p.user_id !== me && (
+                      <button className="link danger-link" onClick={async () => {
+                        if (!window.confirm(`Remove ${p.email} from CAzen? They lose access to every project. Nothing they wrote is deleted.`)) return
+                        try { await removeFromFirm(firmId, p.user_id, projects.map((x) => x.id)); await load() } catch (err) { setError((err as Error).message) }
+                      }}>Remove</button>
+                    )}
+                  </td>
+                </tr>,
+                open === p.user_id && !all && (
+                  <tr key={p.user_id + '-projects'} className="confirm-row"><td colSpan={4}>
+                    <div className="access-projects">
+                      {active.map((x) => (
+                        <label key={x.id} className="check small">
+                          <input type="checkbox" checked={theirs.has(x.id)} onChange={(e) => void toggle(p, x.id, e.target.checked)} />
+                          {x.number} {x.name}
+                        </label>
+                      ))}
+                    </div>
+                  </td></tr>
+                ),
+              ]
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   )
 }

@@ -29,6 +29,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Feature | Status |
 | --- | --- |
 | Sign-in, invites, create password | Live |
+| People and access: invite by email from Settings, firm roles, per-project access | Live (2026-11-19); invitation not yet sent for real |
 | Projects and project switcher; project location (address search, map pin, Open in Maps) | Live |
 | Drawings: upload rounds, split, revision history, set as of date, title block templates, discipline order, search, links between sheets | Live |
 | Markups, dimensions and scale on sheets; markups carried across revisions | Live |

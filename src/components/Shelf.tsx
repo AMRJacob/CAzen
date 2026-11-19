@@ -16,13 +16,16 @@ export function Shelf({ job, small = false }: { job?: string | null; small?: boo
     <div className={`nb-table${small ? ' small' : ''}`} role="list" aria-label="Notebooks">
       {BOOKS.map((b) => (
         <NavLink key={b.mono} role="listitem" to={b.to} className={({ isActive }) => `nb-tome nb-tome-${b.tone}${isActive ? ' open' : ''}`}
-          aria-label={`Open ${b.name}`}>
+          aria-label={`Open ${b.name}`} title={b.name}>
           <span className="nb-tome-band" aria-hidden="true" />
           <span className="nb-tome-mono" aria-hidden="true">{b.mono}</span>
-          <span className="nb-tome-text">
-            <span className="nb-tome-name">{b.name}</span>
-            {!small && <span className="nb-tome-line">{job ? `${job} · ${b.line}` : b.line}</span>}
-          </span>
+          {/* In the sidebar the initials on the cover are the whole label. */}
+          {!small && (
+            <span className="nb-tome-text">
+              <span className="nb-tome-name">{b.name}</span>
+              <span className="nb-tome-line">{job ? `${job} · ${b.line}` : b.line}</span>
+            </span>
+          )}
         </NavLink>
       ))}
     </div>

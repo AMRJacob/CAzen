@@ -11,6 +11,45 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:20 CST
+
+**Project access, and inviting people from the app.** Jacob: invite by email as ArchMGMT did,
+and to begin with, add and remove people from projects.
+
+- **The rule changed** (migration `0037_project_access.sql`, applied with Jacob's confirmation):
+  everyone in the firm used to see every project. Now `is_member(project)` is true for the firm's
+  owners and admins, and for people in `project_members`. Firm membership still gives the firm
+  itself (name, brand, templates). `create_project` puts its creator on the project.
+  `project_members` gained admin read/add/change/remove policies. `firm_people(firm)` lists
+  members with email and name, to admins only. `user_id_for_email` is callable by the service
+  role alone.
+- **`invite-user` edge function** (`supabase/functions/invite-user/index.ts`, deployed v1, JWT
+  required). Checks the caller is a firm admin with the caller's own token, checks the projects
+  belong to that firm, then with the service key: invites the email if it has no account, adds
+  firm membership as `member`, and adds the chosen projects with the chosen project role.
+- **Settings → People and access** (admins only; `Access` in `Settings.tsx`, `src/lib/access.ts`):
+  invite with email, project role and projects; a table of everyone with their firm role
+  (member / admin), the projects they are on as tick boxes, and Remove.
+- Verified with `checks/t_access.py` against the stand-in: list, add to one project and remove
+  from another, send an invitation with role and projects. **Not verified live**: the function
+  has not been called in production, and no invitation email has been sent. Supabase's built-in
+  mailer is rate-limited, and the app's address must be in the project's allowed redirect URLs
+  for the link to land back in CAzen.
+
+**Migration 0036 applied** (third attempt): page `location` and `observation_tags` exist, so the
+Location line and custom tags in Settings are live.
+
+**Sidebar notebooks**: three pocket-notebook covers side by side, 54 × 85 (the 3½ × 5½
+proportion), initials only, no table behind them.
+
+**Weather.** Jacob reported it not working. `json()` in `src/lib/weather.ts` sent a custom
+`X-CAzen` header; a header of our own makes the browser ask the weather service's permission
+first, which it does not give, so the request never left. The header is gone. A lookup asked for
+by hand that finds nothing now says so. Not confirmed against the live service from here — the
+workspace cannot reach it.
+
+---
+
 # Checkpoint — 2026-11-19, 15:40 CST
 
 A run of requests from Jacob, all shipped to `main` except where a database step is waiting.
