@@ -34,6 +34,14 @@ aimed at that, **neither confirmed against these sheets**:
   than its words is the width problem above; an outline somewhere other than its words is a
   placement problem that this change does not fix.
 
+Jacob, 16:46: **he still had to hold Ctrl to zoom in the template editor.** The wheel change
+at 16:36 treated small steps (under 40) as a trackpad swipe and left them to scroll; a mouse
+with smooth scrolling sends exactly such steps, so for him the wheel went on scrolling. (That
+is the likeliest reading; that his copy simply had not updated is the other.) In the template
+editor and on the sketch pad, any up-and-down wheel movement now zooms, whatever its size;
+only a mostly-sideways movement is left to move the sheet. A trackpad's two-finger vertical
+swipe therefore zooms too. Both checks now use twelve steps of 25 with no Ctrl.
+
 ---
 
 # Checkpoint — 2026-11-19, 16:35 CST

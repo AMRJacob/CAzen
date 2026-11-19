@@ -37,9 +37,11 @@ with sync_playwright() as p:
         return inside
     print('readable text outlined on the sheet:',pg.locator('.tb-word').count(),'runs'); pg.screenshot(path='tb_words.png')
     zr=lambda: pg.inner_text('.tb-zoom').replace('\n',' ')
-    pb=pg.locator('.tb-page').bounding_box(); z0=zr(); w0=pb['width']; pg.mouse.move(pb['x']+pb['width']*0.9,pb['y']+pb['height']*0.9); pg.mouse.wheel(0,-300); pg.wait_for_timeout(300); w1=pg.locator('.tb-page').bounding_box()['width']
+    pb=pg.locator('.tb-page').bounding_box(); z0=zr(); w0=pb['width']; pg.mouse.move(pb['x']+pb['width']*0.9,pb['y']+pb['height']*0.9); 
+    for _ in range(12): pg.mouse.wheel(0,-25)
+    pg.wait_for_timeout(300); w1=pg.locator('.tb-page').bounding_box()['width']
     sc=lambda: pg.evaluate("[document.querySelector('.tb-scroll').scrollLeft,document.querySelector('.tb-scroll').scrollTop]"); s0=sc(); pg.mouse.down(button='middle'); pg.mouse.move(pb['x']+pb['width']*0.9-120,pb['y']+pb['height']*0.9-80,steps=5); pg.mouse.up(button='middle'); pg.wait_for_timeout(200); s1=sc()
-    print('wheel over the title block: sheet',round(w0),'→',round(w1),'px wide | wheel pressed and dragged: scrolled by',[round(s1[0]-s0[0]),round(s1[1]-s0[1])],'| no box drawn by it:',pg.locator('.tb-box').count()==0)
+    print('twelve small wheel steps of 25, no Ctrl: sheet',round(w0),'→',round(w1),'px wide | wheel pressed and dragged: scrolled by',[round(s1[0]-s0[0]),round(s1[1]-s0[1])],'| no box drawn by it:',pg.locator('.tb-box').count()==0)
     pg.click('.tb-zoom button:has-text("Fit")'); pg.wait_for_timeout(300)
     print('number box reachable without scrolling:',drag('A-101')); print('keys now:',[t.replace('\n',' = ') for t in pg.locator('.tb-key').all_inner_texts()])
     drag('FIRST FLOOR PLAN'); pg.click('.tb-key:has-text("Issue date")'); drag('09/01/2026'); print('keys:',[t.replace('\n',' = ') for t in pg.locator('.tb-key').all_inner_texts()])

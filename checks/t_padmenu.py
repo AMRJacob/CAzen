@@ -18,7 +18,7 @@ with sync_playwright() as p:
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.goto(BASE+'#/field-notes/reports'); pg.click('.nb-toc button'); pg.wait_for_selector('.nb-pad'); pg.click('.nb-pad'); pg.wait_for_selector('.padview-frame'); pg.wait_for_timeout(700)
     view=lambda: [round(float(v),2) for v in re.findall(r'-?[\d.]+',pg.evaluate("document.querySelector('.pad-texts').style.transform"))[:3]]
     pg.mouse.move(500,400); pg.mouse.down(); pg.mouse.move(560,430,steps=5); pg.mouse.move(640,410,steps=5); pg.mouse.up(); pg.wait_for_timeout(500); print('drawn with the mouse:',len(marks),'mark')
-    v0=view(); pg.mouse.move(700,450); pg.mouse.wheel(0,-300); pg.wait_for_timeout(200); v1=view(); pg.mouse.wheel(0,300); pg.wait_for_timeout(200); v2=view()
+    v0=view(); pg.mouse.move(700,450); [pg.mouse.wheel(0,-25) for _ in range(12)]; pg.wait_for_timeout(200); v1=view(); [pg.mouse.wheel(0,25) for _ in range(12)]; pg.wait_for_timeout(200); v2=view()
     print('wheel up: scale',v0[2],'→',v1[2],'| wheel down again →',v2[2],'| zoomed in then back:',v1[2]>v0[2] and abs(v2[2]-v0[2])<0.01)
     pg.mouse.move(700,450); pg.mouse.down(button='middle'); pg.mouse.move(780,500,steps=5); pg.mouse.up(button='middle'); pg.wait_for_timeout(200); v3=view(); print('wheel pressed and dragged 80, 50: view moved by',[round(v3[0]-v2[0]),round(v3[1]-v2[1])],'| nothing drawn:',len(marks)==1)
     sx,sy=560+80,430+50

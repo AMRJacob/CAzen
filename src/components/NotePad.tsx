@@ -790,14 +790,17 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       e.preventDefault()
       const box = el.getBoundingClientRect()
       const lines = e.deltaMode === 1
-      const swipe = !e.ctrlKey && !e.metaKey && !lines && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40)
+      // Only a mostly-sideways movement moves the paper. Small up-and-down steps are a
+      // smooth-scrolling wheel as often as a trackpad, and a wheel that only zooms with Ctrl
+      // held is the thing this was meant to end.
+      const swipe = !e.ctrlKey && !e.metaKey && !lines && Math.abs(e.deltaX) > Math.abs(e.deltaY)
       if (swipe) {
         setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
         return
       }
       const step = lines ? e.deltaY * 16 : e.deltaY
       // A pinch arrives as small steps with Ctrl; a wheel as big ones. Each notch is about a sixth.
-      const k = e.ctrlKey && Math.abs(step) < 40 ? clamp(1 - step * 0.01, 0.8, 1.25) : Math.exp(-step * 0.0016)
+      const k = e.ctrlKey ? clamp(1 - step * 0.01, 0.8, 1.25) : Math.exp(-step * 0.0016)
       setView((v) => {
         const scale = clamp(v.scale * k, 60, 12000)
         const grew = scale / v.scale

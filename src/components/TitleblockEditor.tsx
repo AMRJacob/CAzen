@@ -112,12 +112,12 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
     const el = scroller.current
     if (!el) return
     const wheel = (e: WheelEvent) => {
-      // The wheel zooms where the pointer is, as it does on a sheet. A trackpad's two-finger
-      // swipe — small steps, or sideways — is left to move the sheet, and its pinch (which
-      // arrives with Ctrl) zooms.
+      // The wheel zooms where the pointer is, as it does on a sheet.
       const lines = e.deltaMode === 1
-      const swipe = !e.ctrlKey && !e.metaKey && !lines && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40)
-      if (swipe) return
+      // Any up-and-down turn of the wheel zooms, however small the step: a smooth-scrolling
+      // mouse sends many small ones, and guessing those were a trackpad left the wheel doing
+      // nothing but scroll unless Ctrl was held. Only a mostly-sideways movement is left alone.
+      if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
       e.preventDefault()
       const pr = pageEl.current!.getBoundingClientRect(), sr = el.getBoundingClientRect()
       const fx = (e.clientX - pr.left) / pr.width, fy = (e.clientY - pr.top) / pr.height
