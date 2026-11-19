@@ -36,6 +36,9 @@ label is now on its button's centre). **Add link is gone** from the menu on phon
 The code that draws and follows links is left in place: sheet numbers on a drawing still link
 by themselves. There were no hand-drawn links in the database, so nothing is stranded.
 
+Jacob, 15:38: **the viewer's ⋯ menu closes when anything else is touched** — the drawing, the
+rest of the bar. Its own buttons and the ⋯ button behave as before.
+
 ---
 
 # Checkpoint — 2026-11-19, 15:28 CST

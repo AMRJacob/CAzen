@@ -200,6 +200,14 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
     } catch { return }
   }, [sheet.sheetId])
 
+  // The ⋯ menu goes away when anything that is not the menu is touched — the drawing included.
+  useEffect(() => {
+    if (!more) return
+    const away = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.('.sv-more-wrap')) setMore(false) }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [more])
+
   // A removal the server would not carry out: the markup is put back on screen, and said.
   useEffect(() => {
     const id = sheet.sheetId
