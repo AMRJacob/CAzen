@@ -98,6 +98,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [said, setSaid] = useState<
     | { kind: 'ask'; rows: Markup[] }
     | { kind: 'gone'; rows: Markup[]; text: string }
+    // Somebody else's markup, about to be removed: anyone on the project may, once told whose it is not.
+    | { kind: 'theirs'; rows: Markup[] }
     | null>(null)
   /** The markups that were already on the sheet when marking up began. */
   const before = useRef<Set<string> | null>(null)
@@ -410,7 +412,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   // The bar says its piece and goes. Left alone, what was drawn stays.
   useEffect(() => {
     if (!said) return
-    const t = setTimeout(() => setSaid(null), said.kind === 'ask' ? 12000 : 9000)
+    const t = setTimeout(() => setSaid(null), said.kind === 'gone' ? 9000 : 15000)
     return () => clearTimeout(t)
   }, [said])
 
@@ -450,7 +452,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
           const m = markups.find((x) => x.id === selected)
           e.preventDefault()
           if (m && mine(m)) takeAway([m], 'Removed.')
-          else if (m) setSaid({ kind: 'gone', rows: [], text: 'Only the person who drew that can remove it.' })
+          else if (m) setSaid({ kind: 'theirs', rows: [m] })
           return
         }
       }
@@ -751,6 +753,12 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 <button className="primary-lite" onClick={() => setSaid(null)}>Keep</button>
                 <button onClick={() => takeAway(said.rows, said.rows.length === 1 ? 'Discarded 1 mark.' : `Discarded ${said.rows.length} marks.`)}>Discard</button>
               </>
+            ) : said.kind === 'theirs' ? (
+              <>
+                <span>Someone else drew this. Remove it for everyone?</span>
+                <button onClick={() => takeAway(said.rows, 'Removed. It was someone else’s.')}>Remove</button>
+                <button className="primary-lite" onClick={() => setSaid(null)}>Leave it</button>
+              </>
             ) : (
               <>
                 <span>{said.text}</span>
@@ -857,6 +865,7 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 revisionNames={revisionNames}
                 scale={scale} aspect={aspect} me={me}
                 onChange={setMarkups}
+                onTheirs={(m) => setSaid({ kind: 'theirs', rows: [m] })}
                 selected={selected}
                 onSelect={setSelected}
                 onTrouble={setError}

@@ -11,6 +11,27 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:36 CST
+
+**Anyone on the project may remove a markup, after a warning** (Jacob, 15:34: "allow anyone to
+delete things, but only after there's a warning that it was created by someone else").
+
+- **Migration `0040_markup_authors.sql` applied**, on that instruction: the delete rule on
+  `sheet_markups` is now project membership (`member_drop`), replacing `author_drop`; a
+  markup arriving with no author is given the sender's. No existing rows changed. (The
+  narrower version written at 15:28 — authorless only — was never applied and is replaced by
+  this.) The two authorless markups on G001 can now be removed from the app.
+- In the viewer, Delete or the eraser on a markup someone else drew raises a bar: "Someone
+  else drew this. Remove it for everyone?" — *Remove* / *Leave it*. Removed, it says so and
+  offers Undo. One's own marks, and marks with no author recorded, go as before, without the
+  question. The bar says "someone else", not who: the app has their id, not their name.
+- `checks/t_theirs.py`: warning shown and nothing sent; *Leave it* keeps it; *Remove* sends
+  the delete; own mark removed with no warning.
+- "Things" was taken as markups on sheets — the only place the database held deletion to its
+  author. Pad sketches, notebook pages and observations had no such rule and have no warning.
+
+---
+
 # Checkpoint — 2026-11-19, 15:28 CST
 
 **A markup deleted on the web was still on the phone — and the phone was right** (Jacob,

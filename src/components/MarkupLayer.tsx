@@ -23,7 +23,7 @@ export interface StylusReading {
   at: number
 }
 
-export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, revisionNames, scale, aspect, me, onChange, onPick, selected, onSelect, keep = true, onTrouble, onStylus, snapper }: {
+export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisionId, revisionNames, scale, aspect, me, onChange, onTheirs, onPick, selected, onSelect, keep = true, onTrouble, onStylus, snapper }: {
   markups: Markup[]
   /** Null when the sheet is being read rather than drawn on. */
   tool: MarkupKind | 'erase' | 'select' | null
@@ -37,6 +37,8 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   aspect: number
   me: string | null
   onChange: (markups: Markup[]) => void
+  /** Asked to remove a markup somebody else drew: the viewer warns before it goes. */
+  onTheirs?: (m: Markup) => void
   /** Picking the two ends of the scale line, when that's what's being set. */
   onPick?: (from: Point, to: Point) => void
   /** False while marks are scratch: drawn on screen, never written anywhere. */
@@ -361,7 +363,9 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
   const isScratch = (id: string) => id.startsWith('scratch:')
 
   async function erase(m: Markup) {
-    if (m.created_by && me && m.created_by !== me) return
+    // Somebody else's markup can be removed, but not by a slip of the eraser: it is handed up
+    // to be asked about first.
+    if (m.created_by && me && m.created_by !== me) { onTheirs?.(m); return }
     onChange(markups.filter((x) => x.id !== m.id))
     if (!isScratch(m.id)) await removeMarkup(m.id)
   }
@@ -602,7 +606,7 @@ export function MarkupLayer({ markups, tool, colour, projectId, sheetId, revisio
         const mine = !m.created_by || m.created_by === me
         return (
           <button key={`e${m.id}`} className={`mk-hit${mine ? '' : ' theirs'}`} style={pct(box)}
-            title={mine ? 'Remove this markup' : 'Only the person who drew this can remove it'}
+            title={mine ? 'Remove this markup' : 'Drawn by someone else — you will be asked before it is removed'}
             onClick={() => erase(m)} />
         )
       })}
