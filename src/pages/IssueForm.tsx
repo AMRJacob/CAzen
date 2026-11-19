@@ -18,19 +18,30 @@ import { prependTo, renderForm } from '../lib/templates/render'
 import { loadLayouts } from '../lib/templates/store'
 import type { FormKind, Layout } from '../lib/templates/types'
 import type { Project } from '../lib/types'
+import { PhotoSheet } from '../components/PhotoSheet'
+import { photosForPdf, sheetFor, type SheetState } from '../lib/photoSheetBytes'
+import { appendPhotoPages } from '../lib/templates/photoPages'
+import { remember, remembered } from '../lib/remembered'
+
+/** A photograph that could go in the report's photo table, and what it was labelled. */
+export interface ReportPhoto { path: string; label: string }
 
 /** Fill in a form and download it on the firm's template. Most fields fill themselves in. */
-export default function IssueForm({ kind, prefill }: {
+export default function IssueForm({ kind, prefill, photos, sheetKey }: {
   kind: FormKind
   /** Fields filled in before anybody types — a report written from the day's observations. */
   prefill?: Record<string, string>
+  /** The day's photographs, offered as a table behind the report. */
+  photos?: ReportPhoto[]
+  /** What the table's crops and choices are remembered under — the page they belong to. */
+  sheetKey?: string
 }) {
   return isConfigured
-    ? <SignedIn kind={kind} prefill={prefill} />
+    ? <SignedIn kind={kind} prefill={prefill} photos={photos} sheetKey={sheetKey} />
     : <Form kind={kind} brand={PLACEHOLDER_BRAND} layouts={{ general: defaultLayout('general'), [kind]: defaultLayout(kind) }} project={null} signer="" />
 }
 
-function SignedIn({ kind, prefill }: { kind: FormKind; prefill?: Record<string, string> }) {
+function SignedIn({ kind, prefill, photos, sheetKey }: { kind: FormKind; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string }) {
   const { firm } = useFirm()
   const { current } = useProject()
   const { session } = useAuth()
@@ -49,15 +60,18 @@ function SignedIn({ kind, prefill }: { kind: FormKind; prefill?: Record<string, 
     <>
       {current && <ProjectFolder project={current} compact />}
       <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts}
-        project={current} signer={signer} prefill={prefill} />
+        project={current} signer={signer} prefill={prefill} photos={photos} sheetKey={sheetKey} />
     </>
   )
 }
 
-function Form({ kind, brand, layouts, project, signer, prefill }: {
+function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey }: {
   kind: FormKind; brand: Brand; layouts: Record<string, Layout>; project: Project | null
-  signer: string; prefill?: Record<string, string>
+  signer: string; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string
 }) {
+  const sheetAt = sheetKey ? `cazen.photoSheet.${sheetKey}` : null
+  const [sheet, setSheet] = useState<SheetState>(() => sheetFor(photos ?? [], sheetAt ? remembered<SheetState>(sheetAt) : null))
+  const changeSheet = (next: SheetState) => { setSheet(next); if (sheetAt) remember(sheetAt, next) }
   const layout = layouts[kind]
   const fields = useMemo(() => inputFieldsFor(kind, layout), [kind, layout])
   // Only ask for fields this firm's template actually prints.
@@ -175,6 +189,11 @@ function Form({ kind, brand, layouts, project, signer, prefill }: {
       const v = values()
       let bytes = await renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand) } })
       if (attachment) bytes = await prependTo(bytes, attachment)
+      if (project && sheet.on && sheet.items.some((i) => i.use)) {
+        bytes = await appendPhotoPages(bytes, await photosForPdf(project, sheet), {
+          perRow: sheet.perRow, project: v['project.name'] ?? '', day: v['fr.date'] ?? '',
+        })
+      }
       const num = Object.entries(v).find(([k]) => k.endsWith('.number') && !k.startsWith('project.'))?.[1]
       const name = `${[v['project.number'], FORM_LABELS[kind], num].filter(Boolean).join(' - ')}.pdf`
       if (mode === 'preview') { setPreview({ bytes, name }); return }
@@ -234,6 +253,7 @@ function Form({ kind, brand, layouts, project, signer, prefill }: {
           </label>
         )}
       </div>
+      {project && sheet.items.length > 0 && <PhotoSheet project={project} state={sheet} onChange={changeSheet} />}
       <div className="actions">
         <button className="primary" onClick={() => build('issue')} disabled={busy}>
           {busy ? 'Building…' : project ? 'Issue & download' : 'Download PDF'}

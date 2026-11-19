@@ -44,7 +44,7 @@ export function hexToRgb(hex: string): RGB {
 }
 
 /** The standard PDF fonts only cover Latin-1 plus a few typographic marks. */
-function safe(s: string) {
+export function safe(s: string) {
   return s
     .replace(/\t/g, '    ')
     .replace(/[^\x20-\x7E\xA0-\xFF‘’“”–—…•\n]/g, '?')

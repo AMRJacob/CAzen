@@ -216,6 +216,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     fingers: fingers.current.size,
     penAt: penAt.current,
     now: Date.now(),
+    // A wide contact is a palm only for someone writing with a pen, and only on the page. A
+    // finger that draws, or a thumb on the menu, is wide and meant.
+    sized: !fingerDraws && !(e.target as Element | null)?.closest?.('button, input, textarea, select, label, .padmenu, .padpop'),
   })
 
   const handAt = useRef(0)

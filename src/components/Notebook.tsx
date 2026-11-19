@@ -403,7 +403,12 @@ function Page({ project, page, turn, bar, earlier, observations, types, onObserv
         </div>
         <p className="muted small">On your firm’s template, filled in from the page. Change anything here; the page stays as it is.</p>
         {visit ? (
-          <IssueForm key={page.id} kind="field_report" prefill={{
+          <IssueForm key={page.id} kind="field_report" sheetKey={page.id}
+            photos={[
+              ...page.photos.map((path) => ({ path, label: label(path) })),
+              ...seen.flatMap((o) => o.photos.map((path) => ({ path, label: o.title }))),
+            ]}
+            prefill={{
             'fr.date': day,
             ...(page.visited_at ? { 'fr.time': clockTime(page.visited_at) } : {}),
             ...(page.weather ? { 'fr.weather': page.weather } : {}),

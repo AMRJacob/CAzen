@@ -11,6 +11,45 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 11:50 CST
+
+(The 16:20 heading on the entry below was written from a clock that was wrong; Jacob's messages
+for this entry are stamped 11:27–11:31 CST.)
+
+**The pad's finger and menu, a photo table behind the field report, and the notebooks menu.**
+
+- **Finger sketching and the pad's menu mark.** Jacob: the first finger motion does not
+  register and the logo takes many taps. Cause found by reproduction, not on his phone: the pad
+  calls any touch wider than 45 CSS px a palm (`PALM_ACROSS` in `ink.ts`), swallows it at the
+  capture phase and then swallows the click. `checks/t_touch.py` sends touches 30 and 60 px
+  across: before, at 60 px no stroke was kept and five taps never opened the menu; after, every
+  stroke is kept and the first tap opens it. The size rule now applies only when a pen is how
+  the person writes (`fingerDraws` off) and the contact is on the page, not on a button
+  (`sized` in `isHandContact`). The pen-tail rule is unchanged. **Not known:** what width his
+  iPhone actually reports — the reproduction shows the rule could do this, not that it did.
+- **Photo table for the field report** (`src/lib/photoSheet.ts`, `photoSheetBytes.ts`,
+  `templates/photoPages.ts`, `components/PhotoSheet.tsx`; wired into `IssueForm` via `photos`
+  and `sheetKey`, passed from the notebook page). "Attach the photographs as a table" in the
+  export: pages are previewed as they will print, from the same layout function that draws the
+  PDF. Rows are chosen as a whole (not greedily) so each row's photographs share one height and
+  fill the width; a page's rows give up to 16% so another row joins rather than leaving a gap.
+  1–4 across. Click a photograph to crop (eight grips), caption, move earlier/later, or leave
+  out; choices are remembered per page in `localStorage` (`cazen.photoSheet.<page id>`), not in
+  the database. Captions print as "01 – CAPTION", taken from the firm's June 2026 Westrock
+  report read from Google Drive; **the photo table in those reports was not seen** — the Drive
+  text has only the "SITE PHOTOS" heading, so the table's look is mine, not copied.
+  Includes the page's documentation photos and the day's observation photos.
+  `checks/photos.test.ts` (layout rules), `checks/t_photos.py` (dialog → crop → issued PDF).
+- **Notebooks menu.** Sidebar books shorter (54×68) with a soft shadow. The Notebooks page is
+  gone: `/field-notes` opens the field notes; on a phone the bottom bar says "Field notes" and
+  Meeting notes and Observations are under More.
+- **Asked, not built: Google Photos behind Library.** Google's own documentation says the
+  Library API now reaches only what an app itself created and that choosing from a person's
+  library goes through the Photos Picker API (OAuth, a picking session, then download). It
+  needs a Google Cloud OAuth client for the app, which does not exist yet.
+
+---
+
 # Checkpoint — 2026-11-19, 16:20 CST
 
 **Project access, and inviting people from the app.** Jacob: invite by email as ArchMGMT did,

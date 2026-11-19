@@ -30,6 +30,8 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | --- | --- |
 | Sign-in, invites, create password | Live |
 | People and access: invite by email from Settings, firm roles, per-project access | Live (2026-11-19); invitation not yet sent for real |
+| Field report photo table: rows of matched height, crop / caption / reorder / leave out before issuing, previewed as it prints | Live (2026-11-19); checked in a test browser only |
+| Google Photos album as a photo source | Not built — needs a Google Cloud OAuth client (Photos Picker API) |
 | Projects and project switcher; project location (address search, map pin, Open in Maps) | Live |
 | Drawings: upload rounds, split, revision history, set as of date, title block templates, discipline order, search, links between sheets | Live |
 | Markups, dimensions and scale on sheets; markups carried across revisions | Live |

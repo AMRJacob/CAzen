@@ -59,11 +59,17 @@ export function isHandContact(e: {
   /** When the pen was last doing anything. */
   penAt: number
   now: number
+  /**
+   * Whether size is to be believed. It is only when a pen is how this person writes and the
+   * contact is on the page: a fingertip pressed flat reports wider than a palm's edge, so
+   * where the finger is the pen, or the contact is on a button, a wide touch is still meant.
+   */
+  sized?: boolean
 }): boolean {
   if (e.pointerType !== 'touch') return false
   if (world.hands.has(e.pointerId)) return true
   if (e.type !== 'pointerdown') return false
-  if (Math.max(e.width || 0, e.height || 0) > PALM_ACROSS) return true
+  if (world.sized !== false && Math.max(e.width || 0, e.height || 0) > PALM_ACROSS) return true
   if (world.fingers > 0) return false
   return world.now - world.penAt < PEN_TAIL
 }

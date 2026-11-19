@@ -2214,12 +2214,12 @@ body:has(.nb) .phone-nav { display: none; }
 
 /* The notebooks in the sidebar: three pocket notebooks side by side, the proportion of a field
    notes book (3½ × 5½), with nothing on the cover but their initials. No table under them. */
-.sidebar nav .nb-table.small { flex-direction: row; justify-content: flex-start; gap: 10px; margin: 8px 10px 6px; padding: 0; max-width: none; background: none; box-shadow: none; border-radius: 0; }
+.sidebar nav .nb-table.small { flex-direction: row; justify-content: flex-start; gap: 10px; margin: 8px 10px 14px; padding: 0; max-width: none; background: none; box-shadow: none; border-radius: 0; }
 .sidebar nav .nb-table.small .nb-tome {
-  display: flex; align-items: center; justify-content: center; width: 54px; height: 85px; padding: 0 7px 0 0; margin: 0; gap: 0; flex: none;
+  display: flex; align-items: center; justify-content: center; width: 54px; height: 68px; padding: 0 7px 0 0; margin: 0; gap: 0; flex: none;
   border-radius: 3px 7px 7px 3px; color: #f6f2e7; transform: none;
   background: linear-gradient(90deg, rgba(0,0,0,0.3) 0, rgba(0,0,0,0.06) 5px, rgba(255,255,255,0.07) 7px, transparent 11px), var(--tome);
-  box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 2px 2px 0 -1px #efe9da, 3px 3px 0 -1px #cfc8b6, 0 5px 10px rgba(40, 25, 10, 0.22);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 2px 2px 0 -1px #efe9da, 3px 3px 0 -1px #cfc8b6, 0 6px 12px rgba(40, 25, 10, 0.2), 0 14px 22px -6px rgba(40, 25, 10, 0.22);
   transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.18s;
 }
 .sidebar nav .nb-table.small .nb-tome:hover { transform: translateY(-3px) rotate(-1.5deg); }
@@ -2290,3 +2290,39 @@ body:has(.nb) .phone-nav { display: none; }
 .nb-people-sheet .nb-person input { width: 18px; height: 18px; flex: none; }
 .nb-people-sheet .nb-person-new input { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; background: #fff; font: inherit; font-size: 15px; }
 .nb-person-new .muted { align-self: center; }
+
+/* ---------- The photo table behind a field report ---------- */
+.psheet { margin-top: 14px; padding: 14px 16px; }
+.psheet-on { display: flex; align-items: center; gap: 9px; font-weight: 600; cursor: pointer; }
+.psheet-on em { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 6px; font-size: 13px; }
+.psheet-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.psheet-bar .chip.on { border-color: var(--ink); background: var(--ink); color: #fff; }
+.psheet-count { margin-left: auto; font-size: 13px; color: var(--muted); }
+.psheet-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-top: 10px; }
+.psheet-page { position: relative; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 6px 18px rgba(40,40,30,0.1); container-type: inline-size; }
+.psheet-head { position: absolute; font-size: 1.8cqw; font-weight: 700; letter-spacing: 0.02em; }
+.psheet-cell { position: absolute; padding: 0; margin: 0; background: none; border: 0.5px solid #b8b8b3; border-radius: 0; cursor: pointer; overflow: hidden; }
+.psheet-cell:hover { outline: 2px solid var(--moss); outline-offset: -1px; z-index: 1; }
+.psheet-photo { position: absolute; overflow: hidden; display: block; }
+.psheet-photo img { position: absolute; max-width: none; display: block; }
+.psheet-cap { position: absolute; left: 2%; right: 2%; font-size: 1.25cqw; line-height: 1.25; text-align: center; color: var(--ink); }
+.psheet-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.psheet-out { position: relative; width: 54px; height: 54px; padding: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--paper, #f4f2ec); }
+.psheet-out img { width: 100%; height: 100%; object-fit: cover; opacity: 0.45; display: block; }
+.psheet-out span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 600; }
+
+.pcrop { position: fixed; inset: 0; z-index: 90; background: rgba(20,22,20,0.72); display: grid; place-items: center; padding: 16px; }
+.pcrop-card { background: #fff; border-radius: 8px; padding: 14px; width: min(860px, 100%); max-height: 100%; overflow: auto; }
+.pcrop-stage { position: relative; margin: 0 auto; max-height: 62vh; max-width: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; background: #111; }
+.pcrop-stage img { width: 100%; height: 100%; display: block; pointer-events: none; }
+.pcrop-box { position: absolute; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); outline: 1.5px solid #fff; cursor: move; touch-action: none; }
+.pcrop-grip { position: absolute; width: 28px; height: 28px; touch-action: none; }
+.pcrop-grip::after { content: ''; position: absolute; inset: 9px; background: #fff; border: 1px solid #222; border-radius: 2px; }
+.pcrop-grip.g-nw { left: -14px; top: -14px; cursor: nwse-resize; } .pcrop-grip.g-se { right: -14px; bottom: -14px; cursor: nwse-resize; }
+.pcrop-grip.g-ne { right: -14px; top: -14px; cursor: nesw-resize; } .pcrop-grip.g-sw { left: -14px; bottom: -14px; cursor: nesw-resize; }
+.pcrop-grip.g-n { left: calc(50% - 14px); top: -14px; cursor: ns-resize; } .pcrop-grip.g-s { left: calc(50% - 14px); bottom: -14px; cursor: ns-resize; }
+.pcrop-grip.g-w { top: calc(50% - 14px); left: -14px; cursor: ew-resize; } .pcrop-grip.g-e { top: calc(50% - 14px); right: -14px; cursor: ew-resize; }
+.pcrop-cap { display: block; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.pcrop-cap input { display: block; width: 100%; margin-top: 4px; }
+.pcrop-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.pcrop-gap { flex: 1; }

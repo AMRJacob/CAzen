@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
+import { Navigate, NavLink, useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { NotePad, PadPages, PadStill } from '../components/NotePad'
 import IssueForm from './IssueForm'
@@ -14,7 +14,6 @@ import {
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
 import { Notebook } from '../components/Notebook'
-import { Shelf } from '../components/Shelf'
 import { listVisits, type SiteVisit, type VisitKind } from '../lib/visits'
 import { Photos } from '../components/Photos'
 import { today } from '../lib/dates'
@@ -58,24 +57,10 @@ const HEADING: Record<Area, { title: string; lead: string }> = {
 
 export default function FieldNotes() {
   const { area } = useParams<{ area: Area }>()
-  if (!area) return <Books />
+  // The books themselves are the menu now; with none named, the field notes are the one opened.
+  if (!area) return <Navigate to="/field-notes/reports" replace />
   if (area === 'observations') return <Observations />
   return <Book area={area === 'meetings' ? 'meetings' : 'reports'} />
-}
-
-/** The way in: the two books on a shelf, and the list of everything observed. */
-function Books() {
-  const { current } = useProject()
-  return (
-    <section>
-      <PageTitle>Notebooks</PageTitle>
-      <p className="lead">
-        {current ? <>{current.number} {current.name} · </> : null}
-        Open a book and turn to today’s page.
-      </p>
-      <Shelf job={current?.number} />
-    </section>
-  )
 }
 
 /**
