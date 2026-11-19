@@ -62,6 +62,19 @@ templates fetches nothing. **Checked**: the editor opens on the selected sheets 
 **Not checked**: drawing boxes, saving, and the re-read that follows — the test sheet is a
 blank dark page with no title block to draw on.
 
+**The project manual's list on a phone, the same** (Jacob, 14:17): section number and title on
+one line each, pages / from / date / history reached by sliding sideways. Measured at 402 px
+with a 68-character title: table 847 px, page no wider than the screen.
+
+**Sideways only on purpose** (Jacob, 14:18). On a phone the sheet list and the manual's list
+would drift sideways under a thumb scrolling down. The browser is now given only the vertical
+(`touch-action: pan-y`); `PanX` moves the list sideways only once a touch has gone more than
+14 px across and more than 2.2 times as far across as down, and that touch then stays
+sideways. A sideways slide is not taken as a tap on the row. No momentum after the finger
+lifts. Tried in the test browser with synthetic touches: straight down and down-with-40%-drift
+move the page only; a clearly sideways drag moves the list 220 px and the page not at all; an
+exact 45° diagonal moved neither. Real fingers on iOS not tried.
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

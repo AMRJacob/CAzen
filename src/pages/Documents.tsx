@@ -1,4 +1,5 @@
 import { PageTitle } from '../components/PageTitle'
+import { PanX } from '../components/PanX'
 import { niceTitle } from '../lib/titles'
 import { today } from '../lib/dates'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -295,7 +296,7 @@ export default function Documents() {
                 <button className="link" onClick={() => { setPicked(new Set()); setSelecting(false) }}>{selecting ? 'Cancel' : 'Clear'}</button>
               </div>
             )}
-<div className="register-pan">
+<PanX className="register-pan">
                         <table className="register sizable" ref={cols.table}>
               {cols.cols}
               <thead>
@@ -323,7 +324,7 @@ export default function Documents() {
                 ))}
               </tbody>
             </table>
-            </div>
+            </PanX>
             </>
           )}
         </>

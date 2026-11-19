@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PanX } from '../components/PanX'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { PdfPreview } from '../components/PdfPreview'
@@ -158,7 +159,8 @@ export default function Manual() {
                   <span className="sv-band-count">{g.items.length}</span>
                 </button>
                 {!shut[g.key] && (
-                  <table className="manual-table">
+<PanX className="manual-pan">
+                                    <table className="manual-table">
                     <tbody>
                       {g.items.map((s) => (
                         <SectionRow key={s.section_id} section={s} project={current}
@@ -167,6 +169,7 @@ export default function Manual() {
                       ))}
                     </tbody>
                   </table>
+                  </PanX>
                 )}
               </div>
             ))}
