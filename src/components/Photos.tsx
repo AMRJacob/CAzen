@@ -10,7 +10,7 @@ import type { ProjectStore } from '../lib/files'
  * what is kept is a resized JPEG, because thirty full-resolution photographs of sealant joints
  * is a morning of uploading for no gain in what anybody can see.
  */
-export function Photos({ project, paths, about, editable, onChange, onTrouble }: {
+export function Photos({ project, paths, about, editable, onChange, onTrouble, cover, onCover }: {
   project: ProjectStore
   paths: string[]
   /** What the photographs are of, used to name the files. */
@@ -18,6 +18,9 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
   editable: boolean
   onChange: (paths: string[]) => void
   onTrouble: (m: string) => void
+  /** The photograph that stands for the set, and the way to choose another. */
+  cover?: string | null
+  onCover?: (path: string) => void
 }) {
   const input = useRef<HTMLInputElement | null>(null)
   const library = useRef<HTMLInputElement | null>(null)
@@ -43,6 +46,7 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
       <div className="photo-strip">
         {paths.map((p) => (
           <Photo key={p} project={project} path={p} editable={editable}
+            isCover={cover === p} onCover={onCover ? () => onCover(p) : undefined}
             onRemove={() => onChange(paths.filter((x) => x !== p))} />
         ))}
         {busy > 0 && <div className="photo photo-waiting"><span className="muted small">{busy}…</span></div>}
@@ -69,7 +73,9 @@ export function Photos({ project, paths, about, editable, onChange, onTrouble }:
   )
 }
 
-function Photo({ project, path, editable, onRemove }: {
+function Photo({ project, path, editable, onRemove, isCover, onCover }: {
+  isCover?: boolean
+  onCover?: () => void
   project: ProjectStore
   path: string
   editable: boolean
@@ -96,6 +102,10 @@ function Photo({ project, path, editable, onRemove }: {
           ? <img src={url} alt="" onClick={() => setBig(true)} />
           : <span className="muted small">…</span>}
         {editable && <button type="button" className="photo-drop" onClick={onRemove} aria-label="Remove this photo">×</button>}
+        {onCover && (
+          <button type="button" className={`photo-cover${isCover ? ' on' : ''}`} onClick={onCover}
+            aria-pressed={!!isCover}>{isCover ? 'Cover' : 'Make cover'}</button>
+        )}
       </div>
       {big && url && (
         <div className="photo-full" role="dialog" onClick={() => setBig(false)}>

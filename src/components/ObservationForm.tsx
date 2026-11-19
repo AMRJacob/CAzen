@@ -22,7 +22,9 @@ const distinct = (list: (string | null | undefined)[]) =>
  * fills in are what it is and what kind of thing it is. Everything else is there when it
  * matters and out of the way when it doesn't.
  */
-export function ObservationForm({ project, types, existing, pin, known, onSaved, onCancel, onTrouble }: {
+export function ObservationForm({ project, types, existing, pin, known, day, onSaved, onCancel, onTrouble }: {
+  /** The day it was seen, when it is being added to a visit that has one. */
+  day?: string
   project: ProjectStore
   types: ObservationType[]
   existing?: Observation
@@ -45,7 +47,7 @@ export function ObservationForm({ project, types, existing, pin, known, onSaved,
   const [area, setArea] = useState(existing?.area ?? '')
   const [trade, setTrade] = useState(existing?.trade ?? '')
   const [status, setStatus] = useState<ObservationStatus>(existing?.status ?? 'open')
-  const [observedOn, setObservedOn] = useState(existing?.observed_on ?? today())
+  const [observedOn, setObservedOn] = useState(existing?.observed_on ?? day ?? today())
   const [dueOn, setDueOn] = useState(existing?.due_on ?? '')
   const [photos, setPhotos] = useState<string[]>(existing?.photos ?? [])
   const [more, setMore] = useState(!!(existing?.area || existing?.trade || existing?.due_on))

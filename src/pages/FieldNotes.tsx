@@ -13,6 +13,8 @@ import {
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
+import { VisitList, VisitPage } from '../components/SiteVisits'
+import { listVisits, startVisit, VisitsNotSetUp, type SiteVisit } from '../lib/visits'
 import { Photos } from '../components/Photos'
 import { today } from '../lib/dates'
 import type { Project } from '../lib/types'
@@ -96,12 +98,46 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
   }, [projectId, kind])
   useEffect(() => { load() }, [load])
 
+  // Field reports begin as visits. `null` while asking; `false` on a database that hasn't the
+  // table yet, where the page is what it was before.
+  const [visits, setVisits] = useState<SiteVisit[] | null | false>(null)
+  const [visit, setVisitOpen] = useState<string | null>(null)
+  const [seen, setSeen] = useState<Observation[]>([])
+  useEffect(() => {
+    if (!projectId || area !== 'reports') { setVisits(false); return }
+    setVisits(null); setVisitOpen(null)
+    listVisits(projectId).then(setVisits)
+      .catch((e) => { setVisits(false); if (!(e instanceof VisitsNotSetUp)) setError(message(e)) })
+    listObservations(projectId).then(setSeen).catch(() => setSeen([]))
+  }, [projectId, area])
+
+  async function newVisit() {
+    if (!projectId) return
+    try {
+      const v = await startVisit(projectId)
+      setVisits((all) => [v, ...(all || [])])
+      setVisitOpen(v.id)
+    } catch (e) {
+      if (e instanceof VisitsNotSetUp) { setVisits(false); setWriting(true) } else setError(message(e))
+    }
+  }
+
   // Leaving the form behind is the same gesture whichever kind it was.
   useEffect(() => { setWriting(false) }, [kind])
 
   const listed = useMemo(
     () => [...(rows ?? [])].sort((a, b) => b.issued_at.localeCompare(a.issued_at)),
     [rows])
+
+  const open = visits ? visits.find((v) => v.id === visit) : undefined
+  if (open && current) {
+    return (
+      <VisitPage project={current} visit={open}
+        onChanged={(v) => setVisits((all) => (all || []).map((x) => (x.id === v.id ? v : x)))}
+        onClose={() => { setVisitOpen(null); load(); listObservations(current.id).then(setSeen).catch(() => {}) }}
+        onRemoved={() => { setVisits((all) => (all || []).filter((x) => x.id !== open.id)); setVisitOpen(null) }} />
+    )
+  }
 
   if (writing) {
     return (
@@ -142,14 +178,25 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
             {HEADING[area].lead}
           </p>
         </div>
-        <button className="primary" onClick={() => setWriting(true)}>
+        <button className="primary" disabled={area === 'reports' && visits === null}
+          onClick={() => (area === 'reports' && visits ? void newVisit() : setWriting(true))}>
           New {FORM_LABELS[kind].toLowerCase()}
         </button>
       </div>
 
       {error && <div className="notice error">{error}</div>}
 
+      {area === 'reports' && visits && current && (
+        <>
+          <VisitList project={current} visits={visits} observations={seen} onOpen={(v) => setVisitOpen(v.id)} />
+          <p className="muted small visit-also">
+            <button className="link" onClick={() => setWriting(true)}>Write a report without a visit</button>
+          </p>
+        </>
+      )}
+
       <Pads kind={kind === 'meeting_notes' ? 'meeting_notes' : 'field_report'}
+        attached={visits ? new Set(visits.map((v) => v.pad_id).filter((x): x is string => !!x)) : undefined}
         projectId={projectId} onTrouble={setError}
         onWriteUp={(pad) => { setFrom(pad); setWriting(true) }} />
 
@@ -188,7 +235,10 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
  * here. A pad is not a draft of the document — it goes on existing after the document is
  * written, and the two are linked rather than merged.
  */
-function Pads({ kind, projectId, onTrouble, onWriteUp }: {
+function Pads({ kind, projectId, onTrouble, onWriteUp, attached }: {
+  /** Pads that belong to a visit and are reached from it. With this given, the card shows only
+      the loose ones, and nothing at all when there are none. */
+  attached?: Set<string>
   kind: PadKind
   projectId: string | undefined
   onTrouble: (m: string) => void
@@ -234,11 +284,14 @@ function Pads({ kind, projectId, onTrouble, onWriteUp }: {
     )
   }
 
+  const loose = attached ? (pads ?? []).filter((p) => !attached.has(p.id)) : pads
+  if (attached && (!pads || !loose?.length)) return null
+
   return (
     <div className="card">
       <div className="pad-head">
-        <h3>Handwritten</h3>
-        <button className="primary-lite" onClick={() => void start()} disabled={!projectId}>New pad</button>
+        <h3>{attached ? 'Pads not part of a visit' : 'Handwritten'}</h3>
+        {!attached && <button className="primary-lite" onClick={() => void start()} disabled={!projectId}>New pad</button>}
       </div>
       <p className="muted small">
         Write by hand in the room, and type it up afterwards from what you wrote. Pads live here —
@@ -248,7 +301,7 @@ function Pads({ kind, projectId, onTrouble, onWriteUp }: {
       {!pads ? <p className="muted small">Loading…</p>
         : !pads.length ? <p className="muted small">No pads yet.</p> : (
           <div className="pad-grid">
-            {pads.map((p) => (
+            {(loose ?? pads).map((p) => (
               <PadCard key={p.id} pad={p} kind={kind} fresh={justClosed === p.id}
                 onOpen={() => setOpen(p)}
                 onWriteUp={onWriteUp ? () => onWriteUp(p) : undefined}
