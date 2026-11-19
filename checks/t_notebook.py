@@ -55,14 +55,16 @@ def run(kw,name):
     pg.wait_for_function("document.querySelector('.nb-weather').value!==''",timeout=8000)
     print('  visit location starts as:',repr(pg.input_value('.nb-location')))
     print('  weather:',repr(pg.input_value('.nb-weather')),'| looked up at',[u.split('/points/')[1] for u in asked if '/points/' in u][:1])
-    pg.click('.nb-z-names button:has-text("Add name")')
+    pg.click('.nb-z-names button:has-text("Add name")'); pg.wait_for_selector('.nb-people-sheet')
     if not people:
-        for nm,c,ph,em in [('Pat Owner','Owner LLC','501-555-0101','pat@owner.org'),('Sam Super','Builder Inc','501-555-0102','sam@builder.com')]:
-            pg.click('text=+ Add name to list'); pg.fill('.nb-person-new input[placeholder=Name]',nm); pg.fill('.nb-person-new input[placeholder=Company]',c); pg.fill('.nb-person-new input[placeholder=Phone]',ph); pg.fill('.nb-person-new input[placeholder=Email]',em); pg.click('.nb-person-new button'); pg.wait_for_timeout(250)
-        pg.click('.nb-person:has-text("Dana Rep") input'); pg.wait_for_timeout(300)
-    print('  picker groups:',pg.evaluate("[...document.querySelectorAll('.nb-people h3')].map(h=>h.textContent)"),'| heading:',pg.inner_text('.nb-z-names h2'))
+        print('  offered first:',pg.inner_text('.nb-people-sheet .nb-person >> nth=0').replace('\n',' '))
+        pg.click('.nb-people-sheet .nb-person >> nth=0'); pg.wait_for_timeout(300)                  # me
+        pg.click('text=+ Add name to list'); pg.fill('.nb-person-new input[placeholder=Name]','Sam Super'); pg.fill('.nb-person-new input[placeholder=Company]','Builder Inc')
+        pg.click('.nb-people-sheet button:has-text("Done")'); pg.wait_for_timeout(400)              # Done, not "Add to the list"
+        print('  after ticking myself, typing Sam and pressing Done — on the project list:',[p_['name'] for p_ in people],'| on the page:',pg.evaluate("[...document.querySelectorAll('.nb-names strong')].map(e=>e.textContent)"))
+    else:
+        print('  next page offers:',pg.evaluate("[...document.querySelectorAll('.nb-people-sheet .nb-person-name')].map(e=>e.textContent)")); pg.click('.nb-people-sheet button:has-text("Done")')
     pg.screenshot(path='attendees_%s.png'%name)
-    pg.click('.nb-z-names button:has-text("Done")')
     for t in ['Steel topped out at grid C, deck welds in progress','roofing membrane down on the east half','curb poured at north parking lot','Owner asked about the ribbon cutting']:
         pg.fill('.nb-quick textarea',t); pg.wait_for_timeout(120); g=pg.inner_text('.nb-quick .chip.on'); pg.keyboard.press('Enter'); pg.wait_for_timeout(120); print('  %-52s → %s'%(t[:50],g))
     pg.click('.nb-quick .chip:has-text("Interior")'); pg.wait_for_timeout(200)

@@ -36,6 +36,12 @@ and to begin with, add and remove people from projects.
   mailer is rate-limited, and the app's address must be in the project's allowed redirect URLs
   for the link to land back in CAzen.
 
+**Attendees did not add.** Jacob typed his own name and it was not kept. The API log shows no
+write to `project_people` at all: the name was typed and the visible button, *Done*, was pressed —
+which closed the list without keeping it; *Add to the list* sat lower, in a part of the page too
+small to show it. The list is now its own sheet over the page, *Done* keeps a name that was typed,
+and the signed-in person is always offered first ("you"), before anyone is on the project's list.
+
 **Migration 0036 applied** (third attempt): page `location` and `observation_tags` exist, so the
 Location line and custom tags in Settings are live.
 

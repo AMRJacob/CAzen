@@ -20,6 +20,8 @@ import { addPerson, asLine, linesOf, listPeople, listPeopleElsewhere, nameIn, ty
 import { catchAll, fileNote, guessCategory, headingsOf, unfileNote } from '../lib/noteSort'
 import { metresBetween, placeAt, weatherAt } from '../lib/weather'
 import { readPref, writePref } from '../lib/prefs'
+import { useAuth } from '../lib/auth'
+import { useFirm } from '../lib/firm'
 import { message } from '../lib/errors'
 import type { Project } from '../lib/types'
 
@@ -657,6 +659,12 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
   const [people, setPeople] = useState<Person[]>([])
   const [elsewhere, setElsewhere] = useState<Person[]>([])
   const [picking, setPicking] = useState(false)
+  // Whoever is signed in is the one person certain to have been there, so they are always
+  // offered — before anybody has been put on the project's list at all.
+  const { session } = useAuth()
+  const { firm } = useFirm()
+  const myName = ((session?.user.user_metadata?.full_name as string | undefined) ?? '').trim() || (session?.user.email ?? '').split('@')[0]
+  const me = myName ? { name: myName, company: firm?.name ?? null, phone: firm?.phone ?? null, email: session?.user.email ?? null } : null
   const [adding, setAdding] = useState(false)
   const [fresh, setFresh] = useState({ name: '', company: '', phone: '', email: '' })
   useEffect(() => {
@@ -685,6 +693,15 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
     } catch (e) { onTrouble(message(e)); return false }
   }
   const set = (k: keyof typeof fresh) => (e: React.ChangeEvent<HTMLInputElement>) => setFresh({ ...fresh, [k]: e.target.value })
+  /** Closing the list keeps a name that was typed and not yet added: typing it was the asking. */
+  async function done() {
+    if (adding && fresh.name.trim()) {
+      if (!(await keepPerson(fresh))) return
+      setFresh({ name: '', company: '', phone: '', email: '' })
+    }
+    setAdding(false)
+    setPicking(false)
+  }
   const row = (key: string, on: boolean, act: () => void, name: string, rest: (string | null | undefined)[]) => (
     <label key={key} className="nb-person">
       <input type="checkbox" checked={on} onChange={act} />
@@ -697,33 +714,42 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
     <section className="nb-z nb-z-names">
       <div className="nb-z-top">
         <h2>Attendees{lines.length ? ` · ${lines.length}` : ''}</h2>
-        <button className="primary-lite" onClick={() => { setPicking(!picking); setAdding(false) }}>{picking ? 'Done' : 'Add name'}</button>
+        <button className="primary-lite" onClick={() => setPicking(true)}>Add name</button>
       </div>
-      {picking ? (
-        <div className="nb-people">
-          {people.length > 0 && <h3>On this project</h3>}
-          {people.map((p) => row(p.id, here.has(p.name.toLowerCase()), () => toggleLine(asLine(p)), p.name, [p.company, p.phone, p.email]))}
-          {typed.length > 0 && <h3>On earlier pages</h3>}
-          {typed.map((l) => row(l, here.has(nameIn(l).toLowerCase()), () => toggleLine(l), nameIn(l), l.split('|').slice(1).map((x) => x.trim())))}
-          {others.length > 0 && <h3>From other projects</h3>}
-          {others.map((p) => row(p.id, false, () => void keepPerson(p), p.name, [p.company, p.phone, p.email]))}
-          {!people.length && !typed.length && !others.length && <p className="nb-none">No names on file yet.</p>}
-          {adding ? (
-            <form className="nb-person-new" onSubmit={async (e) => {
-              e.preventDefault()
-              if (fresh.name.trim() && await keepPerson(fresh)) { setFresh({ name: '', company: '', phone: '', email: '' }); setAdding(false) }
-            }}>
-              <input autoFocus value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
-              <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
-              <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
-              <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
-              <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the list</button>
-            </form>
-          ) : (
-            <button className="link nb-person-add" onClick={() => setAdding(true)}>+ Add name to list</button>
-          )}
+      {/* Its own sheet over the page: the corner of the page the attendees live in is too small
+          to choose from, and a button that scrolls out of sight is a button nobody presses. */}
+      {picking && (
+        <div className="nb-light nb-sheet" role="dialog" aria-label="Attendees" onClick={() => void done()}>
+          <div className="nb-sheet-in nb-people-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="pad-head"><h3>Attendees</h3><button className="primary" onClick={() => void done()}>Done</button></div>
+            <div className="nb-people">
+              {me && !onProject.has(me.name.toLowerCase()) && row('me', here.has(me.name.toLowerCase()), () => { if (here.has(me.name.toLowerCase())) toggleLine(asLine(me)); else void keepPerson(me) }, me.name, ['you', me.company, me.email])}
+              {people.length > 0 && <h4>On this project</h4>}
+              {people.map((p) => row(p.id, here.has(p.name.toLowerCase()), () => toggleLine(asLine(p)), p.name, [p.company, p.phone, p.email]))}
+              {typed.length > 0 && <h4>On earlier pages</h4>}
+              {typed.map((l) => row(l, here.has(nameIn(l).toLowerCase()), () => toggleLine(l), nameIn(l), l.split('|').slice(1).map((x) => x.trim())))}
+              {others.length > 0 && <h4>From other projects</h4>}
+              {others.map((p) => row(p.id, false, () => void keepPerson(p), p.name, [p.company, p.phone, p.email]))}
+            </div>
+            {adding ? (
+              <form className="nb-person-new" onSubmit={async (e) => {
+                e.preventDefault()
+                if (fresh.name.trim() && await keepPerson(fresh)) setFresh({ name: '', company: '', phone: '', email: '' })
+              }}>
+                <input autoFocus value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
+                <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
+                <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
+                <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
+                <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the list</button>
+                <span className="muted small">Done keeps it too.</span>
+              </form>
+            ) : (
+              <button className="link nb-person-add" onClick={() => setAdding(true)}>+ Add name to list</button>
+            )}
+          </div>
         </div>
-      ) : !lines.length ? <p className="nb-none">Nobody yet.</p> : (
+      )}
+      {!lines.length ? <p className="nb-none">Nobody yet.</p> : (
         <ul className="nb-names">
           {lines.map((l) => {
             const [name, company] = l.split('|').map((x) => x.trim())
