@@ -1,10 +1,15 @@
-// Invite somebody to the firm by email and put them on projects.
+// Put somebody on the firm and its projects, and hand back a link for them to get in with.
 //
 // Only a firm owner or admin may call this. The caller's own token is used to check that; the
 // service key is used only after the check passes, for the two things a browser cannot do:
-// send the invitation, and add the firm and project memberships for someone who is not the caller.
+// make the account and its link, and add the firm and project memberships for someone who is
+// not the caller.
 //
-// Deployed to production 2026-11-19 (version 1). This file is the source of record.
+// Nothing is emailed from here. Version 1 sent Supabase's own invitation, which counts against
+// its mail limit; version 2 makes the link and returns it, for the admin to paste into an email
+// of their own. Someone who has not signed in yet gets a fresh link each time this is called.
+//
+// Deployed to production 2026-11-19 (version 2). This file is the source of record.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const cors = {
@@ -48,14 +53,26 @@ Deno.serve(async (req: Request) => {
     }
 
     let invited = false
+    let link: string | null = null
+    const options = redirectTo ? { redirectTo } : undefined
     let { data: userId } = await admin.rpc('user_id_for_email', { p_email: email })
     if (!userId) {
-      const { data, error } = await admin.auth.admin.inviteUserByEmail(email, redirectTo ? { redirectTo } : undefined)
+      const { data, error } = await admin.auth.admin.generateLink({ type: 'invite', email, options })
       if (error) return json({ error: error.message }, 400)
       userId = data.user?.id
+      link = data.properties?.action_link ?? null
       invited = true
+    } else {
+      // Already has an account. If they have never been in, the link they were given may have
+      // run out, so they get another; someone who signs in already needs none.
+      const { data: existing } = await admin.auth.admin.getUserById(userId)
+      if (existing?.user && !existing.user.last_sign_in_at) {
+        const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email, options })
+        if (error) return json({ error: error.message }, 400)
+        link = data.properties?.action_link ?? null
+      }
     }
-    if (!userId) return json({ error: 'The invitation was sent but no account came back.' }, 500)
+    if (!userId) return json({ error: 'The account was made but did not come back.' }, 500)
 
     const { error: firmError } = await admin.from('firm_members')
       .upsert({ firm_id: firmId, user_id: userId, role: 'member' }, { onConflict: 'firm_id,user_id', ignoreDuplicates: true })
@@ -65,7 +82,7 @@ Deno.serve(async (req: Request) => {
         .upsert(projectIds.map((project_id) => ({ project_id, user_id: userId, role })), { onConflict: 'project_id,user_id', ignoreDuplicates: true })
       if (error) return json({ error: error.message }, 400)
     }
-    return json({ user_id: userId, invited, projects: projectIds.length })
+    return json({ user_id: userId, invited, link, projects: projectIds.length })
   } catch (e) {
     return json({ error: (e as Error)?.message ?? String(e) }, 500)
   }

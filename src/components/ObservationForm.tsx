@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { SheetSpot } from './SheetSpot'
-import { byTrade, colourOf, listCustomTags, type Tag } from '../lib/tags'
+import { byTrade, listCustomTags, markOf, markOfTag, type Tag } from '../lib/tags'
+import { TagMark } from './TagMark'
 import { useFirm } from '../lib/firm'
 import { listPeople } from '../lib/people'
 
@@ -81,7 +82,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
   const [custom, setCustom] = useState<Tag[]>([])
   useEffect(() => { if (firm) listCustomTags(firm.id).then(setCustom).catch(() => setCustom([])) }, [firm])
   const groups = useMemo(() => byTrade(custom), [custom])
-  const tradeColour = colourOf(trade, custom)
+  const mark = markOf(trade, title, custom)
   const [busy, setBusy] = useState(false)
   const [kept, setKept] = useState(0)
   const titleBox = useRef<HTMLInputElement | null>(null)
@@ -152,7 +153,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
             onClick={() => setTypeId(t.id)}>{t.name}</button>
         ))}
         <button type="button" className="chip obs-tag-open" onClick={() => setTagging(!tagging)}>
-          {tradeColour && <span className="tag-dot" style={{ background: tradeColour }} />}
+          {mark && <TagMark mark={mark} size={18} />}
           {trade || 'Trade tag'}
         </button>
       </div>
@@ -161,7 +162,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
           <div className="obs-tag-trades">
             {groups.map((g) => (
               <button key={g.trade} type="button" className={`chip${(tagTrade ?? trade) === g.trade ? ' on' : ''}`} onClick={() => setTagTrade(g.trade)}>
-                <span className="tag-dot" style={{ background: g.colour }} />{g.trade}
+                <TagMark mark={g.mark} size={18} />{g.trade}
               </button>
             ))}
           </div>
@@ -176,7 +177,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
                     else if (!title.toLowerCase().includes(t.label.toLowerCase())) setTitle(`${t.label} — ${title.trim()}`)
                     setTagging(false)
                     titleBox.current?.focus()
-                  }}>{t.label}</button>
+                  }}><TagMark mark={markOfTag(g, t)} size={16} />{t.label}</button>
               ))}
               <button type="button" className="chip" onClick={() => { setTrade(g.trade); setTagging(false) }}>Just {g.trade}</button>
             </div>
@@ -250,7 +251,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
 
       {pin && <p className="muted small">Pinned to the sheet it was raised from.</p>}
       {spotting && (
-        <SheetSpot project={project} start={spot ? { sheetId: spot.sheetId, region: spot.region } : null}
+        <SheetSpot project={project} mark={mark} start={spot ? { sheetId: spot.sheetId, region: spot.region } : null}
           onPick={(s) => { setSpot(s); setSpotting(false) }} onClose={() => setSpotting(false)} />
       )}
 

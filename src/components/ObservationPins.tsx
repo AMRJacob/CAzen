@@ -1,4 +1,6 @@
-import { colourOf } from '../lib/tags'
+import { listCustomTags, markOf, type Mark, type Tag } from '../lib/tags'
+import { TagMark } from './TagMark'
+import { useFirm } from '../lib/firm'
 import { useCallback, useEffect, useState } from 'react'
 import { ObservationForm } from './ObservationForm'
 import { listObservations, listTypes, nameOf, watchObservations, type Observation, type ObservationType } from '../lib/observations'
@@ -26,6 +28,15 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
   const [types, setTypes] = useState<ObservationType[]>([])
   const [placing, setPlacing] = useState<{ x: number; y: number } | null>(null)
   const [open, setOpen] = useState<Observation | null>(null)
+  const { firm } = useFirm()
+  const [custom, setCustom] = useState<Tag[]>([])
+  const firmId = firm?.id
+  useEffect(() => { if (firmId) listCustomTags(firmId).then(setCustom).catch(() => setCustom([])) }, [firmId])
+  /** An observation with no trade still gets a mark: round, in the colour of where it stands. */
+  const plain = (o: Observation): Mark => ({
+    shape: 'circle', text: types.find((t) => t.id === o.type_id)?.code ?? '',
+    colour: o.status === 'closed' ? '#5f7a61' : o.status === 'in_progress' ? '#b06a00' : '#c0392b',
+  })
 
   const load = useCallback(() => {
     listObservations(project.id)
@@ -56,12 +67,17 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
           }} />
       )}
 
+      {/* On the sheet an observation is a dot, so thirty of them do not bury the drawing. Under
+          the pointer it opens into its mark and number; held there a moment longer, into what
+          was seen. A touch has no hover, and opens the observation itself. */}
       {all.map((o) => (
-        <button key={o.id} className={`obs-pin obs-pin-${o.status}${o.trade ? ' obs-pin-trade' : ''}`}
-          style={{ left: `${(o.region?.x ?? 0) * 100}%`, top: `${(o.region?.y ?? 0) * 100}%`, ...(colourOf(o.trade) ? { background: colourOf(o.trade)! } : {}) }}
-          title={[o.trade, o.title].filter(Boolean).join(' — ')}
+        <button key={o.id} className={`obs-dot${o.status === 'closed' ? ' closed' : ''}`}
+          style={{ left: `${(o.region?.x ?? 0) * 100}%`, top: `${(o.region?.y ?? 0) * 100}%` }}
+          aria-label={[nameOf(o, types), o.trade, o.title].filter(Boolean).join(' — ')}
           onClick={() => setOpen(o)}>
-          <span>{nameOf(o, types)}</span>
+          <span className="obs-dot-mark"><TagMark mark={markOf(o.trade, o.title, custom) ?? plain(o)} size={30} /></span>
+          <span className="obs-dot-no">{nameOf(o, types)}</span>
+          <span className="obs-dot-said">{o.trade && <b>{o.trade}</b>}{o.title}</span>
         </button>
       ))}
 

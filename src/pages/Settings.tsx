@@ -1,5 +1,6 @@
 import { addToProject, invite, listFirmPeople, listProjectAccess, PROJECT_ROLES, removeFromFirm, removeFromProject, setFirmRole, type FirmPerson, type ProjectRole } from '../lib/access'
-import { addCustomTag, byTrade, listCustomTags, removeCustomTag, TagsNotSetUp, type Tag } from '../lib/tags'
+import { addCustomTag, byTrade, canHoldMarks, listCustomTags, markOfTag, MarksNotSetUp, removeCustomTag, setTagMark, TagsNotSetUp, WHOLE_TRADE, type Mark, type Tag } from '../lib/tags'
+import { MarkEditor, TagMark } from '../components/TagMark'
 import { PageTitle } from '../components/PageTitle'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -417,27 +418,42 @@ function StorageCard({ firm, isAdmin, onSaved }: { firm: Firm; isAdmin: boolean;
 function TagSettings({ firmId }: { firmId: string }) {
   const [custom, setCustom] = useState<Tag[]>([])
   const [missing, setMissing] = useState(false)
+  const [noMarks, setNoMarks] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [f, setF] = useState({ trade: '', label: '', colour: '#3a6ea5' })
-  const load = () => listCustomTags(firmId).then((t) => { setCustom(t); setMissing(false) })
+  /** The mark being changed: a whole trade's (label `WHOLE_TRADE`) or one tag's. */
+  const [editing, setEditing] = useState<{ trade: string; label: string; start: Mark; own?: string } | null>(null)
+  const load = () => listCustomTags(firmId).then((t) => { setCustom(t); setMissing(false); setNoMarks(!canHoldMarks()) })
     .catch((e) => { if (e instanceof TagsNotSetUp) setMissing(true); else setError((e as Error).message) })
   useEffect(() => { void load() }, [firmId])   // eslint-disable-line react-hooks/exhaustive-deps
   const groups = byTrade(custom)
   const known = groups.find((g) => g.trade.toLowerCase() === f.trade.trim().toLowerCase())
+  const can = !missing && !noMarks
 
   return (
     <div className="card">
       <h2>Observation tags</h2>
-      <p className="muted small">The kinds of issue an observation can be tagged with, by trade. A trade’s colour is the colour of its pins on the drawings. Yours are added to the built-in ones.</p>
+      <p className="muted small">The kinds of issue an observation can be tagged with, by trade, and the mark each wears on a drawing: a colour for whose it is, a shape for the family of work, and letters or a mark of your own. {can ? 'Click a mark to change it — a trade’s mark is worn by all its tags unless a tag has its own.' : ''}</p>
       <div className="tag-groups">
         {groups.map((g) => (
           <div key={g.trade} className="tag-group">
-            <span className="tag-group-name"><span className="tag-dot" style={{ background: g.colour }} />{g.trade}</span>
-            {g.tags.map((t) => (
-              <span key={t.label} className={`tag${t.own ? ' tag-own' : ''}`}>{t.label}
-                {t.own && <button className="link" aria-label={`Remove ${t.label}`} onClick={() => removeCustomTag(t.own!).then(load).catch((e) => setError((e as Error).message))}>×</button>}
-              </span>
-            ))}
+            <button type="button" className="tag-group-name tag-markbtn" disabled={!can} title={can ? `Change the mark for ${g.trade}` : undefined}
+              onClick={() => setEditing({ trade: g.trade, label: WHOLE_TRADE, start: g.mark, own: custom.find((c) => c.label === WHOLE_TRADE && c.trade.toLowerCase() === g.trade.toLowerCase())?.own })}>
+              <TagMark mark={g.mark} size={24} />{g.trade}
+            </button>
+            {g.tags.map((t) => {
+              const m = markOfTag(g, t)
+              const ownMark = !!(t.shape || t.text != null || t.glyph)
+              return (
+                <span key={t.label} className={`tag${t.own ? ' tag-own' : ''}`}>
+                  <button type="button" className="tag-markbtn" disabled={!can} title={can ? `Give “${t.label}” its own mark` : undefined}
+                    onClick={() => setEditing({ trade: g.trade, label: t.label, start: m, own: t.own })}>
+                    {ownMark && <TagMark mark={m} size={18} />}{t.label}
+                  </button>
+                  {t.own && <button className="link" aria-label={`Remove ${t.label}`} onClick={() => removeCustomTag(t.own!).then(load).catch((e) => setError((e as Error).message))}>×</button>}
+                </span>
+              )
+            })}
           </div>
         ))}
       </div>
@@ -456,7 +472,18 @@ function TagSettings({ firmId }: { firmId: string }) {
           <button disabled={!f.trade.trim() || !f.label.trim()}>Add tag</button>
         </form>
       )}
+      {!missing && noMarks && <p className="small notice warn">Changing a mark’s shape, letters or sketch needs three columns that are not in the database yet (migration 0038). The standard marks are in use.</p>}
       {error && <div className="notice error">{error}</div>}
+      {editing && (
+        <MarkEditor title={editing.label === WHOLE_TRADE ? editing.trade : `${editing.trade} — ${editing.label}`} start={editing.start}
+          onCancel={() => setEditing(null)}
+          onRemove={editing.own ? () => { removeCustomTag(editing.own!).then(load).catch((e) => setError((e as Error).message)); setEditing(null) } : undefined}
+          onSave={(m) => {
+            setTagMark(firmId, editing.trade, editing.label, m).then(load)
+              .catch((e) => { if (e instanceof MarksNotSetUp) setNoMarks(true); else setError((e as Error).message) })
+            setEditing(null)
+          }} />
+      )}
     </div>
   )
 }
@@ -497,6 +524,8 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
   const [on, setOn] = useState<Map<string, Set<string>>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [said, setSaid] = useState<string | null>(null)
+  const [link, setLink] = useState<{ email: string; url: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const [email, setEmail] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [role, setRole] = useState<ProjectRole>('architect')
@@ -524,9 +553,12 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
     setBusy(true); setError(null); setSaid(null)
     try {
       const r = await invite(firmId, email.trim(), picked, role)
-      setSaid(r.invited
-        ? `Invitation sent to ${email.trim()}. They choose a password from the link, and will see ${picked.length ? `${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : 'no projects until they are added to one'}.`
-        : `${email.trim()} already has an account${picked.length ? ` and has been added to ${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : ''}.`)
+      const where = picked.length ? `${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : null
+      setLink(r.link ? { email: email.trim(), url: r.link } : null)
+      setCopied(false)
+      setSaid(r.link
+        ? `${email.trim()} ${r.invited ? 'has an account waiting' : 'has not signed in yet'}${where ? ` and is on ${where}` : ''}. No email was sent — this link is how they get in and choose a password:`
+        : `${email.trim()} already signs in${where ? ` and has been added to ${where}` : ''}. No link is needed.`)
       setEmail(''); setPicked([])
       await load()
     } catch (err) { setError((err as Error).message) } finally { setBusy(false) }
@@ -541,7 +573,7 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
           <select value={role} onChange={(e) => setRole(e.target.value as ProjectRole)} aria-label="Their part on the projects">
             {(Object.keys(PROJECT_ROLES) as ProjectRole[]).map((r) => <option key={r} value={r}>{PROJECT_ROLES[r]}</option>)}
           </select>
-          <button className="primary" disabled={busy || !email.trim()}>{busy ? 'Sending…' : 'Send invitation'}</button>
+          <button className="primary" disabled={busy || !email.trim()}>{busy ? 'Making the link…' : 'Add and make a link'}</button>
         </div>
         <div className="access-projects">
           {active.map((p) => (
@@ -552,6 +584,16 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
           ))}
         </div>
         {said && <p className="small ok-text">{said}</p>}
+        {link && (
+          <div className="access-link">
+            <input readOnly value={link.url} aria-label={`Link for ${link.email}`} onFocus={(e) => e.currentTarget.select()} />
+            <button type="button" className="primary" onClick={async () => {
+              try { await navigator.clipboard.writeText(link.url); setCopied(true) }
+              catch { setError('This browser would not copy it. Select the link and copy it by hand.') }
+            }}>{copied ? 'Copied' : 'Copy link'}</button>
+          </div>
+        )}
+        {link && <p className="muted small">The link works once and runs out after the time limit Supabase sets on email links. Entering the same email here again, or New link beside their name, makes a fresh one.</p>}
       </form>
 
       {error && <div className="notice error">{error}</div>}
@@ -565,7 +607,15 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
               return [
                 <tr key={p.user_id}>
                   <td><strong>{p.full_name || p.email}</strong>{p.full_name && <div className="muted small">{p.email}</div>}
-                    {!p.last_seen && <div className="muted small">Invited — has not signed in yet</div>}</td>
+                    {!p.last_seen && (
+                      <div className="muted small">Has not signed in yet ·{' '}
+                        <button type="button" className="link" onClick={async () => {
+                          setError(null)
+                          try { const r = await invite(firmId, p.email, [], 'architect'); setLink(r.link ? { email: p.email, url: r.link } : null); setCopied(false); setSaid(r.link ? `A fresh link for ${p.email}:` : `${p.email} already signs in.`) }
+                          catch (err) { setError((err as Error).message) }
+                        }}>New link</button>
+                      </div>
+                    )}</td>
                   <td>
                     {p.role === 'owner' || p.user_id === me ? <span className="tag">{p.role}</span> : (
                       <select value={p.role} aria-label={`Role of ${p.email}`} onChange={async (e) => {

@@ -16,7 +16,7 @@ with sync_playwright() as p:
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/project_members.*'),pm)
     def inv(route):
-        body=json.loads(route.request.post_data); state['invites'].append(body); route.fulfill(status=200,content_type='application/json',body=json.dumps({'user_id':'x','invited':True,'projects':len(body['project_ids'])}))
+        body=json.loads(route.request.post_data); state['invites'].append(body); route.fulfill(status=200,content_type='application/json',body=json.dumps({'user_id':'x','invited':True,'link':'https://stand-in.supabase.co/auth/v1/verify?token=abc&type=invite','projects':len(body['project_ids'])}))
     ctx.route(re.compile(r'.*/functions/v1/invite-user.*'),inv)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.locator('.sidebar').screenshot(path='sidebar2.png')
@@ -25,6 +25,6 @@ with sync_playwright() as p:
     print('people:',pg.evaluate("[...document.querySelectorAll('.access-table tbody tr')].map(r=>r.innerText.replace(/\\s+/g,' ').slice(0,90))"))
     pg.click('.access-table button:has-text("change")'); pg.click('.confirm-row label:has-text("2402") input'); pg.wait_for_timeout(300); pg.click('.confirm-row label:has-text("2401") input'); pg.wait_for_timeout(300)
     print('after adding to 2402 and removing from 2401:',sorted(x['project_id'][-1] for x in state['pm']))
-    pg.fill('.access-invite input[type=email]','sam@builder.com'); pg.select_option('.access-invite select','contractor'); pg.click('.access-invite label:has-text("2402") input'); pg.click('button:has-text("Send invitation")'); pg.wait_for_selector('.access-invite .ok-text')
-    print('invite sent:',{k:state['invites'][0][k] for k in('email','role','project_ids')}); print('says:',pg.inner_text('.access-invite .ok-text'))
+    pg.fill('.access-invite input[type=email]','sam@builder.com'); pg.select_option('.access-invite select','contractor'); pg.click('.access-invite label:has-text("2402") input'); pg.click('button:has-text("Add and make a link")'); pg.wait_for_selector('.access-invite .ok-text')
+    print('invite sent:',{k:state['invites'][0][k] for k in('email','role','project_ids')}); print('says:',pg.inner_text('.access-invite .ok-text')); print('link shown:',pg.input_value('.access-link input')); pg.context.grant_permissions(['clipboard-read','clipboard-write']); pg.click('.access-link button'); print('copied:',pg.evaluate('navigator.clipboard.readText()')==pg.input_value('.access-link input'))
     pg.screenshot(path='access.png'); print('errors:',errs); b.close()

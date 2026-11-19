@@ -11,6 +11,39 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 12:25 CST
+
+**Tag marks, tagging with pan and zoom, dots on the sheet, and invitations as a link.**
+
+- **Tag marks** (`src/lib/tags.ts`, `src/components/TagMark.tsx`). A tag on a drawing is now a
+  mark: colour for the trade, shape for the family of work (structure and site square,
+  envelope and openings diamond, finishes round, MEP and fire hexagon, general triangle), and
+  two letters — or a mark drawn by hand in place of the letters. Settings → Observation tags:
+  click a trade's mark to change it for all its tags, or a tag to give it its own (shape,
+  colour, up to three letters, or Sketch). A firm's row for a built-in tag restyles it; a row
+  labelled `*` is the trade's mark. Migration `0038_tag_marks.sql` (three nullable columns on
+  `observation_tags`) **applied with Jacob's confirmation**. An observation's mark is found from
+  its trade and the tag its name contains (`markOf`) — still no tag column on observations.
+- **Tag to drawing pans and zooms** (`SheetSpot.tsx`): drag, pinch, wheel, − / + / Fit; only a
+  touch that did not move places the tag; past 2.2× a finer picture (5200 px) replaces the
+  first. The tag shows as its mark at a constant size. Found while testing: *Tag it here*
+  appearing made the bar taller and slid the sheet 24 px under the tag just placed — the button
+  is now always there, disabled until a spot is chosen.
+- **On a sheet, observations are dots** (`ObservationPins.tsx`, `.obs-dot`): 12 px in the
+  mark's shape and colour; under the pointer the full mark and number; after 0.7 s the trade
+  and what was seen. No hover on a touch screen: dots are a little larger there and a tap opens
+  the observation, as before.
+- **Invitations no longer send email.** `invite-user` v2 (deployed) uses
+  `auth.admin.generateLink` — per Supabase's reference, it generates the link without sending
+  it — and returns the link; Settings shows it with *Copy link*. Someone who has not signed in
+  yet gets a fresh link from *New link* beside their name (a recovery-type link). **Not tried
+  against production**: no real invitation has been made, and how long a link lasts was not
+  looked up. Jacob also asked that people get access to projects they add: `create_project`
+  already does this (checked in the database's function body).
+- `checks/t_marks.py`, `checks/t_access.py`.
+
+---
+
 # Checkpoint — 2026-11-19, 11:50 CST
 
 (The 16:20 heading on the entry below was written from a clock that was wrong; Jacob's messages

@@ -29,7 +29,9 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Feature | Status |
 | --- | --- |
 | Sign-in, invites, create password | Live |
-| People and access: invite by email from Settings, firm roles, per-project access | Live (2026-11-19); invitation not yet sent for real |
+| People and access: add someone from Settings and copy a link to send them yourself (no email is sent), firm roles, per-project access | Live (2026-11-19); no real invitation made yet |
+| Tag marks: shape, colour, letters or a sketched mark per trade or tag, set in Settings; tagging a drawing with pan and zoom; observations as dots that open on hover | Live (2026-11-19); checked in a test browser only |
+| Pad: drag-out text boxes that wrap and resize, redo | Live (2026-11-19); not yet used on the iPhone |
 | Field report photo table: rows of matched height, crop / caption / reorder / leave out before issuing, previewed as it prints | Live (2026-11-19); checked in a test browser only |
 | Google Photos album as a photo source | Not built — needs a Google Cloud OAuth client (Photos Picker API) |
 | Projects and project switcher; project location (address search, map pin, Open in Maps) | Live |

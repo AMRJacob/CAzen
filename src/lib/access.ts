@@ -67,7 +67,12 @@ export async function removeFromFirm(firmId: string, userId: string, projectIds:
   if (error) throw error
 }
 
-export async function invite(firmId: string, email: string, projectIds: string[], role: ProjectRole): Promise<{ invited: boolean }> {
+/**
+ * Put someone on the firm and the chosen projects. Nothing is emailed: what comes back is a
+ * link for them to get in with, to be sent however the admin likes — or none, for someone who
+ * already signs in.
+ */
+export async function invite(firmId: string, email: string, projectIds: string[], role: ProjectRole): Promise<{ invited: boolean; link: string | null }> {
   const { data, error } = await db().functions.invoke('invite-user', {
     body: { firm_id: firmId, email, project_ids: projectIds, role, redirect_to: appUrl() },
   })
@@ -77,5 +82,6 @@ export async function invite(firmId: string, email: string, projectIds: string[]
     throw new Error(msg)
   }
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error)
-  return { invited: !!(data as { invited?: boolean })?.invited }
+  const d = data as { invited?: boolean; link?: string | null }
+  return { invited: !!d?.invited, link: d?.link ?? null }
 }
