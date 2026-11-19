@@ -1,0 +1,22 @@
+import { readSchedule, datesIn, mendDates, suggestLines } from '../src/lib/scheduleRead.ts'
+const eq=(a:unknown,b:unknown,n:string)=>{const ok=JSON.stringify(a)===JSON.stringify(b);console.log(ok?'ok  ':'FAIL',n,ok?'':JSON.stringify(a)+' != '+JSON.stringify(b))}
+eq(datesIn('x 01/15/26 y 2/3/2026').map(d=>d.day),['2026-01-15','2026-02-03'],'numeric dates')
+eq(datesIn('15-Jan-26 03FEB26 A').map(d=>d.day),['2026-01-15','2026-02-03'],'P6 dates')
+eq(datesIn('Mon 1/5/26  Fri Jan 16, 2026').map(d=>d.day),['2026-01-05','2026-01-16'],'Project dates')
+eq(datesIn('Level 2 framing 12 30').length,0,'numbers are not dates')
+eq(datesIn('02/30/26').length,0,'no 30th of February')
+eq(mendDates('Pour slab O1/l5/26 Bolts'),'Pour slab 01/15/26 Bolts','scan mended in dates only')
+const p6=readSchedule(['Activity ID  Activity Name  Original Duration  Start  Finish','SITEWORK','A1000 Mobilization 5 05-Jan-26 09-Jan-26','A1010 Erosion control & clearing 10 12-Jan-26 A 23-Jan-26','STRUCTURE','A2000 Level 2 framing 15d 02-Feb-26 20-Feb-26 40%','A2010 Substantial Completion 0 30-Jun-26','Page 1 of 3   Data Date 01-Jan-26'])
+eq(p6.map(a=>[a.name,a.is_heading,a.starts_on,a.ends_on,a.percent]),[['SITEWORK',true,null,null,0],['Mobilization',false,'2026-01-05','2026-01-09',0],['Erosion control & clearing',false,'2026-01-12','2026-01-23',0],['STRUCTURE',true,null,null,0],['Level 2 framing',false,'2026-02-02','2026-02-20',40],['Substantial Completion',false,'2026-06-30','2026-06-30',0]],'P6 layout')
+const msp=readSchedule(['ID Task Name Duration Start Finish Predecessors','1 Foundations 12 days Mon 1/5/26 Tue 1/20/26','2 Slab on grade 6 days Wed 1/21/26 Wed 1/28/26 1','3 Roofing 3 wks Mon 3/2/26 Fri 3/20/26 2'])
+eq(msp.map(a=>[a.name,a.starts_on,a.ends_on]),[['Foundations','2026-01-05','2026-01-20'],['Slab on grade','2026-01-21','2026-01-28'],['Roofing','2026-03-02','2026-03-20']],'MS Project layout')
+const scan=readSchedule(['| — ee | === |','Drywall hang & finish 15 O3/O2/26 03/2O/26 |===','~~ __ |  | —','Paint l0 03/23/26 04/03/26'],{scanned:true})
+eq(scan.map(a=>[a.name,a.starts_on,a.ends_on]),[['Drywall hang & finish','2026-03-02','2026-03-20'],['Paint','2026-03-23','2026-04-03']],'scan with bar noise')
+const sov=[{id:'h',description:'DIVISION 09',is_heading:true},{id:'a',description:'Gypsum board assemblies',is_heading:false},{id:'b',description:'Painting',is_heading:false},{id:'c',description:'Concrete foundations',is_heading:false},{id:'d',description:'HVAC',is_heading:false},{id:'e',description:'Electrical',is_heading:false}]
+eq(suggestLines('Drywall hang & finish',sov),['a'],'drywall = gypsum board')
+eq(suggestLines('Paint Level 2',sov),['b'],'paint')
+eq(suggestLines('Pour footings',sov),['c'],'footings → foundations')
+eq(suggestLines('Mechanical rough-in',sov),['d'],'mechanical = HVAC')
+eq(suggestLines('Owner move-in',sov),[],'nothing forced')
+const lv=readSchedule(['A3000 Paint Level 2 10 03/23/26 04/03/26','A3010 Framing Phase 1 15 15 02/02/26 02/20/26'])
+eq(lv.map(a=>a.name),['Paint Level 2','Framing Phase 1'],'a number that belongs to the name stays')

@@ -1864,3 +1864,13 @@ label.stack select, .obs-row select, .obs-more select {
 .sov-preview th, .sov-preview td { padding: 6px 12px; border-bottom: 1px solid var(--line); }
 .sov-preview th.right, .sov-preview td.right { text-align: right; }
 .sov-preview tr.sov-heading td { font-weight: 600; background: var(--moss-soft); }
+
+/* ---------- Reading a schedule in ---------- */
+.sched-import .sched-paste { margin-top: 18px; }
+.sched-import textarea { width: 100%; }
+.sched-read { max-height: 460px; }
+.sched-read td { vertical-align: middle; }
+.sched-read input.cell[type="date"] { width: 140px; }
+.sched-read tr.sched-left-out td:not(:first-child) { opacity: 0.4; }
+.sched-tie { display: inline-flex; align-items: center; gap: 4px; margin: 1px 4px 1px 0; }
+.sched-tie .link { text-decoration: none; padding: 0 2px; }

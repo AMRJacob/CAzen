@@ -7,11 +7,13 @@ import { today } from '../lib/dates'
 import { money, percent } from '../lib/money'
 import { Money } from '../components/Money'
 import {
-  addActivity, compare, listActivities, removeActivity, ScheduleNotSetUp, setActivity, setCovered,
+  addActivities, addActivity, compare, listActivities, removeActivity, ScheduleNotSetUp, setActivity, setCovered,
   type Activity,
 } from '../lib/schedule'
 import { listContracts, loadContract, type LoadedContract } from '../lib/payappsDb'
 import { figure } from '../lib/payapps'
+import { ScheduleImport, type ImportResult } from '../components/ScheduleImport'
+import { suggestLines } from '../lib/scheduleRead'
 
 /**
  * The construction schedule.
@@ -28,6 +30,8 @@ export default function Schedule() {
   const [error, setError] = useState<string | null>(null)
   const [needsSetUp, setNeedsSetUp] = useState(false)
   const [picking, setPicking] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
 
   const projectId = current?.id
   const load = useCallback(() => {
@@ -85,6 +89,50 @@ export default function Schedule() {
     }
   }
 
+  /** What was read from the contractor's schedule: new rows in one request, known ones updated. */
+  async function keepImport(r: ImportResult) {
+    if (!projectId) return
+    const from = (activities ?? []).reduce((m, a) => Math.max(m, a.sort), 0)
+    const made = await addActivities(r.add.map((a, i) => ({
+      project_id: projectId, contract_id: data?.contract.id ?? null,
+      name: a.name, is_heading: a.is_heading, starts_on: a.starts_on, ends_on: a.ends_on,
+      percent: a.percent, sort: from + i + 1, lines: a.lines,
+    })))
+    for (const u of r.update) await setActivity(u.id, u.patch)
+    const patched = new Map(r.update.map((u) => [u.id, u.patch]))
+    setActivities((all) => [...(all ?? []).map((a) => ({ ...a, ...(patched.get(a.id) ?? {}) })), ...made])
+    const tied = made.filter((a) => a.lines.length).length
+    setSaid([
+      made.length ? `${made.length} added` : '', r.update.length ? `${r.update.length} updated` : '',
+      tied ? `${tied} tied to the schedule of values` : '',
+    ].filter(Boolean).join(', ') + '.')
+  }
+
+  /** Offer a tie for every activity that has none, from its name. Ones already tied are left alone. */
+  function suggestTies() {
+    if (!data || !projectId || !activities) return
+    let n = 0
+    const next = activities.map((a) => {
+      if (a.is_heading || a.lines.length) return a
+      const ids = suggestLines(a.name, data.lines)
+      if (!ids.length) return a
+      n++
+      setCovered(projectId, a.id, ids).catch((e) => setError(message(e)))
+      return { ...a, lines: ids }
+    })
+    setActivities(next)
+    const left = next.filter((a) => !a.is_heading && !a.lines.length).length
+    setSaid(n
+      ? `${n} ${n === 1 ? 'activity' : 'activities'} tied by name — each says what it covers, and any of them can be changed.${left ? ` ${left} matched nothing.` : ''}`
+      : 'No activity’s name matched a line of the schedule of values.')
+  }
+
+  const lineName = (id: string) => {
+    const l = data?.lines.find((x) => x.id === id)
+    return l ? `${l.item_no ? `${l.item_no} · ` : ''}${l.description}` : 'a line'
+  }
+  const untied = (activities ?? []).filter((a) => !a.is_heading && !a.lines.length).length
+
   function change(id: string, patch: Partial<Activity>) {
     setActivities((all) => (all ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)))
     setActivity(id, patch).catch((e) => setError(message(e)))
@@ -102,6 +150,7 @@ export default function Schedule() {
         </div>
         {!needsSetUp && (
           <div className="inline-form">
+            <button className="primary" onClick={() => { setImporting(true); setSaid(null) }} disabled={!projectId || importing}>Read from a PDF</button>
             <button onClick={() => void add(false)} disabled={!projectId}>Add activity</button>
             <button onClick={() => void add(true)} disabled={!projectId}>Add heading</button>
           </div>
@@ -117,6 +166,12 @@ export default function Schedule() {
         </div>
       )}
 
+      {said && <div className="notice">{said}</div>}
+      {importing && activities && (
+        <ScheduleImport existing={activities} lines={data?.lines ?? null}
+          onKeep={keepImport} onDone={() => setImporting(false)} />
+      )}
+
       {!activities ? <p className="muted">Loading…</p> : (
         <>
           <div className="card">
@@ -129,6 +184,9 @@ export default function Schedule() {
             <p className="muted small">
               What each activity covers is how the schedule and the applications for payment are
               compared: an activity with no lines against it is drawn, but not compared.
+              {data && untied > 0 && activities.length > 0 && (
+                <> <button className="link" onClick={suggestTies}>Suggest what the {untied} untied {untied === 1 ? 'one covers' : 'ones cover'}</button></>
+              )}
             </p>
             {!activities.length ? <p className="muted small">Nothing in the schedule yet.</p> : (
               <table className="sched-table">
@@ -164,7 +222,7 @@ export default function Schedule() {
                           </td>
                           <td>
                             <button className="link" onClick={() => setPicking(picking === a.id ? null : a.id)}>
-                              {a.lines.length ? `${a.lines.length} ${a.lines.length === 1 ? 'line' : 'lines'}` : 'nothing yet'}
+                              {a.lines.length ? `${lineName(a.lines[0])}${a.lines.length > 1 ? ` +${a.lines.length - 1}` : ''}` : 'nothing yet'}
                             </button>
                           </td>
                         </>

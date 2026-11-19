@@ -79,6 +79,39 @@ export async function addActivity(a: {
   }
 }
 
+/**
+ * A whole schedule's worth of activities in one request, with what each one covers. They come
+ * back in the order they went, so the ties can be matched to the rows they belong to.
+ */
+export async function addActivities(rows: {
+  project_id: string
+  contract_id: string | null
+  name: string
+  is_heading: boolean
+  starts_on: string | null
+  ends_on: string | null
+  percent: number
+  sort: number
+  lines: string[]
+}[]): Promise<Activity[]> {
+  if (!rows.length) return []
+  const client = db()
+  const { data, error } = await client.from('schedule_activities')
+    .insert(rows.map(({ lines: _lines, ...r }) => r)).select(COLUMNS)
+  if (error) { if (notThere(error)) throw new ScheduleNotSetUp(); throw error }
+  const made = ((data ?? []) as unknown as Omit<Activity, 'lines'>[])
+    .map((a) => ({ ...a, percent: Number(a.percent) }))
+    .sort((a, b) => a.sort - b.sort)
+  const bySort = new Map(rows.map((r) => [r.sort, r.lines]))
+  const out = made.map((a) => ({ ...a, lines: bySort.get(a.sort) ?? [] }))
+  const links = out.flatMap((a) => a.lines.map((sov_line_id) => ({ activity_id: a.id, sov_line_id, project_id: a.project_id })))
+  if (links.length) {
+    const { error: linkError } = await client.from('schedule_activity_lines').insert(links)
+    if (linkError) throw linkError
+  }
+  return out
+}
+
 export async function setActivity(
   id: string,
   patch: Partial<Pick<Activity, 'name' | 'starts_on' | 'ends_on' | 'percent' | 'sort' | 'is_heading'>>,
