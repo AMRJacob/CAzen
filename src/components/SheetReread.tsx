@@ -79,8 +79,11 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
     const one = pick ? list.find((t) => t.id === pick) : undefined
     const r = one ? readWith(text, one) : readPage(text, list)
     const title = niceTitle(r.title) ?? ''
-    const differs = (!!title && title !== (niceTitle(sheet.title) ?? '')) || (!!r.date && r.date !== (dates.current.get(sheet.revision_id) ?? ''))
-    return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: differs && (!r.number || same(r.number, sheet.number)) }
+    // The sheets were chosen once already, on the list; they are not asked for again here.
+    // Every sheet something was read from is ticked, changed or not. The one exception is a title
+    // block that read as a different sheet's number: that is the wrong box, or the wrong
+    // sheet, and putting its title on this one is the mistake this exists to undo.
+    return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: (!!title || !!r.date) && (!r.number || same(r.number, sheet.number)) }
   }
   /** Read everything already opened again, leaving alone what was corrected by hand. */
   const again = (list: TitleblockTemplate[], pick: string) => { now.current = { list, pick }; setRows((all) => all.map((r) => {
@@ -224,6 +227,16 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
             {busy ? 'Changing…' : picked.length ? `Change ${picked.length} ${picked.length === 1 ? 'sheet' : 'sheets'}` : 'Nothing ticked'}
           </button>
           <button className="link" onClick={() => onDone(0)}>Cancel</button>
+          {(() => {
+            const odd = rows.filter((r) => r.state === 'read' && !r.apply && !!r.number && !same(r.number, r.sheet.number)).length
+            const blank = rows.filter((r) => r.state === 'read' && !r.title && !r.date).length
+            return (odd > 0 || blank > 0) && left === 0 && (
+              <span className="muted small">
+                {[odd > 0 && `${odd} left unticked: the title block read as a different sheet number`,
+                  blank > 0 && `${blank} with nothing read`].filter(Boolean).join(' · ')}
+              </span>
+            )
+          })()}
         </div>
       </div>
     </div>

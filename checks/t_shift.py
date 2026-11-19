@@ -12,4 +12,5 @@ with sync_playwright() as p:
     pg.click('tr.opens >> nth=0',modifiers=['Control']); pg.click('tr.opens >> nth=4',modifiers=['Shift']); print('Ctrl-click the 1st, Shift-click the 5th:',n())
     pg.keyboard.press('Escape'); pg.reload(); pg.wait_for_selector('tr.opens >> nth=5')
     pg.click('button:has-text("Re-read titles and dates")'); pg.click('tr.opens >> nth=1'); pg.click('tr.opens >> nth=5',modifiers=['Shift']); print('Re-read mode — click the 2nd, Shift-click the 6th:',n())
-    pg.click('tr.opens >> nth=0',modifiers=['Shift']); print('then Shift-click the 1st (run back from the 6th):',n()); b.close()
+    pg.click('tr.opens >> nth=0',modifiers=['Shift']); print('then Shift-click the 1st (run back from the 6th):',n())
+    pg.click('.pick-bar button:has-text("Cancel")'); pg.click('button:has-text("Re-read titles and dates")'); pg.click('tr.group >> nth=0'); print('discipline heading clicked:',n(),'|',pg.inner_text('tr.group >> nth=0').replace('\n',' ')); pg.click('tr.group >> nth=0'); print('clicked again:',pg.inner_text('.pick-bar strong')); b.close()

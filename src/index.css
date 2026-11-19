@@ -2645,3 +2645,7 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .reread-name { display: inline-flex; gap: 8px; align-items: center; }
 .reread-name input { font: inherit; font-size: 14px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 220px; }
 .reread-with { flex-wrap: wrap; }
+.register tr.group-pick { cursor: pointer; }
+.register tr.group-pick:hover td { background: var(--wash); }
+.register tr.group-picked td { background: var(--moss-soft); }
+.group-pick-say { margin-left: 12px; font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }

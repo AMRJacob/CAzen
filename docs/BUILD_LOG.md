@@ -37,6 +37,19 @@ The table of read values stays as it is while renaming. `t_template.py` renames 
 it has just made and checks the server, the list and the rows. *Change its boxes…* was
 compiled, not driven.
 
+Jacob, 15:23, two more on the same screen:
+- **Select a whole discipline.** While selecting, a discipline's heading selects every sheet
+  under it (again to let them go); with Ctrl held it works outside selecting mode too.
+  `t_shift.py`.
+- **"I don't think I need an in between window that required me to reselect the sheets."**
+  Read as: the re-read table arrived with most rows unticked, so the sheets had to be chosen a
+  second time. Rows are now ticked whenever anything was read from the sheet, whether or not it
+  differs from the record. Still left unticked: a sheet whose title block read as a different
+  sheet's number (the wrong box or the wrong sheet), and the line by the button now says how
+  many and why. The table itself is kept — it is where the template is chosen and where what
+  was read can be seen before it replaces anything. **If he meant the table should go
+  altogether, this is not that.**
+
 ---
 
 # Checkpoint — 2026-11-19, 15:19 CST

@@ -320,7 +320,7 @@ export default function Documents() {
             {(picked.size > 0 || selecting) && (
               <div className="pick-bar">
                 <strong>{picked.size ? `${picked.size} ${picked.size === 1 ? 'sheet' : 'sheets'} selected` : 'Click the sheets to re-read'}</strong>
-                {selecting && <span className="muted small">A click selects; Shift-click takes everything between.</span>}
+                {selecting && <span className="muted small">A click selects; Shift-click takes everything between; a discipline’s heading takes the whole discipline.</span>}
                 <button className="link" onClick={() => setPicked(new Set(groups.flatMap((g) => g.items.map((i) => i.sheet_id))))}>Select all {groups.reduce((n, g) => n + g.items.length, 0)}</button>
                 {picked.size > 0 && <button className="primary" onClick={() => setRereading(true)}>Re-read {picked.size === 1 ? 'its' : 'their'} title and date</button>}
                 <button className="link" onClick={() => { setPicked(new Set()); setSelecting(false) }}>{selecting ? 'Cancel' : 'Clear'}</button>
@@ -345,7 +345,23 @@ export default function Documents() {
               <tbody>
                 {groups.map((g) => (
                   <Fragment key={g.key}>
-                    <tr className="group"><td colSpan={7}>{g.label}</td></tr>
+                    {/* A discipline's heading selects the whole discipline: while selecting, or with
+                        Ctrl held. Clicked again with all of it selected, it lets all of it go. */}
+                    <tr className={`group${selecting ? ' group-pick' : ''}${g.items.length && g.items.every((i) => picked.has(i.sheet_id)) ? ' group-picked' : ''}`}
+                      title={selecting ? `Select every ${g.label} sheet` : 'Ctrl-click to select every sheet in this discipline'}
+                      onClick={(e) => {
+                        if (!(selecting || e.ctrlKey || e.metaKey)) return
+                        const ids = g.items.map((i) => i.sheet_id)
+                        setPicked((was) => {
+                          const next = new Set(was)
+                          const all = ids.every((id) => next.has(id))
+                          for (const id of ids) { if (all) next.delete(id); else next.add(id) }
+                          return next
+                        })
+                        lastPick.current = ids[ids.length - 1] ?? null
+                      }}>
+                      <td colSpan={7}>{g.label}{selecting && <span className="group-pick-say">{g.items.every((i) => picked.has(i.sheet_id)) ? 'all selected' : `select all ${g.items.length}`}</span>}</td>
+                    </tr>
                     {g.items.map((s) => <SheetRow key={s.sheet_id} sheet={s} project={current} order={order} isAdmin={isAdmin} onChanged={load} onOpen={(v) => setViewing({ start: v })}
                       picked={picked.has(s.sheet_id)} anyPicked={picked.size > 0} selecting={selecting}
                       onPick={(range) => pick(s.sheet_id, range, groups.flatMap((x) => x.items.map((i) => i.sheet_id)))}
