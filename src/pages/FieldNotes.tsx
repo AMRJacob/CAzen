@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
-import { NotePad } from '../components/NotePad'
+import { NotePad, PadPages, Paper, Stroke, PAGE_H } from '../components/NotePad'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
 import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
-import { listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind } from '../lib/pads'
+import { listMarks, listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind, type PadMark } from '../lib/pads'
 import {
   asReport, editObservation, listObservations, listTypes, nameOf, onDay, photosOf, punchList,
   STATUS_LABELS, watchObservations,
@@ -100,13 +100,13 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
             reading what was written in the room, and closing the pad to type is the one thing
             that makes people not bother. */}
         {from && (
-          <div className="card pad-card">
+          <div className="card">
             <div className="pad-head">
               <h3>{from.title || (kind === 'meeting_notes' ? 'Meeting notes' : 'Site visit')}</h3>
               <span className="muted small">{usDate(from.noted_on)}</span>
               <button className="link" onClick={() => setFrom(null)}>Put it away</button>
             </div>
-            <NotePad pad={from} onChanged={setFrom} onTrouble={setError} />
+            <PadPages pad={from} onTrouble={setError} />
           </div>
         )}
         <IssueForm key={kind} kind={kind} />
@@ -179,6 +179,8 @@ function Pads({ kind, projectId, onTrouble, onWriteUp }: {
 }) {
   const [pads, setPads] = useState<Pad[] | null>(null)
   const [open, setOpen] = useState<Pad | null>(null)
+  /** The pad just closed, marked in the list for a moment so it is obvious where it went. */
+  const [justClosed, setJustClosed] = useState<string | null>(null)
 
   const load = useCallback(() => {
     if (!projectId) return
@@ -204,30 +206,13 @@ function Pads({ kind, projectId, onTrouble, onWriteUp }: {
 
   if (open) {
     return (
-      <div className="card pad-card">
-        <div className="pad-head">
-          <input className="pad-title" value={open.title ?? ''} placeholder={untitled(kind)}
-            aria-label="What these notes are about"
-            onChange={(e) => setOpen({ ...open, title: e.target.value })}
-            onBlur={(e) => {
-              setPads((all) => (all ?? []).map((p) => (p.id === open.id ? { ...p, title: e.target.value } : p)))
-              setPad(open.id, { title: e.target.value || null }).catch((err) => onTrouble(message(err)))
-            }} />
-          <input type="date" value={open.noted_on} aria-label="The day these notes are about"
-            onChange={(e) => {
-              const noted_on = e.target.value
-              setOpen({ ...open, noted_on })
-              setPads((all) => (all ?? []).map((p) => (p.id === open.id ? { ...p, noted_on } : p)))
-              setPad(open.id, { noted_on }).catch((err) => onTrouble(message(err)))
-            }} />
-          {onWriteUp && <button className="primary-lite" onClick={() => onWriteUp(open)}>Type it up</button>}
-          <button onClick={() => { setOpen(null); load() }}>Done</button>
-        </div>
-        <NotePad pad={open} onChanged={(p) => {
+      <NotePad pad={open}
+        onChanged={(p) => {
           setOpen(p)
           setPads((all) => (all ?? []).map((x) => (x.id === p.id ? p : x)))
-        }} onTrouble={onTrouble} />
-      </div>
+        }}
+        onClose={() => { setJustClosed(open.id); setOpen(null); load() }}
+        onTrouble={onTrouble} />
     )
   }
 
@@ -238,23 +223,75 @@ function Pads({ kind, projectId, onTrouble, onWriteUp }: {
         <button className="primary-lite" onClick={() => void start()} disabled={!projectId}>New pad</button>
       </div>
       <p className="muted small">
-        Write by hand in the room, and type it up afterwards from what you wrote. More than one
-        person can write on the same pad at once.
+        Write by hand in the room, and type it up afterwards from what you wrote. Pads live here —
+        this is where one you have closed will be waiting. More than one person can write on the
+        same pad at once.
       </p>
       {!pads ? <p className="muted small">Loading…</p>
         : !pads.length ? <p className="muted small">No pads yet.</p> : (
-          <div className="pad-list">
+          <div className="pad-grid">
             {pads.map((p) => (
-              <div key={p.id} className="pad-row">
-                <button className="link" onClick={() => setOpen(p)}>{p.title || untitled(kind)}</button>
-                <span className="muted small nowrap">{usDate(p.noted_on)}</span>
-                <span className="muted small nowrap">{p.pages} {p.pages === 1 ? 'page' : 'pages'}</span>
-                {onWriteUp && <button className="link" onClick={() => onWriteUp(p)}>Type it up</button>}
-                <button className="link danger-link" onClick={() => void discard(p)}>Delete</button>
-              </div>
+              <PadCard key={p.id} pad={p} kind={kind} fresh={justClosed === p.id}
+                onOpen={() => setOpen(p)}
+                onWriteUp={onWriteUp ? () => onWriteUp(p) : undefined}
+                onDiscard={() => void discard(p)}
+                onRename={(title) => {
+                  setPads((all) => (all ?? []).map((x) => (x.id === p.id ? { ...x, title } : x)))
+                  setPad(p.id, { title: title || null }).catch((err) => onTrouble(message(err)))
+                }} />
             ))}
           </div>
         )}
+    </div>
+  )
+}
+
+/**
+ * One pad in the list, showing the first page of what is actually on it.
+ *
+ * Pads look alike in a list of titles and dates, and most of them never get titled. A glance
+ * at your own handwriting is how you find the one you mean — and seeing it here is also the
+ * answer to where a pad goes when you close it.
+ */
+function PadCard({ pad, kind, fresh, onOpen, onWriteUp, onDiscard, onRename }: {
+  pad: Pad
+  kind: PadKind
+  fresh: boolean
+  onOpen: () => void
+  onWriteUp?: () => void
+  onDiscard: () => void
+  onRename: (title: string) => void
+}) {
+  const [marks, setMarks] = useState<PadMark[] | null>(null)
+
+  useEffect(() => {
+    let gone = false
+    listMarks(pad.id)
+      .then((m) => { if (!gone) setMarks(m.filter((x) => x.page === 1 && x.kind !== 'text')) })
+      .catch(() => { if (!gone) setMarks([]) })
+    return () => { gone = true }
+  }, [pad.id, pad.pages])
+
+  return (
+    <div className={`pad-card-item${fresh ? ' fresh' : ''}`}>
+      <button className="pad-thumb" onClick={onOpen} aria-label={`Open ${pad.title || untitled(kind)}`}>
+        <svg viewBox={`0 0 1 ${PAGE_H}`} preserveAspectRatio="xMidYMin meet" aria-hidden="true">
+          <Paper rule={pad.rule} />
+          {(marks ?? []).map((m) => <Stroke key={m.id} mark={m} />)}
+        </svg>
+        {marks && !marks.length && <span className="pad-thumb-empty muted small">Nothing written yet</span>}
+      </button>
+      <input className="pad-card-title" defaultValue={pad.title ?? ''} placeholder={untitled(kind)}
+        aria-label="What these notes are about"
+        onBlur={(e) => { if (e.target.value !== (pad.title ?? '')) onRename(e.target.value) }} />
+      <div className="pad-card-foot">
+        <span className="muted small nowrap">{usDate(pad.noted_on)}</span>
+        <span className="muted small nowrap">{pad.pages} {pad.pages === 1 ? 'page' : 'pages'}</span>
+      </div>
+      <div className="pad-card-actions">
+        {onWriteUp && <button className="link" onClick={onWriteUp}>Type it up</button>}
+        <button className="link danger-link" onClick={onDiscard}>Delete</button>
+      </div>
     </div>
   )
 }
