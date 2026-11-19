@@ -129,3 +129,35 @@ export async function setContract(id: string, patch: Record<string, unknown>): P
   const { error } = await db().from('pay_contracts').update(patch).eq('id', id)
   if (error) throw error
 }
+
+/**
+ * Set a contract up: the agreement's figures and its schedule of values, in one go.
+ *
+ * The lines go in as one insert, so a schedule of two hundred lines is one request and either
+ * all of it arrives or none of it does. If they fail, the contract that was just made is taken
+ * back rather than left behind empty.
+ */
+export async function createContract(projectId: string, contract: {
+  contractor: string | null
+  name: string | null
+  original_sum: number
+  retainage_work: number
+  retainage_stored: number
+}, lines: { item_no: string | null; description: string; scheduled_value: number; is_heading: boolean }[]): Promise<string> {
+  const client = db()
+  const { data: u } = await client.auth.getUser()
+  const { data, error } = await client.from('pay_contracts')
+    .insert({ project_id: projectId, ...contract, created_by: u.user?.id ?? null })
+    .select('id').single()
+  if (error) throw error
+  const id = (data as { id: string }).id
+  if (lines.length) {
+    const { error: lineError } = await client.from('sov_lines')
+      .insert(lines.map((l, i) => ({ contract_id: id, ...l, sort: (i + 1) * 10 })))
+    if (lineError) {
+      await client.from('pay_contracts').delete().eq('id', id)
+      throw lineError
+    }
+  }
+  return id
+}

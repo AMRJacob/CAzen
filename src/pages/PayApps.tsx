@@ -1,3 +1,4 @@
+import { ContractSetup } from '../components/ContractSetup'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
@@ -96,7 +97,11 @@ export default function PayApps() {
       {error && <div className="notice error">{error}</div>}
 
       {contracts?.length === 0 && (
-        <div className="card muted">No contract set up for this project yet.</div>
+        <ContractSetup project={current} onCreated={(id) => {
+          setContracts([{ id, name: null }])
+          setChosen(id)
+          setTab('summary')
+        }} />
       )}
 
       {contracts && contracts.length > 1 && (
