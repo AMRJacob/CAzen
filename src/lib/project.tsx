@@ -2,6 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { db } from './supabase'
 import { useFirm } from './firm'
 import type { Project } from './types'
+import { remember, remembered } from './remembered'
+
+const kept = (firmId: string) => `cazen.kept.projects.${firmId}`
 
 const KEY = 'cazen.currentProject'
 
@@ -25,16 +28,20 @@ const ProjectContext = createContext<ProjectState>({
 })
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [currentId, setCurrentId] = useState<string | null>(readSaved())
-  const [loading, setLoading] = useState(true)
-
   const { firm } = useFirm()
+  const [projects, setProjects] = useState<Project[]>(() => (firm ? remembered<Project[]>(kept(firm.id)) ?? [] : []))
+  const [currentId, setCurrentId] = useState<string | null>(readSaved())
+  const [loading, setLoading] = useState(() => !(firm && remembered<Project[]>(kept(firm.id))))
 
   const reload = useCallback(async () => {
     if (!firm) return
-    const { data, error } = await db().from('projects').select('*').eq('firm_id', firm.id).order('number', { ascending: false })
-    if (!error && data) setProjects(data as Project[])
+    try {
+      const { data, error } = await db().from('projects').select('*').eq('firm_id', firm.id).order('number', { ascending: false })
+      if (!error && data) {
+        setProjects(data as Project[])
+        remember(kept(firm.id), data)
+      }
+    } catch { /* no signal: the list already on screen is the list */ }
     setLoading(false)
   }, [firm])
 

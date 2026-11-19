@@ -968,6 +968,9 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
   .projects td.p-number { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; color: var(--muted); }
   .projects td.p-name { font-size: 17px; font-weight: 500; }
   .projects td.p-who, .projects td.p-edit { display: none; }
+  .projects td.p-field { display: block; padding-top: 6px; }
+  .projects td.p-field .link { font-size: 14px; padding: 6px 0; }
+  .projects tr.p-field-row { display: block; }
   .projects tr.selected { border-color: var(--moss); background: var(--moss-soft); }
 
   /* The register: which sheet, what it is, which revision. The rest is desk reading. */
@@ -1813,3 +1816,6 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .contract-row .inline-field { gap: 6px; }
 .padpop-slider { display: flex; align-items: center; gap: 10px; }
 .padpop-slider input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--moss); }
+
+/* Taking a project to the field from the list is the phone's way in; a desk has Edit. */
+@media (min-width: 620px) { .projects .p-field, .projects tr.p-field-row { display: none; } }

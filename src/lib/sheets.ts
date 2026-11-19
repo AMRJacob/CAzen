@@ -3,6 +3,7 @@ import { copyToFolder, deleteProjectCloudFiles, deleteStoredFiles, folderReady, 
 import { backupProject } from './projectData'
 import type { CurrentSheet, IssuanceKind, SheetRevision } from './types'
 import type { BundleSheet } from './pdf/bundle'
+import { all as localAll } from './offline/store'
 
 export interface IssuanceInput {
   kind: IssuanceKind
@@ -30,6 +31,73 @@ export async function listCurrentSheets(projectId: string): Promise<CurrentSheet
     .order('number')
   if (error) throw error
   return (data ?? []) as CurrentSheet[]
+}
+
+type Row = Record<string, unknown>
+const localIssuances = async (projectId: string) =>
+  new Map((await localAll<Row>('issuances', projectId)).map((i) => [i.id as string, i]))
+
+/** The revisions this device holds, newest issue first, each with the issue it came in. */
+async function localRevisions(projectId: string) {
+  const issued = await localIssuances(projectId)
+  return (await localAll<Row>('revisions', projectId))
+    .map((r) => ({ r, i: issued.get(r.issuance_id as string) }))
+    .filter((x): x is { r: Row; i: Row } => !!x.i)
+    .sort((a, b) =>
+      String(b.i.issued_on).localeCompare(String(a.i.issued_on)) ||
+      (b.r.revision_index as number) - (a.r.revision_index as number))
+}
+
+/**
+ * The current set, from the copy on this device — the same answer the current_sheets view gives,
+ * worked out from the rows a project taken to the field brought with it. Empty when the project
+ * isn't held here.
+ */
+export async function localCurrentSheets(projectId: string): Promise<CurrentSheet[]> {
+  const sheets = await localAll<Row>('sheets', projectId)
+  if (!sheets.length) return []
+  const revs = await localRevisions(projectId)
+  const out: CurrentSheet[] = []
+  for (const s of sheets) {
+    const mine = revs.filter((x) => x.r.sheet_id === s.id)
+    const top = mine[0]
+    if (!top) continue
+    out.push({
+      sheet_id: s.id as string,
+      project_id: projectId,
+      number: s.number as string,
+      title: (top.r.title_at_rev as string | null) ?? (s.title as string | null) ?? null,
+      discipline: (s.discipline as string | null) ?? null,
+      filed_under: (s.filed_under as string | null) ?? null,
+      is_void: !!s.is_void,
+      revision_id: top.r.id as string,
+      revision_index: top.r.revision_index as number,
+      revision_label: (top.r.revision_label as string | null) ?? null,
+      file_path: top.r.file_path as string,
+      issuance_kind: top.i.kind as IssuanceKind,
+      issuance_number: (top.i.number as string | null) ?? null,
+      issued_on: top.i.issued_on as string,
+      revision_count: mine.length,
+    })
+  }
+  return out.sort((a, b) => a.number.localeCompare(b.number))
+}
+
+/** A sheet's history from the copy on this device. */
+export async function localSheetRevisions(projectId: string, sheetId: string): Promise<SheetRevision[]> {
+  return (await localRevisions(projectId))
+    .filter((x) => x.r.sheet_id === sheetId)
+    .sort((a, b) => (b.r.revision_index as number) - (a.r.revision_index as number))
+    .map(({ r, i }) => ({
+      id: r.id as string,
+      revision_index: r.revision_index as number,
+      revision_label: (r.revision_label as string | null) ?? null,
+      sheet_date: (r.sheet_date as string | null) ?? null,
+      title_at_rev: (r.title_at_rev as string | null) ?? null,
+      file_path: r.file_path as string,
+      created_at: r.created_at as string,
+      issuances: { kind: i.kind as IssuanceKind, number: (i.number as string | null) ?? null, issued_on: i.issued_on as string },
+    }))
 }
 
 export async function listSheetsAsOf(projectId: string, date: string) {
@@ -82,13 +150,21 @@ export async function renameSheet(
 }
 
 export async function listRevisions(sheetId: string): Promise<SheetRevision[]> {
-  const { data, error } = await db()
-    .from('sheet_revisions')
-    .select('id, revision_index, revision_label, sheet_date, title_at_rev, file_path, created_at, issuances(kind, number, issued_on)')
-    .eq('sheet_id', sheetId)
-    .order('revision_index', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as unknown as SheetRevision[]
+  try {
+    const { data, error } = await db()
+      .from('sheet_revisions')
+      .select('id, revision_index, revision_label, sheet_date, title_at_rev, file_path, created_at, issuances(kind, number, issued_on)')
+      .eq('sheet_id', sheetId)
+      .order('revision_index', { ascending: false })
+    if (error) throw error
+    return (data ?? []) as unknown as SheetRevision[]
+  } catch (e) {
+    // No signal: a sheet taken to the field still has its history on the device.
+    const row = (await localAll<Row>('revisions').catch(() => [])).find((r) => r.sheet_id === sheetId)
+    const here = row ? await localSheetRevisions(row.project_id as string, sheetId).catch(() => []) : []
+    if (here.length) return here
+    throw e
+  }
 }
 
 /** Open a stored sheet PDF in a new tab, from cloud storage or the project folder. */

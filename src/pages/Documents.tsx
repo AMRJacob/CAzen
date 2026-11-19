@@ -15,7 +15,7 @@ import { PdfPreview } from '../components/PdfPreview'
 import { FieldSync } from '../components/FieldSync'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
 import {
-  deleteIssuance, deleteRevision, existingSets, listCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
+  deleteIssuance, deleteRevision, existingSets, listCurrentSheets, localCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
@@ -86,11 +86,15 @@ export default function Documents() {
   const load = useCallback(async () => {
     if (!current) return
     setLoading(true)
+    // A project taken to the field is listed from the device at once, and the server's list
+    // replaces it when it answers. One bar that never delivers is then no worse than none.
+    const here = await localCurrentSheets(current.id).catch(() => [])
+    if (here.length) { setSheets(here); setLoading(false) }
     try {
       setSheets(await listCurrentSheets(current.id))
       setError(null)
     } catch (e) {
-      setError(message(e))
+      if (!here.length) setError(message(e))
     } finally {
       setLoading(false)
     }
@@ -235,7 +239,7 @@ export default function Documents() {
               <span className="muted small">
                 {asOfRows
                   ? `${asOfRows.length} sheets as of ${usDate(asOf)}`
-                  : `${sheets.length} current sheets`}
+                  : `${sheets.length} current ${sheets.length === 1 ? "sheet" : "sheets"}`}
               </span>
               <DownloadSet
                 project={current}

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { EmailOtpType, Session } from '@supabase/supabase-js'
-import { appUrl, supabase } from './supabase'
+import { appUrl, storedSession, supabase } from './supabase'
+import { forget } from './remembered'
 import { Logo } from '../components/Logo'
 
 interface AuthState {
@@ -67,8 +68,10 @@ async function consumeAuthLink(): Promise<{ type: string | null; error: string |
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(Boolean(supabase))
+  // Whoever was last signed in on this device is who opens it, at once; the server's word on the
+  // matter follows and wins. A link in the address is someone arriving, so that waits to be read.
+  const [session, setSession] = useState<Session | null>(() => (captured ? null : storedSession()))
+  const [loading, setLoading] = useState(() => Boolean(supabase) && (Boolean(captured) || !storedSession()))
   const [needsPassword, setNeedsPassword] = useState(flag.get())
   const [linkError, setLinkError] = useState<string | null>(null)
 
@@ -77,9 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const requirePassword = () => { flag.set(true); setNeedsPassword(true) }
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s)
+      // "No session" from anything but a sign-out is, with no signal, only a refresh that could
+      // not be made. The saved session stands until the server can be asked.
+      setSession(s ?? (event === 'SIGNED_OUT' ? null : storedSession()))
       if (event === 'PASSWORD_RECOVERY') requirePassword()
-      if (event === 'SIGNED_OUT') { flag.set(false); setNeedsPassword(false) }
+      if (event === 'SIGNED_OUT') { flag.set(false); setNeedsPassword(false); forget('cazen.kept.') }
       if (s && window.location.search.includes('code=')) {
         window.history.replaceState(null, '', appUrl() + window.location.hash)
       }
@@ -89,8 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const link = await consumeAuthLink()
       if (link.error) setLinkError(link.error)
       if (link.type === 'invite' || link.type === 'recovery' || link.type === 'signup') requirePassword()
-      const { data } = await supabase.auth.getSession()
-      setSession(data.session)
+      const { data, error } = await supabase.auth.getSession()
+      // An error here is the network, not a verdict: a session the server has really ended is
+      // also removed from the device, and then there is nothing saved to fall back on.
+      setSession(data.session ?? (error || !navigator.onLine ? storedSession() : null))
       setLoading(false)
     })()
 

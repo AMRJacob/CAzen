@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type Session } from '@supabase/supabase-js'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -24,4 +24,22 @@ export function db() {
 /** The app's own address, used as the return link in sign-in emails. */
 export function appUrl() {
   return window.location.origin + window.location.pathname
+}
+
+/**
+ * The session as it was last saved on this device, read without asking the server anything.
+ *
+ * The library won't hand a session over until it has refreshed it, and with no signal it keeps
+ * trying for half a minute before giving up and answering "nobody". Somebody who signed in at
+ * their desk this morning is still that person in a basement at two, so the saved session is
+ * what the app opens on, and the library's answer replaces it when it arrives.
+ */
+export function storedSession(): Session | null {
+  if (!url) return null
+  try {
+    const raw = localStorage.getItem(`sb-${new URL(url).hostname.split('.')[0]}-auth-token`)
+    if (!raw) return null
+    const s = JSON.parse(raw) as Session
+    return s?.user?.id && s.access_token ? s : null
+  } catch { return null }
 }

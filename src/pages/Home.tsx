@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
@@ -7,6 +7,7 @@ import type { Project } from '../lib/types'
 import { ProjectAdmin } from '../components/ProjectAdmin'
 import { ProjectFolder } from '../components/ProjectFolder'
 import { FieldCopy } from '../components/FieldCopy'
+import { heldAll } from '../lib/offline/store'
 import { LocationPicker, type Location } from '../components/LocationPicker'
 
 export default function Home() {
@@ -14,6 +15,14 @@ export default function Home() {
   const { isAdmin } = useFirm()
   const [showNew, setShowNew] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
+  // On a phone the row is the project and there is no Edit, so taking it to the field — which is
+  // decided on the phone — has its own way in, and a held project says so where it is listed.
+  const [fielding, setFielding] = useState<string | null>(null)
+  const [heldIds, setHeldIds] = useState<Set<string>>(new Set())
+  const lookHeld = useCallback(() => {
+    heldAll().then((h) => setHeldIds(new Set(h.map((x) => x.project_id)))).catch(() => {})
+  }, [])
+  useEffect(() => { lookHeld() }, [lookHeld, fielding, editing])
   const navigate = useNavigate()
 
   function open(p: Project) {
@@ -39,7 +48,7 @@ export default function Home() {
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
         <table className="projects">
-          <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /></tr></thead>
+          <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
@@ -52,9 +61,17 @@ export default function Home() {
                 <td className="p-who">{p.owner_name ?? ''}</td>
                 <td className="p-who">{p.contractor_name ?? ''}</td>
                 <td className="right nowrap p-edit"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button></td>
+                <td className="p-field">
+                  <button className="link" onClick={() => setFielding(fielding === p.id ? null : p.id)}>
+                    {fielding === p.id ? 'Done' : heldIds.has(p.id) ? 'On this device ✓' : 'Take to the field'}
+                  </button>
+                </td>
               </tr>,
+              fielding === p.id && editing !== p.id && (
+                <tr key={p.id + '-field'} className="p-field-row"><td colSpan={6}><FieldCopy project={p} /></td></tr>
+              ),
               editing === p.id && (
-                <tr key={p.id + '-edit'}><td colSpan={5}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectFolder project={p} /><FieldCopy project={p} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
+                <tr key={p.id + '-edit'}><td colSpan={6}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectFolder project={p} /><FieldCopy project={p} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
               ),
             ])}
           </tbody>

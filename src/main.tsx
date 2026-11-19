@@ -16,3 +16,8 @@ createRoot(document.getElementById('root')!).render(
 
 // Anything written with no signal goes back the moment there is one.
 drainWhenOnline()
+
+// Put the app itself on the device, so it opens where there is no signal to fetch it with.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}) })
+}

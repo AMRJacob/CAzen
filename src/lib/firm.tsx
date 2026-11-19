@@ -3,6 +3,10 @@ import { db } from './supabase'
 import { useAuth } from './auth'
 import type { Firm, FirmRole } from './types'
 import { Logo } from '../components/Logo'
+import { remember, remembered } from './remembered'
+
+const KEPT = 'cazen.kept.firms'
+interface Kept { firms: Firm[]; roles: Record<string, FirmRole> }
 
 const KEY = 'cazen.currentFirm'
 const saved = { get: () => { try { return localStorage.getItem(KEY) } catch { return null } },
@@ -24,25 +28,35 @@ const FirmContext = createContext<FirmState>({
 /** Loads the signed-in user's firms. With none yet, shows first-run firm setup instead of the app. */
 export function FirmProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const [firms, setFirms] = useState<Firm[]>([])
-  const [roles, setRoles] = useState<Record<string, FirmRole>>({})
+  const [kept] = useState(() => remembered<Kept>(KEPT))
+  const [firms, setFirms] = useState<Firm[]>(kept?.firms ?? [])
+  const [roles, setRoles] = useState<Record<string, FirmRole>>(kept?.roles ?? {})
   const [currentId, setCurrentId] = useState<string | null>(saved.get())
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!kept?.firms.length)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
-    // One firm per CAzen site: joining is automatic for anyone invited after setup.
-    await db().rpc('join_firm')
-    const [f, m] = await Promise.all([
-      db().from('firms').select('*').order('name'),
-      db().from('firm_members').select('firm_id, role').eq('user_id', session!.user.id),
-    ])
-    if (f.error) setError(f.error.message)
-    else {
+    try {
+      // One firm per CAzen site: joining is automatic for anyone invited after setup.
+      await db().rpc('join_firm')
+      const [f, m] = await Promise.all([
+        db().from('firms').select('*').order('name'),
+        db().from('firm_members').select('firm_id, role').eq('user_id', session!.user.id),
+      ])
+      if (f.error) throw f.error
+      const nextRoles = Object.fromEntries((m.data ?? []).map((r) => [r.firm_id, r.role as FirmRole]))
       setFirms(f.data as Firm[])
-      setRoles(Object.fromEntries((m.data ?? []).map((r) => [r.firm_id, r.role as FirmRole])))
+      // Roles that couldn't be read leave the ones already known standing.
+      if (!m.error) setRoles(nextRoles)
+      setError(null)
+      if (!m.error) remember(KEPT, { firms: f.data, roles: nextRoles } satisfies Kept)
+    } catch (e) {
+      // With the firm already on the device, a server that can't be reached changes nothing on
+      // screen. Only someone with nothing to show is told.
+      if (!remembered<Kept>(KEPT)?.firms.length) setError((e as Error)?.message ?? 'Could not reach CAzen.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [session])
 
   useEffect(() => { reload() }, [reload])
