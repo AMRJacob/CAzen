@@ -2689,3 +2689,24 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
   padding: 10px 16px; border-radius: 10px; font-size: 14px; line-height: 1.35; text-align: center;
   background: #7a2a1e; color: #fff; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
 }
+
+/* ---------- The note box: words, then Tag and Add ----------
+   The categories used to stand in a row under the box, all of them, all the time. On a phone
+   that was most of the box. They are behind one button now. */
+.nb-quick { position: relative; }
+.nb-paper .nb-quick textarea { min-height: 48px; }
+.nb-quick-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; position: relative; }
+.nb-quick-foot .nb-quick-say { margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-quick-tag, .nb-quick-foot .nb-quick-keep { margin: 0; padding: 5px 16px; font-size: 13.5px; border-radius: 999px; }
+.nb-quick-tag { border: 1.5px solid #cfd6d0; background: #fff; color: var(--ink); }
+.nb-quick-tag.on { background: #2b2d2c; border-color: #2b2d2c; color: #fff; }
+.nb-quick-tag:disabled, .nb-quick-keep:disabled { opacity: 0.45; }
+.nb-quick-tags {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 200px; max-width: min(320px, 86vw);
+  max-height: 46vh; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgba(43, 45, 44, 0.18);
+}
+.nb-quick-tags button { border: none; background: none; text-align: left; padding: 9px 12px; border-radius: 8px; font-size: 14.5px; color: var(--ink); }
+.nb-quick-tags button:hover { background: var(--wash); }
+.nb-quick-tags button.on { background: var(--moss-soft); font-weight: 500; }
+@media (pointer: coarse) { .nb-quick-tag, .nb-quick-foot .nb-quick-keep { padding: 8px 18px; font-size: 14.5px; } .nb-quick-tags button { padding: 12px 12px; } }

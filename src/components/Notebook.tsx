@@ -604,6 +604,15 @@ function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) 
   const [picked, setPicked] = useState<number | null>(null)
   const [last, setLast] = useState<{ heading: number; text: string } | null>(null)
   const box = useRef<HTMLTextAreaElement | null>(null)
+  /** The list of tags, open. It is asked for with the Tag button and put away by choosing or by touching anything else. */
+  const [tagging, setTagging] = useState(false)
+  const wrap = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!tagging) return
+    const away = (e: Event) => { if (!wrap.current?.contains(e.target as Node)) setTagging(false) }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [tagging])
 
   useEffect(() => {
     const el = box.current
@@ -634,24 +643,35 @@ function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) 
     setLast({ ...last, heading: i })
   }
 
+  const short = (h: string) => h.replace(/\s*\(.*\)\s*$/, '')
+  const typing = !!text.trim()
+  // Where it is going, or where the last one went: said in a few quiet words, not a row of chips.
+  const under = typing ? active : last ? last.heading : null
+
   return (
-    <div className="nb-quick">
-      <textarea ref={box} rows={1} value={text} aria-label="Type a note"
-        placeholder="Type it as you see it — Enter files it"
+    <div className="nb-quick" ref={wrap}>
+      <textarea ref={box} rows={2} value={text} aria-label="Type a note"
+        placeholder="Type it as you see it"
         enterKeyHint="done" autoCapitalize="sentences"
         onChange={(e) => { setText(e.target.value); if (last) setLast(null) }}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); keep() } }} />
-      <div className="nb-quick-cats" role="radiogroup" aria-label={text.trim() || !last ? 'File it under' : 'Move the last note to'}>
-        <span className="nb-quick-say">{text.trim() ? 'Under' : last ? 'Filed under' : 'Under'}</span>
-        {headings.map((h, i) => {
-          const on = text.trim() ? i === active : last ? i === last.heading : i === active
-          return (
-            <button key={i} role="radio" aria-checked={on}
-              className={`chip${on ? ' on' : ''}${text.trim() && picked === null && guessed === i ? ' guessed' : ''}`}
-              onClick={() => choose(i)}>{h.replace(/\s*\(.*\)\s*$/, '')}</button>
-          )
-        })}
-        {text.trim() && <button className="primary-lite nb-quick-keep" onClick={keep}>Keep</button>}
+      <div className="nb-quick-foot">
+        {under !== null && headings[under] !== undefined && (
+          <span className="nb-quick-say">{typing ? 'Under' : 'Filed under'} {short(headings[under])}</span>
+        )}
+        <button className={`nb-quick-tag${picked !== null && typing ? ' on' : ''}`} aria-haspopup="listbox" aria-expanded={tagging}
+          disabled={!headings.length || (!typing && !last)}
+          title={typing ? 'Choose what this note is filed under' : last ? 'Move the note just added' : 'Type a note first'}
+          onClick={() => setTagging(!tagging)}>Tag</button>
+        <button className="primary-lite nb-quick-keep" disabled={!typing} onClick={keep}>Add</button>
+        {tagging && (
+          <div className="nb-quick-tags" role="listbox" aria-label={typing ? 'File it under' : 'Move the last note to'}>
+            {headings.map((h, i) => (
+              <button key={i} role="option" aria-selected={i === under} className={i === under ? 'on' : ''}
+                onClick={() => { choose(i); setTagging(false) }}>{short(h)}</button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

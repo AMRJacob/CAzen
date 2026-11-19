@@ -11,6 +11,27 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:56 CST
+
+**The note box on field notes and meeting notes: words, then Tag and Add** (Jacob, 15:55, with
+a sketch: the entry section is busy on a phone; put a Tag button at the right of the box
+instead of every tag showing). `QuickNote` in `Notebook.tsx`.
+
+- The row of category chips is gone. The box is the words, and at its bottom right **Tag**
+  and **Add**, in that order, as drawn.
+- **Tag** opens the page's categories as a list; choosing one closes it. Touching anywhere
+  else closes it too.
+- The guess from the words still happens. Where the note is going is said in a few grey words
+  at the bottom left — "Under Structure" while typing, "Filed under Structure" after — rather
+  than by a lit chip. That line is mine; the sketch has only the two buttons.
+- With the box empty after adding, **Tag** moves the note just added (as tapping a chip did).
+  Enter still adds.
+- `checks/t_quick.py`, phone size: no chips; Tag then Add at the right; pick Envelope → filed
+  under Envelope; Tag afterwards → moved to Structure; Enter adds with the guessed category.
+  `t_notebook.py` (already stale) looks for the chips and will fail there.
+
+---
+
 # Checkpoint — 2026-11-19, 15:52 CST
 
 Four more from Jacob on the phone (15:44–15:50).
