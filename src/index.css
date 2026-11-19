@@ -2578,3 +2578,23 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
   .docs-mini-tabs button:first-child { flex: 0 0 auto; padding: 9px 16px; }
   .docs-mini-tabs button { font-size: 13.5px; }
 }
+
+/* ---------- A project on this device: filling, solid, or hatched ---------- */
+.projects tr.opens { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.projects tr.p-held, .projects tr.p-held td { background: #dcebdc; }
+.projects tr.p-unsynced, .projects tr.p-unsynced td {
+  background: repeating-linear-gradient(135deg, #dcebdc 0 9px, #f6f4ec 9px 18px); background-attachment: fixed;
+}
+.projects tr.p-loading td { background: #eef4ee; }
+.projects tr.p-held:hover td { background: #d2e5d2; }
+.projects td.p-state { font-size: 12.5px; color: #3f5a48; }
+.p-hint { margin: 0 0 10px; max-width: 70ch; }
+@media (max-width: 619px) {
+  /* The row is one block on a phone, so the fill is the block's and its cells stay clear. */
+  .projects tr.p-held td, .projects tr.p-unsynced td, .projects tr.p-loading td { background: none; }
+  .projects tr.p-held { background: #dcebdc; border-color: #9fc09f; }
+  .projects tr.p-unsynced { background: repeating-linear-gradient(135deg, #dcebdc 0 9px, #f6f4ec 9px 18px); border-color: #9fc09f; }
+  .projects tr.p-loading { background: linear-gradient(to right, #dcebdc var(--p-fill, 3%), var(--panel) var(--p-fill, 3%)); }
+  .projects td.p-state:empty { display: none; }
+}
+@media (min-width: 620px) { .projects td.p-state { display: table-cell; } .projects th.p-field { display: table-cell; } }

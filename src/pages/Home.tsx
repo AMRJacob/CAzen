@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/supabase'
 import { useProject } from '../lib/project'
@@ -8,6 +8,9 @@ import { ProjectAdmin } from '../components/ProjectAdmin'
 import { ProjectFolder } from '../components/ProjectFolder'
 import { FieldCopy } from '../components/FieldCopy'
 import { heldAll } from '../lib/offline/store'
+import { takeToField, type Progress } from '../lib/offline/download'
+import { drain, pending } from '../lib/offline/outbox'
+import { message } from '../lib/errors'
 import { LocationPicker, type Location } from '../components/LocationPicker'
 
 export default function Home() {
@@ -23,6 +26,59 @@ export default function Home() {
     heldAll().then((h) => setHeldIds(new Set(h.map((x) => x.project_id)))).catch(() => {})
   }, [])
   useEffect(() => { lookHeld() }, [lookHeld, fielding, editing])
+
+  // What each project still has to send back. Hatched until it is none; looked at every few
+  // seconds while this page is open, and the queue is given a push each time in case the
+  // device came back without saying so.
+  const [waiting, setWaiting] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const look = () => {
+      void drain().catch(() => {})
+      pending().then((q) => {
+        const n: Record<string, number> = {}
+        for (const j of q) n[j.project_id] = (n[j.project_id] ?? 0) + 1
+        setWaiting(n)
+      }).catch(() => {})
+    }
+    look()
+    const t = setInterval(look, 4000)
+    window.addEventListener('online', look)
+    return () => { clearInterval(t); window.removeEventListener('online', look) }
+  }, [])
+
+  // Press and hold a project (or right-click it) to take it to the field: its current sheets
+  // come down at once and the row fills as they do. Held again once it is on the device, it
+  // opens what can be done with the copy — refresh it, take every revision, let it go.
+  const [loading_, setLoading_] = useState<Record<string, Progress>>({})
+  const [trouble, setTrouble] = useState<string | null>(null)
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null)
+  const pressed = useRef(0)
+  async function take(p: Project) {
+    if (loading_[p.id]) return
+    if (heldIds.has(p.id)) { setFielding(fielding === p.id ? null : p.id); return }
+    setTrouble(null)
+    setLoading_((l) => ({ ...l, [p.id]: { done: 0, total: 0, bytes: 0, what: '' } }))
+    try {
+      await takeToField(p, 'current', (pr) => setLoading_((l) => ({ ...l, [p.id]: pr })))
+      lookHeld()
+    } catch (e) { setTrouble(`${p.name}: ${message(e)}`) }
+    finally { setLoading_((l) => { const n = { ...l }; delete n[p.id]; return n }) }
+  }
+  const holdStart = (e: React.PointerEvent, p: Project) => {
+    if (e.pointerType === 'mouse' || (e.target as HTMLElement).closest('button, a, input')) return
+    const timer = window.setTimeout(() => {
+      press.current = null
+      pressed.current = Date.now()
+      navigator.vibrate?.(12)
+      void take(p)
+    }, 550)
+    press.current = { timer, x: e.clientX, y: e.clientY }
+  }
+  const holdMove = (e: React.PointerEvent) => {
+    const h = press.current
+    if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) { clearTimeout(h.timer); press.current = null }
+  }
+  const holdEnd = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null } }
   const navigate = useNavigate()
 
   function open(p: Project) {
@@ -40,6 +96,7 @@ export default function Home() {
         <button className="primary" onClick={() => setShowNew(!showNew)}>{showNew ? 'Cancel' : 'New project'}</button>
       </div>
 
+      {trouble && <div className="notice error">{trouble}</div>}
       {showNew && <ProjectForm onCreated={async (p) => { await reload(); setShowNew(false); open(p) }} />}
 
       {loading ? (
@@ -47,24 +104,36 @@ export default function Home() {
       ) : projects.length === 0 ? (
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
+        <>
+        <p className="muted small p-hint">Press and hold a project to take it to the field. A solid colour means it is on this device with nothing left to send; hatched means changes made here have not reached the office yet.</p>
         <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
-              <tr key={p.id} className={`opens${p.id === current?.id ? ' selected' : ''}`}
+              <tr key={p.id}
+                className={`opens${p.id === current?.id ? ' selected' : ''}${heldIds.has(p.id) ? (waiting[p.id] ? ' p-unsynced' : ' p-held') : ''}${loading_[p.id] ? ' p-loading' : ''}`}
+                style={loading_[p.id] ? { '--p-fill': `${loading_[p.id].total ? Math.round(loading_[p.id].done / loading_[p.id].total * 100) : 3}%` } as React.CSSProperties : undefined}
                 tabIndex={0} role="button" aria-label={`Open ${p.number} ${p.name}`}
-                onClick={(e) => { if (!(e.target as HTMLElement).closest('button, a')) open(p) }}
+                onPointerDown={(e) => holdStart(e, p)} onPointerMove={holdMove} onPointerUp={holdEnd} onPointerCancel={holdEnd} onPointerLeave={holdEnd}
+                onContextMenu={(e) => { e.preventDefault(); if (Date.now() - pressed.current > 800) void take(p) }}
+                onClick={(e) => {
+                  // The press that took it to the field is not also a tap that opens it.
+                  if (Date.now() - pressed.current < 800) return
+                  if (!(e.target as HTMLElement).closest('button, a')) open(p)
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(p) } }}>
                 <td className="p-number">{p.number}</td>
                 <td className="p-name">{p.name}{p.status === 'archived' && <> <span className="tag muted">archived</span></>}</td>
                 <td className="p-who">{p.owner_name ?? ''}</td>
                 <td className="p-who">{p.contractor_name ?? ''}</td>
                 <td className="right nowrap p-edit"><button className="link" onClick={() => setEditing(editing === p.id ? null : p.id)}>Edit</button></td>
-                <td className="p-field">
-                  <button className="link" onClick={() => setFielding(fielding === p.id ? null : p.id)}>
-                    {fielding === p.id ? 'Done' : heldIds.has(p.id) ? 'On this device ✓' : 'Take to the field'}
-                  </button>
+                <td className="p-field p-state">
+                  {loading_[p.id]
+                    ? `Bringing it to this device… ${loading_[p.id].total ? `${loading_[p.id].done} of ${loading_[p.id].total} sheets` : ''}`
+                    : heldIds.has(p.id)
+                      ? waiting[p.id] ? `On this device · ${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} still to send` : 'On this device · everything sent'
+                      : ''}
                 </td>
               </tr>,
               fielding === p.id && editing !== p.id && (
@@ -76,6 +145,7 @@ export default function Home() {
             ])}
           </tbody>
         </table>
+        </>
       )}
     </section>
   )

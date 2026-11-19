@@ -11,6 +11,33 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 16:20 CST
+
+**Taking a project to the field is a press and hold** (Jacob, 14:25: the button was not working
+well). On the project list, pressing and holding a project for about half a second — or
+right-clicking it — brings its current sheets down straight away; the row fills as they
+arrive. Once it is on the device the row is a **solid** green; while changes made on the device
+have not reached the server it is **hatched**, and it says how many are waiting. Held again on
+a project already on the device, it opens the panel that was behind the button (refresh, take
+every revision, remove from the device). A plain tap still opens the project. The
+"Take to the field" link is gone from the list; the panel is still under Edit on a desk.
+`checks/t_hold.py`: hold → downloaded → solid; offline with one change queued → hatched, "1
+change still to send"; back online → solid. (`checks/t_field.py` used the old button and is
+stale.)
+
+How the sending back works, as built (`src/lib/offline/outbox.ts`), for the record:
+- A change made in the field is applied to the device's copy and put in a queue on the device.
+- The queue is sent oldest first: when the app starts, when the browser reports it is back
+  online, whenever another change is queued, and now every four seconds while the project list
+  is open. It stops at the first failure that looks like the network and keeps the order.
+- **What goes through the queue:** markups (add, edit, remove), observations (add, edit) and a
+  sheet's scale. **What does not:** notebook pages, photographs, pad sketches, people, and
+  everything on the desk side — those need a signal at the moment they are made. So "solid"
+  means the queue is empty, not that nothing was lost by trying those offline.
+- There is no background sync: nothing is sent while the app is closed.
+
+---
+
 # Checkpoint — 2026-11-19, 15:40 CST
 
 **The schedule is one Gantt chart.** (`src/components/Gantt.tsx`, rewritten; the separate
