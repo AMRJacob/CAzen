@@ -189,6 +189,8 @@ export async function takeToField(
   }
   onProgress({ done, total: wanted.length, bytes, what: '' })
 
+  await bringNotebooks(project.id).catch(() => { /* the drawings are what was asked for */ })
+
   const note: Held = {
     key: `held:${project.id}`, project_id: project.id, scope,
     at: Date.now(), files: done, bytes,
@@ -197,11 +199,28 @@ export async function takeToField(
   return note
 }
 
+/**
+ * The notebooks as they stand, so that last week's page can be turned back to on site. Reading
+ * them is what keeps them: every list below leaves its rows on this device as it goes.
+ */
+async function bringNotebooks(projectId: string): Promise<void> {
+  const [{ listVisits }, { listPads, listMarks }, { listPeople }] = await Promise.all([
+    import('../visits'), import('../pads'), import('../people'),
+  ])
+  await Promise.all([listVisits(projectId, 'visit'), listVisits(projectId, 'meeting'), listPeople(projectId)])
+  for (const kind of ['field_report', 'meeting_notes'] as const) {
+    for (const pad of await listPads(projectId, kind)) await listMarks(pad.id)
+  }
+}
+
 /** Drop held files that aren't in `keep`. Returns the bytes given back. */
 async function prune(projectId: string, keep: Set<string>): Promise<number> {
   let freed = 0
   for (const f of await all<CachedFile>('files', projectId)) {
     if (keep.has(f.path)) continue
+    // Only drawings are given back. A photograph taken on site may not have been sent yet, and
+    // the pages that show it expect to find it here.
+    if (!/\.pdf$/i.test(f.path)) continue
     freed += f.bytes.size
     await remove('files', f.path)
   }

@@ -135,14 +135,14 @@ export default function Home() {
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
         <>
-        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device with nothing left to send; hatched means changes made here have not reached the office yet.</p>
+        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device with nothing left to send; hatched means something written here — notes, photographs, markups — has not reached the office yet.</p>
         <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
               <tr key={p.id}
-                className={`opens${p.id === current?.id ? ' selected' : ''}${heldIds.has(p.id) ? (waiting[p.id] ? ' p-unsynced' : ' p-held') : ''}${loading_[p.id] ? ' p-loading' : ''}`}
+                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}`}
                 style={loading_[p.id] ? { '--p-fill': `${loading_[p.id].total ? Math.round(loading_[p.id].done / loading_[p.id].total * 100) : 3}%` } as React.CSSProperties : undefined}
                 tabIndex={0} role="button" aria-label={`Open ${p.number} ${p.name}`}
                 onPointerDown={(e) => holdStart(e, p)} onPointerMove={holdMove} onPointerUp={holdEnd} onPointerCancel={holdEnd} onPointerLeave={holdEnd}
@@ -161,9 +161,9 @@ export default function Home() {
                 <td className="p-field p-state">
                   {loading_[p.id]
                     ? `Bringing it to this device… ${loading_[p.id].total ? `${loading_[p.id].done} of ${loading_[p.id].total} sheets` : ''}`
-                    : heldIds.has(p.id)
-                      ? waiting[p.id] ? `On this device · ${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} still to send` : 'On this device · everything sent'
-                      : ''}
+                    : waiting[p.id]
+                      ? `${heldIds.has(p.id) ? 'On this device · ' : ''}${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} still to send`
+                      : heldIds.has(p.id) ? 'On this device · everything sent' : ''}
                 </td>
               </tr>,
               fielding === p.id && editing !== p.id && (

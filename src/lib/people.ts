@@ -1,4 +1,7 @@
 import { db } from './supabase'
+import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
+import { queue } from './offline/outbox'
+import { localFirst } from './offline/mirror'
 
 /**
  * The people on a job — what a sign-in sheet asks for, kept once per project so that a page's
@@ -13,11 +16,19 @@ export interface Person {
   email: string | null
 }
 
-export async function listPeople(projectId: string): Promise<Person[]> {
-  const { data, error } = await db().from('project_people')
-    .select('id, project_id, name, company, phone, email').eq('project_id', projectId).order('name')
-  if (error) throw error
-  return (data ?? []) as Person[]
+/** Who is on the job. Kept on this device too: the people at a site meeting are added at it. */
+export function listPeople(projectId: string): Promise<Person[]> {
+  return localFirst<Person>({
+    store: 'people',
+    here: () => localAll<Person>('people', projectId),
+    theirs: async () => {
+      const { data, error } = await db().from('project_people')
+        .select('id, project_id, name, company, phone, email').eq('project_id', projectId).order('name')
+      if (error) throw error
+      return (data ?? []) as Person[]
+    },
+    sort: (x, y) => x.name.localeCompare(y.name),
+  })
 }
 
 export async function addPerson(projectId: string, p: { name: string; company?: string; phone?: string; email?: string }): Promise<Person> {
@@ -25,14 +36,15 @@ export async function addPerson(projectId: string, p: { name: string; company?: 
     id: crypto.randomUUID(), project_id: projectId, name: p.name.trim(),
     company: p.company?.trim() || null, phone: p.phone?.trim() || null, email: p.email?.trim() || null,
   }
-  const { error } = await db().from('project_people').insert(row)
-  if (error) throw error
+  await localPut('people', row)
+  await queue(projectId, { kind: 'row.put', table: 'project_people', row: row as unknown as Record<string, unknown> })
   return row
 }
 
 export async function removePerson(id: string): Promise<void> {
-  const { error } = await db().from('project_people').delete().eq('id', id)
-  if (error) throw error
+  const had = await localGet<Person>('people', id).catch(() => undefined)
+  await localRemove('people', id).catch(() => {})
+  await queue(had?.project_id ?? '', { kind: 'row.remove', table: 'project_people', ids: [id] })
 }
 
 /** A person as the report templates take a participant: Name | Company | Email. */

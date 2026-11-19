@@ -258,6 +258,45 @@ export async function putFile(project: ProjectStore, bytes: Uint8Array, cloudPat
   return cloudPath
 }
 
+/**
+ * Where a file will be kept, decided on this device before anything has been sent.
+ *
+ * A photograph taken with no signal has to be pointed at by the page it is on straight away, so
+ * its path cannot wait for storage to hand one back. Null where the place can only be known by
+ * writing the file — a project kept in a folder on this computer, which needs no network anyway.
+ */
+export function plannedPath(project: ProjectStore, cloudPath: string, folder: { dirs: string[]; name: string }): string | null {
+  if (project.storage === 'folder') return null
+  if (project.storage === 'r2') return `${R2}${project.id}/${relParts(folder).join('/')}`
+  return cloudPath
+}
+
+/**
+ * Send a file to the path already chosen for it. Safe to do twice: a file that turns out to be
+ * there already is left alone, which is what happens when the signal dropped between the upload
+ * and the reply saying it had arrived.
+ */
+export async function sendFile(project: ProjectStore, bytes: Uint8Array, path: string, type: string): Promise<void> {
+  if (isR2Path(path)) {
+    const key = path.slice(R2.length)
+    try { await fileLink('confirm', project.id, key); return } catch (e) {
+      if (!/didn.t arrive/i.test((e as Error)?.message ?? '')) throw e
+    }
+    const { url, key: given } = await fileLink('put', project.id, key, bytes.length)
+    if (given !== key) throw new Error('File storage already holds a different file under this name.')
+    const res = await fetch(url, { method: 'PUT', body: bytes as BlobPart, headers: { 'Content-Type': type } })
+    if (!res.ok) throw new Error(`Upload to CAzen file storage failed (${res.status}).`)
+    await fileLink('confirm', project.id, key)
+    try {
+      const base = await folderIfReady(project.id)
+      if (base) await writeToFolder(base, key.slice(project.id.length + 1).split('/'), bytes, false)
+    } catch { /* the "Copy to project folder" button catches up later */ }
+    return
+  }
+  const up = await db().storage.from('documents').upload(path, new Blob([bytes as BlobPart], { type }), { upsert: false })
+  if (up.error && !/exists|duplicate/i.test(up.error.message ?? '')) throw up.error
+}
+
 async function exists(dir: FileSystemDirectoryHandle, name: string) {
   try { await dir.getFileHandle(name); return true } catch { return false }
 }

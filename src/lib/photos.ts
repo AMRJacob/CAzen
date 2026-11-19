@@ -1,4 +1,5 @@
-import { putFile, readFile, SECTIONS, type ProjectStore } from './files'
+import { plannedPath, putFile, readFile, SECTIONS, type ProjectStore } from './files'
+import { queue } from './offline/outbox'
 import { cacheFile, fileFromCache } from './offline/store'
 
 /**
@@ -48,26 +49,37 @@ function photoName(prefix: string, n: number): string {
   const d = new Date()
   const pad = (x: number) => String(x).padStart(2, '0')
   const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
-  return `${prefix} ${stamp}${n > 1 ? ` (${n})` : ''}.jpg`
+  // The last three characters are chance. The name is settled on this device, possibly with no
+  // signal, and has to be one that nobody else's phone settled on in the same second.
+  const tail = Math.random().toString(36).slice(2, 5).padEnd(3, 'x')
+  return `${prefix} ${stamp}${n > 1 ? ` (${n})` : ''} ${tail}.jpg`
 }
 
 /**
- * Take a photo into the project's storage and hand back the path to keep.
+ * Keep a photo and hand back the path it will be found at.
  *
- * The shrunk copy is also kept on this device, so it is on screen the moment it is taken
- * rather than after a round trip to storage it may not have signal for.
+ * It is kept on this device first and sent afterwards, through the same outbox as everything else
+ * written on site. So it is on screen the moment it is taken, a page can point at it straight
+ * away, and thirty of them taken in a basement with no signal are thirty uploads waiting for the
+ * car park rather than thirty errors.
  */
 export async function keepPhoto(project: ProjectStore, file: File | Blob, about: string, n = 1): Promise<string> {
   const { bytes } = await shrink(file)
   const name = photoName(about, n)
-  const path = await putFile(
-    project, bytes,
-    `${project.id}/photos/${name}`,
-    { dirs: [SECTIONS.fieldReports, 'Photos'], name },
-    'image/jpeg',
-  )
-  await cacheFile(path, project.id, new Blob([bytes as BlobPart], { type: 'image/jpeg' }))
-    .catch(() => { /* the copy in storage is the one that matters */ })
+  const cloudPath = `${project.id}/photos/${name}`
+  const folder = { dirs: [SECTIONS.fieldReports, 'Photos'], name }
+  const blob = new Blob([bytes as BlobPart], { type: 'image/jpeg' })
+
+  const path = plannedPath(project, cloudPath, folder)
+  if (!path) {
+    // A project kept in a folder on this computer: written straight there, no network involved.
+    const written = await putFile(project, bytes, cloudPath, folder, 'image/jpeg')
+    await cacheFile(written, project.id, blob).catch(() => {})
+    return written
+  }
+  // This copy is, for now, the only one. If the device won't keep it, that is said.
+  await cacheFile(path, project.id, blob)
+  await queue(project.id, { kind: 'file.put', path, storage: project.storage ?? null, type: 'image/jpeg' })
   return path
 }
 

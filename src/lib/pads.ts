@@ -1,5 +1,9 @@
 import { db } from './supabase'
 import type { InkPoint } from './ink'
+import { today } from './dates'
+import { all as localAll, get as localGet, marksOfPad, put as localPut, remove as localRemove } from './offline/store'
+import { queue } from './offline/outbox'
+import { localFirst, localFirstOne } from './offline/mirror'
 
 /**
  * Notes pads: what somebody wrote in the room.
@@ -58,50 +62,93 @@ export const PAD_COLOURS = ['#2b2d2c', '#1f4e79', '#c0392b', '#1f6f3f'] as const
 /** What a highlighter lays down. Pale, because it goes over words rather than instead of them. */
 export const HIGHLIGHTS = ['#f4e07a', '#b8e4c9', '#f6c6b8', '#c9d9f2'] as const
 
-export async function listPads(projectId: string, kind: PadKind): Promise<NotePad[]> {
-  const { data, error } = await db()
-    .from('note_pads').select(PAD_COLUMNS)
-    .eq('project_id', projectId).eq('kind', kind)
-    .order('noted_on', { ascending: false }).order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as NotePad[]
+/** Who is signed in, from what this device already holds — asking the server needs signal. */
+async function me(): Promise<string | null> {
+  try { return (await db().auth.getSession()).data.session?.user.id ?? null } catch { return null }
+}
+
+const newestPad = (a: NotePad, b: NotePad) =>
+  b.noted_on.localeCompare(a.noted_on) || b.created_at.localeCompare(a.created_at)
+
+/*
+ * Pads are written on in the field. Every read below answers from this device when the server
+ * can't, and every write lands here first and goes to the server through the outbox — the same
+ * road whether there are four bars or none.
+ */
+
+export function listPads(projectId: string, kind: PadKind): Promise<NotePad[]> {
+  return localFirst<NotePad>({
+    store: 'pads',
+    here: async () => (await localAll<NotePad>('pads', projectId)).filter((p) => p.kind === kind),
+    theirs: async () => {
+      const { data, error } = await db()
+        .from('note_pads').select(PAD_COLUMNS)
+        .eq('project_id', projectId).eq('kind', kind)
+        .order('noted_on', { ascending: false }).order('created_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as NotePad[]
+    },
+    sort: newestPad,
+  })
 }
 
 export async function getPad(id: string): Promise<NotePad> {
-  const { data, error } = await db().from('note_pads').select(PAD_COLUMNS).eq('id', id).single()
-  if (error) throw error
-  return data as NotePad
+  const here = await localGet<NotePad>('pads', id).catch(() => undefined)
+  return localFirstOne<NotePad>('pads', id, here, async () => {
+    const { data, error } = await db().from('note_pads').select(PAD_COLUMNS).eq('id', id).single()
+    if (error) throw error
+    return data as NotePad
+  })
 }
 
 export async function newPad(projectId: string, kind: PadKind, fields: {
   title?: string | null
   noted_on?: string
 }): Promise<NotePad> {
-  const { data: u } = await db().auth.getUser()
-  const { data, error } = await db().from('note_pads')
-    .insert({ project_id: projectId, kind, created_by: u.user?.id ?? null, ...fields })
-    .select(PAD_COLUMNS).single()
-  if (error) throw error
-  return data as NotePad
+  const now = new Date().toISOString()
+  // Everything the database would have filled in, filled in here, so the pad can be written on
+  // before the database has heard of it.
+  const pad: NotePad = {
+    id: crypto.randomUUID(), project_id: projectId, kind,
+    title: fields.title ?? null, noted_on: fields.noted_on ?? today(),
+    pages: 1, rule: 'lines', rule_ink: 40, issued_id: null,
+    created_by: await me(), created_at: now, updated_at: now,
+  }
+  await localPut('pads', pad)
+  await queue(projectId, { kind: 'row.put', table: 'note_pads', row: pad as unknown as Record<string, unknown> })
+  return pad
 }
 
 export async function setPad(id: string, patch: Partial<Pick<NotePad, 'title' | 'noted_on' | 'pages' | 'rule' | 'rule_ink' | 'issued_id'>>): Promise<void> {
-  const { error } = await db().from('note_pads')
-    .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
-  if (error) throw error
+  const updated_at = new Date().toISOString()
+  const had = await localGet<NotePad>('pads', id).catch(() => undefined)
+  if (had) await localPut('pads', { ...had, ...patch, updated_at })
+  await queue(had?.project_id ?? '', { kind: 'row.patch', table: 'note_pads', id, patch: { ...patch, updated_at } })
 }
 
 export async function removePad(id: string): Promise<void> {
-  const { error } = await db().from('note_pads').delete().eq('id', id)
-  if (error) throw error
+  const had = await localGet<NotePad>('pads', id).catch(() => undefined)
+  for (const m of await marksOfPad<PadMark>(id).catch(() => [] as PadMark[])) await localRemove('padMarks', m.id).catch(() => {})
+  await localRemove('pads', id).catch(() => {})
+  // Its marks go with it on the server: they hang off the pad.
+  await queue(had?.project_id ?? '', { kind: 'row.remove', table: 'note_pads', ids: [id] })
 }
 
-export async function listMarks(padId: string): Promise<PadMark[]> {
-  const { data, error } = await db()
-    .from('pad_marks').select(MARK_COLUMNS).eq('pad_id', padId)
-    .order('created_at', { ascending: true })
-  if (error) throw error
-  return (data ?? []) as PadMark[]
+const oldestMark = (a: PadMark, b: PadMark) => a.created_at.localeCompare(b.created_at)
+
+export function listMarks(padId: string): Promise<PadMark[]> {
+  return localFirst<PadMark>({
+    store: 'padMarks',
+    here: () => marksOfPad<PadMark>(padId),
+    theirs: async () => {
+      const { data, error } = await db()
+        .from('pad_marks').select(MARK_COLUMNS).eq('pad_id', padId)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as PadMark[]
+    },
+    sort: oldestMark,
+  })
 }
 
 export async function addMark(mark: {
@@ -115,36 +162,38 @@ export async function addMark(mark: {
   style?: { colour?: string; width?: number; nib?: 'pencil' }
   body?: string | null
 }): Promise<PadMark> {
-  const { data: u } = await db().auth.getUser()
-  const { data, error } = await db().from('pad_marks')
-    .insert({ style: {}, body: null, created_by: u.user?.id ?? null, ...mark })
-    .select(MARK_COLUMNS).single()
-  if (error) throw error
-  return data as PadMark
+  const row: PadMark = {
+    style: {}, body: null, created_by: await me(), created_at: new Date().toISOString(),
+    ...mark, id: mark.id ?? crypto.randomUUID(),
+  }
+  await localPut('padMarks', row)
+  await queue(row.project_id, { kind: 'row.put', table: 'pad_marks', row: row as unknown as Record<string, unknown> })
+  return row
+}
+
+async function patchMark(id: string, patch: Partial<Pick<PadMark, 'body' | 'geometry' | 'style'>>): Promise<void> {
+  const had = await localGet<PadMark>('padMarks', id).catch(() => undefined)
+  if (had) await localPut('padMarks', { ...had, ...patch })
+  await queue(had?.project_id ?? '', { kind: 'row.patch', table: 'pad_marks', id, patch })
 }
 
 /** The one thing that is edited rather than added: what a text box says. */
-export async function setMarkBody(id: string, body: string): Promise<void> {
-  const { error } = await db().from('pad_marks').update({ body }).eq('id', id)
-  if (error) throw error
-}
+export const setMarkBody = (id: string, body: string) => patchMark(id, { body })
 
 /** A text box made wider, narrower or taller: where it wraps is part of what was written. */
-export async function setMarkGeometry(id: string, geometry: MarkGeometry): Promise<void> {
-  const { error } = await db().from('pad_marks').update({ geometry }).eq('id', id)
-  if (error) throw error
-}
+export const setMarkGeometry = (id: string, geometry: MarkGeometry) => patchMark(id, { geometry })
 
 /** A stroke or a text box given another colour or width after the fact. */
-export async function setMarkStyle(id: string, style: PadMark['style']): Promise<void> {
-  const { error } = await db().from('pad_marks').update({ style }).eq('id', id)
-  if (error) throw error
-}
+export const setMarkStyle = (id: string, style: PadMark['style']) => patchMark(id, { style })
 
 export async function removeMarks(ids: string[]): Promise<void> {
   if (!ids.length) return
-  const { error } = await db().from('pad_marks').delete().in('id', ids)
-  if (error) throw error
+  let project = ''
+  for (const id of ids) {
+    project ||= (await localGet<PadMark>('padMarks', id).catch(() => undefined))?.project_id ?? ''
+    await localRemove('padMarks', id).catch(() => {})
+  }
+  await queue(project, { kind: 'row.remove', table: 'pad_marks', ids })
 }
 
 /**

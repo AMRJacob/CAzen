@@ -16,16 +16,26 @@
  */
 
 const DB = 'cazen'
-const VERSION = 2
+const VERSION = 3
 
 /** What a device can hold for a project. Rows mirror the server; files are the drawings. */
 export type Store =
   | 'projects' | 'sheets' | 'revisions' | 'issuances' | 'markups' | 'observations' | 'observationTypes'
   | 'sheetText' | 'files' | 'outbox' | 'meta'
+  | 'visits' | 'pads' | 'padMarks' | 'people'
 
 const ROW_STORES: Store[] = [
   'projects', 'sheets', 'revisions', 'issuances', 'markups', 'observations', 'observationTypes', 'sheetText',
 ]
+
+/**
+ * The notebooks: pages, the pads drawn on, every mark on them, and who was there.
+ *
+ * Kept apart from the rows above because they are not something a project is "taken" to the
+ * field with and given back afterwards. A page written on this device is here whether or not the
+ * drawings were ever downloaded, and letting go of the drawings does not let go of it.
+ */
+const NOTE_STORES: Store[] = ['visits', 'pads', 'padMarks', 'people']
 
 /** Stores from an earlier shape of the app, dropped on the way past. */
 const GONE = ['punch', 'punchCategories']
@@ -44,6 +54,13 @@ export function db(): Promise<IDBDatabase> {
         const s = d.createObjectStore(name, { keyPath: 'id' })
         // Everything is fetched and cleared a project at a time.
         s.createIndex('project', 'project_id')
+      }
+      for (const name of NOTE_STORES) {
+        if (d.objectStoreNames.contains(name)) continue
+        const s = d.createObjectStore(name, { keyPath: 'id' })
+        s.createIndex('project', 'project_id')
+        // A pad's marks are asked for by pad, and there can be thousands of them in a project.
+        if (name === 'padMarks') s.createIndex('pad', 'pad_id')
       }
       if (!d.objectStoreNames.contains('files')) {
         d.createObjectStore('files', { keyPath: 'path' }).createIndex('project', 'project_id')
@@ -83,6 +100,12 @@ export async function all<T>(store: Store, projectId?: string): Promise<T[]> {
   const s = d.transaction(store).objectStore(store)
   const src = projectId ? s.index('project') : s
   return done<T[]>((projectId ? src.getAll(projectId) : src.getAll()) as IDBRequest<T[]>)
+}
+
+/** Every mark on one pad. */
+export async function marksOfPad<T>(padId: string): Promise<T[]> {
+  const d = await db()
+  return done<T[]>(d.transaction('padMarks').objectStore('padMarks').index('pad').getAll(padId) as IDBRequest<T[]>)
 }
 
 export async function put(store: Store, rows: unknown | unknown[]): Promise<void> {
@@ -146,7 +169,19 @@ export async function heldAll(): Promise<Held[]> {
 
 /** Give a project's copy back: its rows, its drawings, and the note that it was held. */
 export async function release(projectId: string): Promise<void> {
-  for (const s of [...ROW_STORES, 'files'] as Store[]) await replace(s, projectId, [])
+  for (const s of ROW_STORES) await replace(s, projectId, [])
+  // A photograph taken on site and not yet uploaded exists nowhere but here. It stays until it
+  // has gone, whatever else is given back.
+  const waiting = new Set<string>()
+  for (const q of await all<{ job?: { kind?: string; path?: string } }>('outbox', projectId).catch(() => [])) {
+    if (q.job?.kind === 'file.put' && q.job.path) waiting.add(q.job.path)
+  }
+  const d = await db()
+  const tx = d.transaction('files', 'readwrite')
+  const s = tx.objectStore('files')
+  const keys = await done<IDBValidKey[]>(s.index('project').getAllKeys(projectId))
+  for (const k of keys) if (!waiting.has(String(k))) s.delete(k)
+  await settled(tx)
   await remove('meta', heldKey(projectId))
 }
 

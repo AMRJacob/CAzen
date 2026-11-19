@@ -1,6 +1,9 @@
 import { db } from './supabase'
 import { today } from './dates'
 import { fieldDef } from './templates/fields'
+import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
+import { queue } from './offline/outbox'
+import { localFirst } from './offline/mirror'
 
 /**
  * A site visit: one trip to the job and everything that came back from it — a pad written on by
@@ -52,21 +55,46 @@ const notThere = (e: unknown): boolean => {
  * run, asking for it by name would fail the whole list — so it is asked about once, on its own,
  * and the rest of the app goes by the answer.
  */
-let locationKnown: boolean | null = null
+const LOCATION_KEY = 'cazen.visits.location'
+let locationKnown: boolean | null = (() => {
+  // Remembered from the last time there was signal, so a page started with none still carries one.
+  try { const v = localStorage.getItem(LOCATION_KEY); return v === null ? null : v === '1' } catch { return null }
+})()
+let locationAsked = false
 export const canHoldLocation = () => locationKnown === true
 async function lookForLocation(): Promise<void> {
-  if (locationKnown !== null) return
+  if (locationAsked || !navigator.onLine) return
   const { error } = await db().from('site_visits').select('location').limit(1)
+  // No answer is not an answer: only a reply from the database settles it.
+  if (error && !(error as { code?: string }).code) return
+  locationAsked = true
   locationKnown = !error
+  try { localStorage.setItem(LOCATION_KEY, locationKnown ? '1' : '0') } catch { /* private mode */ }
 }
 
-export async function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisit[]> {
-  await lookForLocation().catch(() => { locationKnown = false })
-  const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : ''))
-    .eq('project_id', projectId).eq('kind', kind)
-    .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
-  if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }
-  return (data ?? []) as unknown as SiteVisit[]
+const newestFirst = (a: SiteVisit, b: SiteVisit) =>
+  b.visited_on.localeCompare(a.visited_on) || (b.visited_at ?? '').localeCompare(a.visited_at ?? '')
+
+/**
+ * The pages of one notebook.
+ *
+ * They are written on site, which means they are written with no signal: every page is kept on
+ * this device as well as on the server, and every change goes into the outbox on its way there.
+ */
+export function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisit[]> {
+  return localFirst<SiteVisit>({
+    store: 'visits',
+    here: async () => (await localAll<SiteVisit>('visits', projectId)).filter((v) => v.kind === kind),
+    theirs: async () => {
+      await lookForLocation().catch(() => {})
+      const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : ''))
+        .eq('project_id', projectId).eq('kind', kind)
+        .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
+      if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }
+      return (data ?? []) as unknown as SiteVisit[]
+    },
+    sort: newestFirst,
+  })
 }
 
 const clock = () => {
@@ -97,18 +125,22 @@ export function buildVisit(projectId: string, kind: VisitKind = 'visit', names: 
 }
 
 export async function saveVisit(v: SiteVisit): Promise<void> {
-  const { error } = await db().from('site_visits').upsert(v, { onConflict: 'id' })
-  if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }
+  await localPut('visits', v)
+  await queue(v.project_id, { kind: 'row.put', table: 'site_visits', row: v as unknown as Record<string, unknown> })
 }
 
 export async function setVisit(id: string, patch: Partial<Omit<SiteVisit, 'id' | 'project_id' | 'created_at'>>): Promise<void> {
-  const { error } = await db().from('site_visits').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
-  if (error) throw error
+  const had = await localGet<SiteVisit>('visits', id).catch(() => undefined)
+  if (had) await localPut('visits', { ...had, ...patch })
+  await queue(had?.project_id ?? '', {
+    kind: 'row.patch', table: 'site_visits', id, patch: { ...patch, updated_at: new Date().toISOString() },
+  })
 }
 
 export async function removeVisit(id: string): Promise<void> {
-  const { error } = await db().from('site_visits').delete().eq('id', id)
-  if (error) throw error
+  const had = await localGet<SiteVisit>('visits', id).catch(() => undefined)
+  await localRemove('visits', id).catch(() => {})
+  await queue(had?.project_id ?? '', { kind: 'row.remove', table: 'site_visits', ids: [id] })
 }
 
 /** "2:05 PM" from "14:05:00". */

@@ -1,5 +1,6 @@
 import { db as sb } from '../supabase'
-import { all, put, remove, type Store } from './store'
+import { all, fileFromCache, put, remove, type Store } from './store'
+import { sendFile, type StorageMode } from '../files'
 
 /**
  * Changes made on this device that the server hasn't taken yet.
@@ -23,8 +24,23 @@ export type Job =
   | { kind: 'observation.add'; row: Record<string, unknown> }
   | { kind: 'observation.edit'; id: string; patch: Record<string, unknown> }
   | { kind: 'sheet.scale'; id: string; scale: unknown }
+  // The notebooks. One shape for every table, because there is nothing to say about a page, a
+  // pad, a mark or a person that isn't "this row", "this much of it changed" or "it has gone".
+  | { kind: 'row.put'; table: NoteTable; row: Record<string, unknown> }
+  | { kind: 'row.patch'; table: NoteTable; id: string; patch: Record<string, unknown> }
+  | { kind: 'row.remove'; table: NoteTable; ids: string[] }
+  // A file already sitting in this device's copy, to be sent to the path the rows point at.
+  | { kind: 'file.put'; path: string; storage: StorageMode | null; type: string }
 
-export interface Queued { id: string; project_id: string; at: number; tries: number; last_error?: string; job: Job }
+export type NoteTable = 'site_visits' | 'note_pads' | 'pad_marks' | 'project_people'
+
+export interface Queued {
+  id: string; project_id: string; at: number; tries: number
+  last_error?: string
+  /** When it was last attempted, so something storage refuses isn't asked for every few seconds. */
+  tried_at?: number
+  job: Job
+}
 
 const uuid = () =>
   (crypto.randomUUID?.() ??
@@ -32,8 +48,35 @@ const uuid = () =>
 
 /** Put a change in the queue. Callers have already applied it to the local copy. */
 export async function queue(projectId: string, job: Job): Promise<void> {
-  await put('outbox', { id: uuid(), project_id: projectId, at: Date.now(), tries: 0, job } satisfies Queued)
+  if (job.kind === 'row.patch' && await folded(job)) { void drain(); return }
+  await put('outbox', { id: uuid(), project_id: projectId, at: stamp(), tries: 0, job } satisfies Queued)
   void drain()
+}
+
+/** Strictly rising, so two changes made in the same millisecond still go out in the order made. */
+let lastStamp = 0
+const stamp = () => (lastStamp = Math.max(Date.now(), lastStamp + 1))
+
+/** The job on its way to the server this instant. It can no longer be added to. */
+let sending: string | null = null
+
+/**
+ * Typing a paragraph with no signal would otherwise queue a change a second for an afternoon.
+ * A change to a row is folded into the one before it when that one is to the same row and is the
+ * newest thing waiting — only then, because anything queued in between may be something the
+ * later change depends on, and order is the one promise this queue makes.
+ */
+async function folded(job: Extract<Job, { kind: 'row.patch' }>): Promise<boolean> {
+  const waiting = (await all<Queued>('outbox').catch(() => [] as Queued[])).sort((a, b) => a.at - b.at)
+  const last = waiting[waiting.length - 1]
+  if (!last || last.id === sending) return false
+  const j = last.job
+  if (j.kind !== 'row.patch' || j.table !== job.table || j.id !== job.id) return false
+  await put('outbox', { ...last, job: { ...j, patch: { ...j.patch, ...job.patch } } } satisfies Queued)
+  // If it began to go while this was being written there is no telling which version went. Say
+  // so, and the change is queued again on its own: sending the same change twice costs nothing.
+  if (sending === last.id) return false
+  return true
 }
 
 export const pending = (projectId?: string) => all<Queued>('outbox', projectId)
@@ -50,6 +93,7 @@ export async function unsentIds(): Promise<Set<string>> {
   for (const q of await all<Queued>('outbox').catch(() => [] as Queued[])) {
     const j = q.job
     if ('row' in j && typeof j.row.id === 'string') out.add(j.row.id)
+    else if ('ids' in j) for (const id of j.ids) out.add(id)
     else if ('id' in j) out.add(j.id)
   }
   return out
@@ -72,7 +116,7 @@ function current(job: AnyJob): Job {
 }
 
 /** Each job, as the one request that carries it out. Errors bubble so drain can decide. */
-async function send(raw: AnyJob): Promise<void> {
+async function send(raw: AnyJob, projectId = ''): Promise<void> {
   const job = current(raw)
   if (job.kind === 'markup.add') {
     // The row carries the id this device made, so a second attempt lands on the same row.
@@ -105,8 +149,38 @@ async function send(raw: AnyJob): Promise<void> {
     if (error) throw error
     return
   }
+  if (job.kind === 'row.put') {
+    const { error } = await sb().from(job.table).upsert(job.row, { onConflict: 'id' })
+    if (error) throw error
+    return
+  }
+  if (job.kind === 'row.patch') {
+    const { error } = await sb().from(job.table).update(job.patch).eq('id', job.id)
+    if (error) throw error
+    return
+  }
+  if (job.kind === 'row.remove') {
+    const { error } = await sb().from(job.table).delete().in('id', job.ids)
+    if (error) throw error
+    return
+  }
+  if (job.kind === 'file.put') {
+    const bytes = await fileFromCache(job.path)
+    // Nothing to send: the copy was cleared from this device. Asking again will never find it.
+    if (!bytes) throw Object.assign(new Error('The photograph is no longer on this device.'), { code: 'GONE' })
+    const project = projectId || job.path.replace(/^r2:/, '').split('/')[0]
+    await sendFile({ id: project, storage: job.storage }, new Uint8Array(await bytes.arrayBuffer()), job.path, job.type)
+    return
+  }
   const { error } = await sb().from('sheets').update({ scale: job.scale }).eq('id', job.id)
   if (error) throw error
+}
+
+/** No signal, or a request that never got an answer — as against an answer that was "no". */
+export function offlineish(e: unknown): boolean {
+  if (!navigator.onLine) return true
+  const m = (e as { message?: string })?.message ?? String(e)
+  return /failed to fetch|networkerror|load failed|send a request|timed out|fetch failed/i.test(m)
 }
 
 /**
@@ -116,7 +190,7 @@ async function send(raw: AnyJob): Promise<void> {
  */
 function permanent(e: unknown): boolean {
   const code = (e as { code?: string })?.code ?? ''
-  return ['23503', '42501', 'PGRST116'].includes(code)
+  return ['23503', '42501', 'PGRST116', 'GONE'].includes(code)
 }
 
 let draining: Promise<{ sent: number; failed: number }> | null = null
@@ -132,8 +206,17 @@ export function drain(): Promise<{ sent: number; failed: number }> {
     if (!navigator.onLine) return { sent, failed }
     const jobs = (await all<Queued>('outbox')).sort((a, b) => a.at - b.at)
     for (const q of jobs) {
+      const isFile = q.job.kind === 'file.put'
+      // A file storage has refused is asked for again, but not every four seconds.
+      if (isFile && q.tries > 0 && Date.now() - (q.tried_at ?? 0) < Math.min(300_000, 15_000 * 2 ** (q.tries - 1))) {
+        failed++
+        continue
+      }
       try {
-        await send(q.job)
+        sending = q.id
+        // The row is read again: a change may have been folded into it since the list was made.
+        const now = (await all<Queued>('outbox')).find((x) => x.id === q.id) ?? q
+        await send(now.job, q.project_id)
         await remove('outbox', q.id)
         sent++
       } catch (e) {
@@ -142,9 +225,11 @@ export function drain(): Promise<{ sent: number; failed: number }> {
           failed++
           continue
         }
-        await put('outbox', { ...q, tries: q.tries + 1, last_error: (e as Error)?.message ?? String(e) })
+        await put('outbox', { ...q, tries: q.tries + 1, tried_at: Date.now(), last_error: (e as Error)?.message ?? String(e) })
+        // A file that storage would not take — full, too large — holds up nothing but itself.
+        if (isFile && !offlineish(e)) { failed++; continue }
         break // the network, most likely: keep the rest in order and try again later
-      }
+      } finally { sending = null }
     }
     return { sent, failed }
   })()
