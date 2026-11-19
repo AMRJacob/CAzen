@@ -2598,3 +2598,11 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
   .projects td.p-state:empty { display: none; }
 }
 @media (min-width: 620px) { .projects td.p-state { display: table-cell; } .projects th.p-field { display: table-cell; } }
+
+.take-ask { position: fixed; inset: 0; z-index: 80; background: rgba(20, 22, 20, 0.5); display: grid; place-items: end center; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+@media (min-width: 620px) { .take-ask { place-items: center; } }
+.take-card { width: min(440px, 100%); background: var(--panel); border-radius: 16px; padding: 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); }
+.take-card h3 { margin: 0 0 6px; font-size: 17px; }
+.take-choices { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.take-choices button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; text-align: left; border-radius: 12px; }
+.take-choices button span { font-size: 13px; opacity: 0.8; }

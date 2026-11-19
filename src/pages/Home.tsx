@@ -8,7 +8,7 @@ import { ProjectAdmin } from '../components/ProjectAdmin'
 import { ProjectFolder } from '../components/ProjectFolder'
 import { FieldCopy } from '../components/FieldCopy'
 import { heldAll } from '../lib/offline/store'
-import { takeToField, type Progress } from '../lib/offline/download'
+import { plans, takeToField, type Plan, type Progress, type Scope } from '../lib/offline/download'
 import { drain, pending } from '../lib/offline/outbox'
 import { message } from '../lib/errors'
 import { LocationPicker, type Location } from '../components/LocationPicker'
@@ -53,13 +53,22 @@ export default function Home() {
   const [trouble, setTrouble] = useState<string | null>(null)
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const pressed = useRef(0)
+  /** The project a hold has asked about, and what taking it would bring down. */
+  const [asking, setAsking] = useState<{ project: Project; plans: Plan[] | null } | null>(null)
+  // A hold asks first: it says how much would come down, and nothing does until it is chosen.
   async function take(p: Project) {
     if (loading_[p.id]) return
     if (heldIds.has(p.id)) { setFielding(fielding === p.id ? null : p.id); return }
     setTrouble(null)
+    setAsking({ project: p, plans: null })
+    try { const list = await plans(p.id); setAsking((a) => (a?.project.id === p.id ? { project: p, plans: list } : a)) }
+    catch (e) { setAsking(null); setTrouble(`${p.name}: ${message(e)}`) }
+  }
+  async function download(p: Project, scope: Scope) {
+    setAsking(null)
     setLoading_((l) => ({ ...l, [p.id]: { done: 0, total: 0, bytes: 0, what: '' } }))
     try {
-      await takeToField(p, 'current', (pr) => setLoading_((l) => ({ ...l, [p.id]: pr })))
+      await takeToField(p, scope, (pr) => setLoading_((l) => ({ ...l, [p.id]: pr })))
       lookHeld()
     } catch (e) { setTrouble(`${p.name}: ${message(e)}`) }
     finally { setLoading_((l) => { const n = { ...l }; delete n[p.id]; return n }) }
@@ -97,6 +106,27 @@ export default function Home() {
       </div>
 
       {trouble && <div className="notice error">{trouble}</div>}
+      {asking && (
+        <div className="take-ask" role="dialog" aria-label={`Take ${asking.project.name} to the field`}
+          // Lifting the finger that was holding lands on this backdrop; that is not a "no".
+          onClick={() => { if (Date.now() - pressed.current > 800) setAsking(null) }}>
+          <div className="take-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Take {asking.project.name} to the field?</h3>
+            <p className="muted small">Its drawings are kept on this device so they open with no signal. Sheets already here are not fetched again.</p>
+            {!asking.plans ? <p className="muted small">Working out how much there is…</p> : (
+              <div className="take-choices">
+                {asking.plans.map((c) => (
+                  <button key={c.scope} className={c.scope === 'current' ? 'primary' : ''} onClick={() => void download(asking.project, c.scope)}>
+                    <strong>{c.scope === 'current' ? 'Download the current sheets' : 'Download every revision'}</strong>
+                    <span>{c.files} {c.files === 1 ? 'sheet' : 'sheets'} · {c.estimated ? 'about ' : ''}{sizeOf(c.bytes)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button className="link" onClick={() => setAsking(null)}>Not now</button>
+          </div>
+        </div>
+      )}
       {showNew && <ProjectForm onCreated={async (p) => { await reload(); setShowNew(false); open(p) }} />}
 
       {loading ? (
@@ -105,7 +135,7 @@ export default function Home() {
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
         <>
-        <p className="muted small p-hint">Press and hold a project to take it to the field. A solid colour means it is on this device with nothing left to send; hatched means changes made here have not reached the office yet.</p>
+        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device with nothing left to send; hatched means changes made here have not reached the office yet.</p>
         <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
@@ -210,3 +240,5 @@ function ProjectForm({ project, onCreated }: { project?: Project; onCreated: (p:
     </form>
   )
 }
+
+const sizeOf = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`)

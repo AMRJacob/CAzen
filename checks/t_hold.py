@@ -19,6 +19,7 @@ with sync_playwright() as p:
     print('before:',cls(),'| hint shown:',pg.locator('.p-hint').count()==1,'| old button present:',pg.locator('text=Take to the field').count()>0 and pg.locator('button:has-text("Take to the field")').count()>0)
     cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':bx['x']+80,'y':bx['y']+20,'id':1}]}); pg.wait_for_timeout(750)
     mid=cls(); cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); print('held 0.75 s:',mid,'| still on the project list (not opened):',pg.url.endswith('#/'))
+    pg.wait_for_selector('.take-choices button'); print('asked first:',pg.inner_text('.take-card h3'),'|',[t.replace('\n',' — ') for t in pg.locator('.take-choices button').all_inner_texts()],'| nothing downloaded yet:',cls()); pg.screenshot(path='take_ask.png'); pg.tap('.take-choices button >> nth=0')
     pg.wait_for_function("document.querySelector('tr.opens').classList.contains('p-held')",timeout=30000); print('after download:',cls(),'|',pg.inner_text('.p-state')); pg.screenshot(path='held_solid.png',clip={'x':0,'y':bx['y']-70,'width':402,'height':260})
     ctx.set_offline(True); pg.wait_for_timeout(300)
     pg.evaluate("""new Promise(r=>{const q=indexedDB.open('cazen');q.onsuccess=()=>{const d=q.result;const t=d.transaction('outbox','readwrite');t.objectStore('outbox').put({id:'q1',project_id:'%s',at:Date.now(),tries:0,job:{kind:'markup.edit',id:'00000000-0000-4000-8000-000000000009',patch:{}}});t.oncomplete=()=>r(1)}})""" % (''+PROJ+''))
