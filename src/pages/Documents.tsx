@@ -37,6 +37,7 @@ const REGISTER_COLUMNS = [
   { key: 'sheet' }, { key: 'title' }, { key: 'rev' },
   { key: 'from' }, { key: 'date' }, { key: 'history' }, { key: 'actions' },
 ]
+const SET_COLUMNS = [{ key: 'set-date' }, { key: 'set-as' }, { key: 'set-subject' }, { key: 'set-sheets' }, { key: 'set-download' }, { key: 'set-actions' }]
 import { SheetViewer, type ViewSheet } from '../components/SheetViewer'
 import { SheetReread } from '../components/SheetReread'
 import { TitleblockEditor } from '../components/TitleblockEditor'
@@ -601,6 +602,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
   const reload = useCallback(() => { listIssuances(project.id).then(setRows).catch((e) => setError(message(e))) }, [project.id])
   useEffect(() => { reload() }, [reload])
   const setBox = useRef<HTMLDivElement>(null)
+  const cols = useColumnWidths(SET_COLUMNS)
   useClickAway(setBox, () => { if (!saving) setEditing(null) }, !!editing)
   if (error) return <div className="notice error">{error}</div>
   if (!rows) return <p className="muted">Loading…</p>
@@ -608,8 +610,9 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
   return (
     <>
       {note && <div className="notice">{note}</div>}
-      <table>
-        <thead><tr><th>Date</th><th>Issued as</th><th>Subject</th><th>Sheets</th><th /><th /></tr></thead>
+      <table className="sets sizable" ref={cols.table}>
+        {cols.cols}
+        <thead><tr><th>Date{cols.grip('set-date', 72)}</th><th>Issued as{cols.grip('set-as', 80)}</th><th>Subject{cols.grip('set-subject', 100)}</th><th>Sheets{cols.grip('set-sheets', 90)}</th><th /><th /></tr></thead>
         <tbody>
           {rows.map((r) => (
             <Fragment key={r.id}>

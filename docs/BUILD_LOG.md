@@ -11,6 +11,36 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:40 CST
+
+**The schedule is one Gantt chart.** (`src/components/Gantt.tsx`, rewritten; the separate
+Activities table is gone.)
+
+- Columns the way a scheduling program prints them: **Line, Activity, Start, Finish, %**, then
+  the bars on one time scale. Line is the row's place in the schedule, headings included, which
+  is how MS Project numbers them (the contractor's 57 lines come out 1–57).
+- **Headings are highlighted** and carry a summary bar and the dates spanning the activities
+  under them, up to the next heading.
+- **Right-click a line to change it**: it opens in place — name, start, finish, percent — with
+  *Pay lines*, *Remove* and *Done*; Enter and Escape close it.
+- **It fits its card.** The old chart's month rules and percent labels were offset 180 px past
+  the right edge. Checked: the chart's edges sit inside the card and nothing scrolls sideways
+  at 1440 px.
+- **Zoom and pan through time**: drag the chart sideways, Ctrl + scroll (or a trackpad pinch) to
+  zoom about the pointer, − / + / Fit. One zoom and one offset for every row, held as CSS
+  variables. A two-finger pinch on a touch screen is not handled.
+- **Milestones**: an activity with no length (start = finish) is drawn as a diamond.
+- **Colour coding is not built.** Jacob noted another contractor may colour-code or add
+  milestones. A colour per activity needs a column on `schedule_activities`.
+- "Covers" (Jacob asked): which lines of the pay application's schedule of values an activity
+  is paid under — it is what lets the page compare what the schedule says is done with what
+  has been billed. In the chart it is now called *Pay lines* and lives in the row's editor.
+
+**Sets and revisions columns can be resized**, with the same grips as the sheet list
+(double-click a grip to give a column back to the table).
+
+---
+
 # Checkpoint — 2026-11-19, 15:00 CST
 
 - **Re-read titles and dates on sheets already uploaded** (`src/components/SheetReread.tsx`).

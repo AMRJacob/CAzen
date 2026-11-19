@@ -198,67 +198,23 @@ export default function Schedule() {
         <>
           <div className="card">
             <h3>The schedule</h3>
-            <Gantt activities={activities} today={today()} />
-          </div>
-
-          <div className="card">
-            <h3>Activities</h3>
-            <p className="muted small">
-              What each activity covers is how the schedule and the applications for payment are
-              compared: an activity with no lines against it is drawn, but not compared.
-              {data && untied > 0 && activities.length > 0 && (
-                <> <button className="link" onClick={suggestTies}>Suggest what the {untied} untied {untied === 1 ? 'one covers' : 'ones cover'}</button></>
-              )}
-            </p>
             {!activities.length ? <p className="muted small">Nothing in the schedule yet.</p> : (
-              <table className="sched-table">
-                <thead>
-                  <tr>
-                    <th>Activity</th><th>Starts</th><th>Ends</th>
-                    <th className="right">Done</th><th>Covers</th><th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {activities.map((a) => (
-                    <tr key={a.id} className={a.is_heading ? 'sched-heading' : undefined}>
-                      <td>
-                        <input value={a.name} aria-label="Activity name"
-                          onChange={(e) => setActivities((all) => (all ?? []).map((x) => (x.id === a.id ? { ...x, name: e.target.value } : x)))}
-                          onBlur={(e) => change(a.id, { name: e.target.value })} />
-                      </td>
-                      {a.is_heading ? <td colSpan={4} /> : (
-                        <>
-                          <td>
-                            <input type="date" value={a.starts_on ?? ''} aria-label="Starts"
-                              onChange={(e) => change(a.id, { starts_on: e.target.value || null })} />
-                          </td>
-                          <td>
-                            <input type="date" value={a.ends_on ?? ''} aria-label="Ends"
-                              onChange={(e) => change(a.id, { ends_on: e.target.value || null })} />
-                          </td>
-                          <td className="right">
-                            <input className="mono sched-pc" inputMode="decimal" value={a.percent}
-                              aria-label="Percent complete"
-                              onChange={(e) => setActivities((all) => (all ?? []).map((x) => (x.id === a.id ? { ...x, percent: Number(e.target.value) || 0 } : x)))}
-                              onBlur={(e) => change(a.id, { percent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
-                          </td>
-                          <td>
-                            <button className="link" onClick={() => setPicking(picking === a.id ? null : a.id)}>
-                              {a.lines.length ? `${lineName(a.lines[0])}${a.lines.length > 1 ? ` +${a.lines.length - 1}` : ''}` : 'nothing yet'}
-                            </button>
-                          </td>
-                        </>
-                      )}
-                      <td className="right">
-                        <button className="link danger-link" onClick={() => {
-                          setActivities((all) => (all ?? []).filter((x) => x.id !== a.id))
-                          removeActivity(a.id).catch((e) => setError(message(e)))
-                        }}>Remove</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <p className="muted small">
+                  Right-click a line to change it.
+                  {data && untied > 0 && (
+                    <> {untied} {untied === 1 ? 'activity is' : 'activities are'} not yet tied to pay lines and so {untied === 1 ? 'is' : 'are'} not compared below. <button className="link" onClick={suggestTies}>Suggest ties from the names</button></>
+                  )}
+                </p>
+                <Gantt activities={activities} today={today()}
+                  linesOf={(a) => (a.lines.length ? `${lineName(a.lines[0])}${a.lines.length > 1 ? ` +${a.lines.length - 1}` : ''}` : 'none')}
+                  onChange={change}
+                  onCovers={(id) => setPicking(picking === id ? null : id)}
+                  onRemove={(id) => {
+                    setActivities((all) => (all ?? []).filter((x) => x.id !== id))
+                    removeActivity(id).catch((e) => setError(message(e)))
+                  }} />
+              </>
             )}
 
             {picking && data && (
