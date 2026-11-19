@@ -119,7 +119,10 @@ async function rows(projectId: string) {
     sheets,
     issuances: await one('issuances'),
     revisions: await bySheet('sheet_revisions'),
-    sheetText: await one('sheet_text'),
+    // The words on each sheet have no id of their own on the server — one row a revision — and
+    // the device's store is keyed by id, so the revision's stands in. The search index column is
+    // left behind: it is the server's, and several times the size of the words.
+    sheetText: (await one('sheet_text', 'revision_id, project_id, body')).map((t) => ({ ...t, id: t.revision_id })),
     markups: await one('sheet_markups'),
     observations: await one('observations'),
   }

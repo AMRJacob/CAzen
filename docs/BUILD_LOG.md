@@ -11,6 +11,25 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:57 CST
+
+**Downloading a real project to a device failed, and had since field mode was built.** Jacob,
+14:55, testing: "Failed to store record in an IDBObjectStore: Evaluating the object store's key
+path did not yield a value." The words on each sheet (`sheet_text`) have no `id` column on the
+server — they are keyed by `revision_id` — and the device's store is keyed by `id`, so the
+write was refused and the download stopped before the project was noted as held. Every check
+passed because no fixture had any sheet text. Fixed in `rows()` (`download.ts`): the
+revision's id stands in, and the search-index column is no longer brought down.
+`checks/t_hold.py` now carries sheet text; it fails on the build before the fix and passes
+after. This is the likely cause of "the take to the field button isn't working very well"
+earlier today — inferred, not confirmed. Checked against the live schema for the other tables
+the device stores: all have `id`.
+
+**Projects page**: the description and the colour key are under the list (Jacob, 14:55: the
+top as clean as possible).
+
+---
+
 # Checkpoint — 2026-11-19, 14:49 CST
 
 **A project on a phone keeps itself current, says when it is not, and can be removed** (Jacob,

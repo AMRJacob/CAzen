@@ -119,7 +119,6 @@ export default function Home() {
       <div className="page-head">
         <div>
           <h1>Projects</h1>
-          <p className="lead">Project details fill in every form automatically, so set them once here.</p>
         </div>
         <button className="primary" onClick={() => setShowNew(!showNew)}>{showNew ? 'Cancel' : 'New project'}</button>
       </div>
@@ -184,7 +183,6 @@ export default function Home() {
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
         <>
-        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device, matched to the office within the last day, with nothing left to send. Hatched means it has not been matched in that time, or something written here has not reached the office yet. Hold it again to update it or remove it from this device.</p>
         <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
@@ -226,6 +224,11 @@ export default function Home() {
         </table>
         </>
       )}
+      {/* What the page is for and what the colours mean sit under the list: the top is the list. */}
+      <div className="p-about">
+        <p className="muted small">Project details fill in every form automatically, so set them once here.</p>
+        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device, matched to the office within the last day, with nothing left to send. Hatched means it has not been matched in that time, or something written here has not reached the office yet. Hold it again to update it or remove it from this device.</p>
+      </div>
     </section>
   )
 }

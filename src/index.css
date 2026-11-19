@@ -2608,3 +2608,5 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .take-choices button span { font-size: 13px; opacity: 0.8; }
 
 .take-choices button.take-remove { color: #a23a2a; border-color: #e3c4bd; background: transparent; }
+.p-about { margin-top: 28px; }
+.p-about p { margin: 0 0 8px; max-width: 70ch; }
