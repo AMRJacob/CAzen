@@ -42,7 +42,8 @@ export interface PadMark {
   page: number
   kind: MarkKind
   geometry: MarkGeometry
-  style: { colour?: string; width?: number }
+  /** `nib` says whether a stroke is ink or graphite; they are drawn differently. */
+  style: { colour?: string; width?: number; nib?: 'pencil' }
   body: string | null
   created_by: string | null
   created_at: string
@@ -103,12 +104,14 @@ export async function listMarks(padId: string): Promise<PadMark[]> {
 }
 
 export async function addMark(mark: {
+  /** Chosen by the caller, so the stroke can be on screen before the server has heard of it. */
+  id?: string
   pad_id: string
   project_id: string
   page: number
   kind: MarkKind
   geometry: MarkGeometry
-  style?: { colour?: string; width?: number }
+  style?: { colour?: string; width?: number; nib?: 'pencil' }
   body?: string | null
 }): Promise<PadMark> {
   const { data: u } = await db().auth.getUser()
