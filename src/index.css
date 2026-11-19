@@ -2525,3 +2525,17 @@ table.sets.sizable td { overflow: hidden; text-overflow: ellipsis; }
 table.sets.sizable tr.editing td, table.sets.sizable tr.confirm-row td { overflow: visible; }
 table.sets.sizable th:nth-child(5) { width: 130px; }
 table.sets.sizable th:nth-child(6) { width: 170px; }
+/* On a phone the sheet list is as wide as what is in it: number and title on one line each,
+   every column kept, and the list slid sideways to see the rest. Squeezing it to the screen
+   meant wrapped titles and hidden columns. */
+@media (max-width: 760px) {
+  .register-pan { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px; }
+  .register-pan .register.sizable { table-layout: auto; width: max-content; min-width: 100%; }
+  .register-pan .register col { width: auto !important; }
+  .register-pan .register th, .register-pan .register td { white-space: nowrap; overflow: visible; text-overflow: clip; }
+  .register-pan .register td.col-from, .register-pan .register th.col-from,
+  .register-pan .register td.col-date, .register-pan .register th.col-date,
+  .register-pan .register td.col-history, .register-pan .register th.col-history { display: table-cell; }
+  .register-pan .register tr.editing td, .register-pan .register tr.confirm-row td { white-space: normal; }
+  .register-pan .col-grip { display: none; }
+}

@@ -41,6 +41,12 @@ rows. *Re-read titles and dates* sits on the Drawings toolbar beside *Sheet orde
 a mode where a plain click selects a sheet (Shift-click a run, *Select all*), then *Re-read
 their title and date*. Ctrl-click and right-click still work without it.
 
+**The sheet list on a phone runs as wide as its contents** (Jacob, 14:03). Number and title
+each stay on one line, every column is kept (From, Date and History were hidden below 900 /
+620 px), and the list slides sideways inside its own frame; the page itself does not get
+wider. Measured at 402 px: table 862 px, one line per row. This reverses the earlier choice
+recorded in the stylesheet ("side-scrolling a table one-handed on a ladder is no good").
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

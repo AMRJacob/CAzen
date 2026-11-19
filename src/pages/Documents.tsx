@@ -295,7 +295,8 @@ export default function Documents() {
                 <button className="link" onClick={() => { setPicked(new Set()); setSelecting(false) }}>{selecting ? 'Cancel' : 'Clear'}</button>
               </div>
             )}
-            <table className="register sizable" ref={cols.table}>
+<div className="register-pan">
+                        <table className="register sizable" ref={cols.table}>
               {cols.cols}
               <thead>
                 {/* col-* classes set which columns give way first on a small screen (index.css).
@@ -322,6 +323,7 @@ export default function Documents() {
                 ))}
               </tbody>
             </table>
+            </div>
             </>
           )}
         </>
