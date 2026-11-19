@@ -1541,7 +1541,9 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
    has to be a line somebody can actually see — it was #e3eaf0, which is paper with a hint of
    blue in it, and no amount of opacity makes almost-white visible on almost-white. It stays
    well lighter than ink, so writing always reads over it. */
-.ground-line { stroke: #5d89b0; stroke-width: 1; fill: none; }
+/* A hairline whatever the picture is scaled to. Without non-scaling-stroke the 1 here is one unit
+   of the pad — the width of the whole page — and the ruling floods the still with its colour. */
+.ground-line { stroke: #5d89b0; stroke-width: 1px; vector-effect: non-scaling-stroke; fill: none; }
 .ground-dot { fill: #4e7da6; }
 
 .pad-texts { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
@@ -2001,7 +2003,7 @@ label.stack select, .obs-row select, .obs-more select {
 .nb-z-notes .outline-tools, .nb-z-notes .nb-z-top > div { margin: 0; }
 .nb-pad { flex: 1; min-height: 0; width: 100%; position: relative; padding: 0; border: 1px solid var(--hair); border-radius: 6px; background: #fff; overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .nb-pad:hover { border-color: var(--moss); background: #fff; }
-.nb-pad > svg, .nb-pad > canvas, .nb-pad > div:first-child { max-width: 100%; max-height: 100%; }
+.nb-pad > .pad-still { position: absolute; inset: 0; width: 100%; height: 100%; }
 .nb-pad-empty { position: absolute; inset: 0; display: grid; place-items: center; color: #a3a8a1; font-size: 14px; pointer-events: none; }
 .nb-gallery { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; align-content: start; padding: 4px 0; }
 .nb-shot { position: relative; aspect-ratio: 4 / 3; padding: 0; border: none; border-radius: 5px; overflow: hidden; background: #e8ece7; cursor: pointer; }

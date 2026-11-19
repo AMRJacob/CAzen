@@ -11,6 +11,29 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:15 CST
+
+**The still picture of a pad was wrong in two ways, both since the ink engine.** Jacob sent the
+notebook's sketch preview: fat wedges on a blue ground. `PadStill` (`src/components/NotePad.tsx`)
+is what every thumbnail and read-only pad uses, so the pad cards had it too.
+
+1. `.ground-line { stroke-width: 1 }` in CSS overrides the attribute, and in an SVG whose view
+   is about one unit across, 1 is the width of the page: the ruling flooded the picture with its
+   colour. Now `1px` with `vector-effect: non-scaling-stroke`.
+2. `Stroke` worked the outline out in the pad's units. The stroke maker pads a single-point
+   stroke by one whole unit, so a tap became a wedge across the page and a highlighter dab a
+   flood. It now scales the points to pixels (900 across the view), as `PadSurface` does, and
+   draws the result back at the pad's scale.
+
+The notebook's sketch frame also passes its own shape to the still, so it fills the frame
+instead of sitting letterboxed. `checks/t_still.py`: a wave, a box, two taps and a highlighter
+dab — the dab is 4% of the picture's width where it had covered all of it.
+
+**Not done:** the Westrock Landing field reports have not been read for categories. The folder
+dialog on Jacob's computer closed unanswered.
+
+---
+
 # Checkpoint — 2026-11-19, 13:55 CST
 
 Six things from Jacob on the notebooks, all in `src/components/Notebook.tsx` unless said.

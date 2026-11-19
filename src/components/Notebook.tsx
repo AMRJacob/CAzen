@@ -254,6 +254,19 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
   const [viewing, setViewing] = useState<{ path: string; fresh: boolean } | null>(null)
   /** The observation being written or changed, in the same form the sheets and the list use. */
   const [observing, setObserving] = useState<Observation | 'new' | null>(null)
+  /** The shape of the sketch's frame, so the still fills it instead of sitting in a letterbox. */
+  const frame = useRef<HTMLButtonElement | null>(null)
+  const [shape, setShape] = useState(1.3)
+  useEffect(() => {
+    const el = frame.current
+    if (!el) return
+    const see = () => { if (el.clientWidth > 0) setShape(el.clientHeight / el.clientWidth) }
+    see()
+    const ro = new ResizeObserver(see)
+    ro.observe(el)
+    return () => ro.disconnect()
+    // The frame is taken away while the pad or the export is open, and is a new one after.
+  }, [drawing, exporting])
   const camera = useRef<HTMLInputElement | null>(null)
   const library = useRef<HTMLInputElement | null>(null)
 
@@ -420,8 +433,8 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
 
       <section className="nb-z nb-z-sketch">
         <div className="nb-z-top"><h2>Sketch</h2><button className="link" onClick={() => void draw()}>{marks.length ? 'Open' : 'Start'}</button></div>
-        <button className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
-          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} />
+        <button ref={frame} className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
+          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} ratio={shape} />
           {!marks.length && <span className="nb-pad-empty">Tap to draw or write by hand</span>}
         </button>
       </section>

@@ -790,12 +790,23 @@ export function Stroke({ mark, across = 1 }: { mark: PadMark; across?: number })
   if (!g?.points?.length) return null
   const nib: Nib = mark.kind === 'highlight' ? 'highlight'
     : mark.style?.nib === 'pencil' ? 'pencil' : 'pen'
-  // Roughness is measured in pixels, so in a still it is scaled to the window being shown.
-  const width = Math.max(mark.style?.width ?? 0.005, across / 600)
-  const d = pathOf(outlineOf(g.points, width, nib, seedOf(mark.id)))
+  /*
+   * The outline is worked out in pixels, exactly as the pad itself does it, and then drawn back
+   * at the pad's own scale. Working it out in the pad's units — where the whole view is about one
+   * unit across — was wrong in a way that only showed here: the stroke maker pads a single-point
+   * stroke by one whole unit, so a tap became a wedge the width of the page, and a dab of
+   * highlighter flooded the whole picture with its colour.
+   */
+  const px = STILL_PX / Math.max(across, 1e-6)
+  const here = g.points.map((p) => (p.length > 2 ? [p[0] * px, p[1] * px, p[2] as number] : [p[0] * px, p[1] * px])) as InkPoint[]
+  const width = Math.max(1.4, (mark.style?.width ?? 0.005) * px)
+  const d = pathOf(outlineOf(here, width, nib, seedOf(mark.id)))
   if (!d) return null
-  return <path d={d} fill={mark.style?.colour ?? '#2b2d2c'} opacity={handOf(nib).alpha} />
+  return <path d={d} transform={`scale(${1 / px})`} fill={mark.style?.colour ?? '#2b2d2c'} opacity={handOf(nib).alpha} />
 }
+
+/** How many pixels wide a still is taken to be when its ink is worked out. */
+const STILL_PX = 900
 
 /**
  * A page of a pad, still: fitted to whatever was written on it, read-only.
