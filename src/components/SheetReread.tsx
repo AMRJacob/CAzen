@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { message } from '../lib/errors'
 import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
-import { readPageText } from '../lib/pdf/pageText'
+import { readPageText, type PageText } from '../lib/pdf/pageText'
+import { TitleblockEditor } from './TitleblockEditor'
 import { renameSheet, setSheetDate, sheetDates } from '../lib/sheets'
 import type { CurrentSheet } from '../lib/types'
-import { listTemplates, readPage } from '../lib/titleblocks'
+import { listTemplates, readPage, readWith, type TitleblockTemplate } from '../lib/titleblocks'
 import { niceTitle } from '../lib/titles'
 
 /**
@@ -28,6 +29,8 @@ interface Row {
   number: string
   unsure: boolean
   apply: boolean
+  /** Corrected by hand: a new template does not overwrite it. */
+  touched?: boolean
   problem?: string
 }
 
@@ -42,24 +45,47 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
   const [error, setError] = useState<string | null>(null)
   const patch = (id: string, change: Partial<Row>) => setRows((all) => all.map((r) => (r.sheet.sheet_id === id ? { ...r, ...change } : r)))
 
+  // Each sheet's file is opened once; its words are kept, so trying another template — or a
+  // new one — reads them again without fetching anything.
+  const held = useRef(new Map<string, { bytes: Uint8Array; text: PageText }>())
+  const [templates, setTemplates] = useState<TitleblockTemplate[]>([])
+  /** The template to read with; '' lets each sheet take whichever fits it best. */
+  const [using, setUsing] = useState('')
+  const [drawing, setDrawing] = useState(false)
+  const dates = useRef(new Map<string, string | null>())
+
+  const readingOf = (sheet: CurrentSheet, text: PageText, list: TitleblockTemplate[], pick: string): Partial<Row> => {
+    const one = pick ? list.find((t) => t.id === pick) : undefined
+    const r = one ? readWith(text, one) : readPage(text, list)
+    const title = niceTitle(r.title) ?? ''
+    const differs = (!!title && title !== (niceTitle(sheet.title) ?? '')) || (!!r.date && r.date !== (dates.current.get(sheet.revision_id) ?? ''))
+    return { state: 'read', title, date: r.date, number: r.number, unsure: !one && !!r.unsure, apply: differs && (!r.number || same(r.number, sheet.number)) }
+  }
+  /** Read everything already opened again, leaving alone what was corrected by hand. */
+  const again = (list: TitleblockTemplate[], pick: string) => setRows((all) => all.map((r) => {
+    const h = held.current.get(r.sheet.sheet_id)
+    return h && !r.touched ? { ...r, ...readingOf(r.sheet, h.text, list, pick) } : r
+  }))
+
   useEffect(() => {
     let gone = false
     ;(async () => {
-      const templates = await listTemplates(firmId)
-      const dates = await sheetDates(sheets.map((x) => x.revision_id))
+      const list = await listTemplates(firmId)
+      dates.current = await sheetDates(sheets.map((x) => x.revision_id))
       if (gone) return
-      setRows((all) => all.map((r) => ({ ...r, was: dates.get(r.sheet.revision_id) ?? null })))
+      setTemplates(list)
+      setRows((all) => all.map((r) => ({ ...r, was: dates.current.get(r.sheet.revision_id) ?? null })))
       for (const sheet of sheets) {
         if (gone) return
         patch(sheet.sheet_id, { state: 'reading' })
         try {
-          const pdf = await getDocument({ data: await readFile(project, sheet.file_path) }).promise
+          const bytes = await readFile(project, sheet.file_path)
+          // pdf.js takes the bytes it is given for its own; the copy is what the editor draws from.
+          const pdf = await getDocument({ data: bytes.slice() }).promise
           const text = await readPageText(await pdf.getPage(1))
           void pdf.loadingTask.destroy()
-          const r = readPage(text, templates)
-          const title = niceTitle(r.title) ?? ''
-          const differs = (title && title !== (niceTitle(sheet.title) ?? '')) || (!!r.date && r.date !== (dates.get(sheet.revision_id) ?? ''))
-          patch(sheet.sheet_id, { state: 'read', title, date: r.date, number: r.number, unsure: !!r.unsure, apply: differs && (!r.number || same(r.number, sheet.number)) })
+          held.current.set(sheet.sheet_id, { bytes, text })
+          patch(sheet.sheet_id, readingOf(sheet, text, list, ''))
         } catch (e) {
           patch(sheet.sheet_id, { state: 'failed', problem: message(e) })
         }
@@ -86,6 +112,23 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
     } catch (e) { setError(`${message(e)} (${done} of ${picked.length} were changed before this.)`); setBusy(false) }
   }
 
+  if (drawing) {
+    const pages = rows.filter((r) => held.current.has(r.sheet.sheet_id)).map((r) => ({ ...held.current.get(r.sheet.sheet_id)!, label: r.sheet.number }))
+    return (
+      <div className="reread reread-draw" role="dialog" aria-label="New title block template">
+        <div className="reread-card">
+          <TitleblockEditor firmId={firmId} pages={pages}
+            onCancel={() => setDrawing(false)}
+            onSaved={(t) => {
+              const list = [...templates.filter((x) => x.id !== t.id), t].sort((a, b) => a.name.localeCompare(b.name))
+              setTemplates(list); setUsing(t.id); setDrawing(false)
+              again(list, t.id)
+            }} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="reread" role="dialog" aria-label="Re-read titles and dates">
       <div className="reread-card">
@@ -97,6 +140,18 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
           Each sheet’s title block is read again with the title block templates as they are now. Tick what should replace what is on record; the read values can be corrected first. Sheet numbers are not changed here.
           {left > 0 && <strong> Reading {rows.length - left + 1} of {rows.length}…</strong>}
         </p>
+        <div className="inline-form reread-with">
+          <label className="small">Read with{' '}
+            <select value={using} onChange={(e) => { setUsing(e.target.value); again(templates, e.target.value) }}>
+              <option value="">Whichever template fits each sheet</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          <button onClick={() => setDrawing(true)} disabled={left > 0 || !rows.some((r) => held.current.has(r.sheet.sheet_id))}
+            title="Draw boxes round the number, title and date on one of these sheets; the others are then read the same way">
+            New template from these sheets…
+          </button>
+        </div>
         <div className="reread-table">
           <table>
             <thead><tr><th /><th>Sheet</th><th>Title on record</th><th>Title read</th><th>Date on record</th><th>Date read</th></tr></thead>
@@ -112,10 +167,10 @@ export function SheetReread({ project, firmId, sheets, onDone }: {
                     </td>
                     <td>{niceTitle(r.sheet.title) || <span className="muted">—</span>}</td>
                     <td>{r.state === 'read'
-                      ? <input className="cell" value={r.title} placeholder="Nothing read" aria-label="Title read" onChange={(e) => patch(r.sheet.sheet_id, { title: e.target.value, apply: true })} />
+                      ? <input className="cell" value={r.title} placeholder="Nothing read" aria-label="Title read" onChange={(e) => patch(r.sheet.sheet_id, { title: e.target.value, apply: true, touched: true })} />
                       : <span className="muted">{r.state === 'failed' ? r.problem : r.state === 'reading' ? 'Reading…' : ''}</span>}</td>
                     <td>{r.was ? usDay(r.was) : <span className="muted">—</span>}</td>
-                    <td>{r.state === 'read' && <input className="cell" type="date" value={r.date} aria-label="Date read" onChange={(e) => patch(r.sheet.sheet_id, { date: e.target.value, apply: true })} />}</td>
+                    <td>{r.state === 'read' && <input className="cell" type="date" value={r.date} aria-label="Date read" onChange={(e) => patch(r.sheet.sheet_id, { date: e.target.value, apply: true, touched: true })} />}</td>
                   </tr>
                 )
               })}

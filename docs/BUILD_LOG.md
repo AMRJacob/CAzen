@@ -53,6 +53,15 @@ ten items in three rows (two were added at 11:50) in a bar sized for two, and th
 downward. It is sized by its rows and grows upward from the bottom edge. Measured at 402×874:
 bar 706–864, lowest item ends at 859.
 
+**A new title block template can be made while re-reading** (Jacob, 14:15). The re-read
+dialog has *Read with* (whichever template fits each sheet, or one named template) and *New
+template from these sheets…*, which opens the same template editor the upload uses on the
+selected sheets. Saving it re-reads every selected sheet with the new template; rows corrected
+by hand are left alone. Each sheet's file is fetched once and its words kept, so switching
+templates fetches nothing. **Checked**: the editor opens on the selected sheets and returns.
+**Not checked**: drawing boxes, saving, and the re-read that follows — the test sheet is a
+blank dark page with no title block to draw on.
+
 **Sets and revisions columns can be resized**, with the same grips as the sheet list
 (double-click a grip to give a column back to the table).
 

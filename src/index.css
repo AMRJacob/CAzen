@@ -2539,3 +2539,5 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
   .register-pan .register tr.editing td, .register-pan .register tr.confirm-row td { white-space: normal; }
   .register-pan .col-grip { display: none; }
 }
+.reread-with { margin: 4px 0 2px; align-items: center; gap: 12px; }
+.reread-draw .reread-card { width: min(1500px, 100%); height: 100%; overflow: auto; }
