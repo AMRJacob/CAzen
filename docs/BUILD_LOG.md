@@ -11,6 +11,49 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 10:35 CST
+
+Two requests from Jacob after the first check-in, both shipped to `main`.
+
+**The contractor's schedule, read from a PDF — scanned or not** (`7`th commit of the day).
+*Read from a PDF* on the schedule page. A printed PDF's words are read with pdf.js; a scanned
+page is drawn at 250 dpi and read by Tesseract in the browser (`src/lib/pdf/scheduleText.ts`),
+its files served from the app's own address under `ocr/` and fetched only when a scan is opened —
+they are not put on a phone ahead of time. `src/lib/scheduleRead.ts` turns lines into
+activities: the first two dates are start and finish; ID, duration and percent come off the
+name; a line of words above activities is a heading; in a scan, O/l/S/B are mended inside
+date-shaped tokens only. Everything is previewed and editable before it is kept. A row whose
+name is already in the schedule updates that activity, so next month's issue keeps its ties.
+
+**Tying activities to pay lines by name.** Contractors do not schedule by their own pay lines,
+so `suggestLines` matches on shared words with the trades' other names counted as the same
+(drywall / gypsum board, mechanical / HVAC, footings / foundations). Offered in the import
+preview and, for activities already there, from one link. The Covers column names the line.
+
+**A field report begins as a site visit.** *New field report* starts a visit and opens it as one
+page in four parts: sketch pad, typed notes beginning with the template's headings (the
+`starter` of `fr.notes`), site photos, and that day's observations. Four on screen when wide,
+one at a time behind a row of four on a phone. The list shows each visit as a page with cover
+photo, day and time. *Write the field report* opens the form filled from the visit.
+`src/lib/visits.ts`, `src/components/SiteVisits.tsx`, migration `0033_site_visits.sql`.
+
+- A visit's observations are the ones seen on its day — no link table, so two visits on one day
+  share them.
+- **Migration 0033 is not applied to production.** The database asked for confirmation and none
+  came. Until it is applied the Field reports page is exactly what it was (`VisitsNotSetUp`).
+
+Verified: `checks/schedule.test.ts` (15 cases); `t_sched.py` reads a synthetic scan (skewed,
+blurred, speckled, with bars) end to end — 11 activities, 3 headings, every date right, 7 tied;
+`t_visit.py` runs a visit on desk and phone, and `t_visit.py missing` the fallback.
+
+Not verified: a real contractor's scan; anything on the iPhone.
+
+Found and not done: a visit is not kept offline (no outbox job yet); photographs still need a
+signal at the moment they are taken (`keepPhoto` uploads first); the report written from a visit
+is not linked back to it (`issued_id` is there for it); weather is typed, not looked up.
+
+---
+
 # Checkpoint — 2026-11-19, 09:40 CST
 
 First stretch of the push toward a pilot-ready app. Jacob's direction for this push: site-visit
