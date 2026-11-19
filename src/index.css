@@ -1934,11 +1934,7 @@ label.stack select, .obs-row select, .obs-more select {
 .nb-paper {
   position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: calc(26px + env(safe-area-inset-top)) max(30px, env(safe-area-inset-right)) calc(26px + env(safe-area-inset-bottom)) max(64px, calc(34px + env(safe-area-inset-left)));
-  background:
-    linear-gradient(90deg, transparent 43px, var(--margin-line) 43px, var(--margin-line) 44px, transparent 44px),
-    repeating-linear-gradient(180deg, transparent 0, transparent 31px, var(--rule) 31px, var(--rule) 32px) 0 2px,
-    var(--paper);
-  background-attachment: local;
+  background: linear-gradient(90deg, transparent 43px, var(--margin-line) 43px, var(--margin-line) 44px, transparent 44px), var(--paper);
   transform-origin: left center;
 }
 .nb-turn-fwd { animation: nb-turn-fwd 0.36s cubic-bezier(0.2, 0.7, 0.2, 1); }
@@ -2057,10 +2053,7 @@ label.stack select, .obs-row select, .obs-more select {
 /* Narrow: the same page read top to bottom, each part as tall as it needs. */
 @media (max-width: 759px) {
   .nb-paper { padding-left: max(34px, calc(14px + env(safe-area-inset-left))); padding-right: max(14px, env(safe-area-inset-right)); padding-bottom: calc(86px + env(safe-area-inset-bottom));
-    background:
-      linear-gradient(90deg, transparent 23px, var(--margin-line) 23px, var(--margin-line) 24px, transparent 24px),
-      repeating-linear-gradient(180deg, transparent 0, transparent 31px, var(--rule) 31px, var(--rule) 32px) 0 2px,
-      var(--paper); background-attachment: local; }
+    background: linear-gradient(90deg, transparent 23px, var(--margin-line) 23px, var(--margin-line) 24px, transparent 24px), var(--paper); }
   .nb-contents { padding-left: max(34px, calc(14px + env(safe-area-inset-left))); }
   .nb-paper h1 { font-size: 24px; }
   .nb-page, .nb-meeting .nb-page { display: block; overflow-y: auto; }
@@ -2100,3 +2093,86 @@ body:has(.nb) .phone-nav { display: none; }
 .pr-decide .chip.on.pr-rejected { background: var(--danger-soft, #f6e3df); border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .pr-flag { color: #9a5b00; font-size: 12.5px; }
 @media (pointer: coarse) { .pr-decide .chip { padding: 8px 13px; font-size: 13.5px; } }
+
+/* Ruling belongs to the lines that are written on, and nowhere else. It is drawn by the writing
+   area itself, at the height of a line of its text, and scrolls with the text — so a line of
+   writing always sits on a rule, wherever on the page the area happens to start. */
+.nb-paper .nb-ruled {
+  line-height: 32px; padding: 0;
+  background-image: repeating-linear-gradient(180deg, transparent 0, transparent 31px, var(--rule) 31px, var(--rule) 32px);
+  /* Lifted so the rule runs just under the baseline: the writing sits on the line, as on paper,
+     and does not float in the middle of the space between two. */
+  background-attachment: local; background-position: 0 -6px;
+}
+.nb-paper .nb-ruled:focus { background-color: rgba(255, 247, 200, 0.28); }
+.nb-paper h1 { line-height: 36px; }
+.nb-z-head { padding-bottom: 14px; }
+.nb-weather-again { font-size: 17px; text-decoration: none; padding: 0 4px; line-height: 32px; }
+
+/* Typing as it comes */
+.nb-quick { flex: none; margin: 10px 0 6px; padding: 10px 12px 9px; border: 1.5px solid #cfd6d0; border-radius: 12px; background: #fff; }
+.nb-quick:focus-within { border-color: var(--moss); box-shadow: 0 0 0 3px var(--moss-soft); }
+.nb-paper .nb-quick textarea { display: block; width: 100%; resize: none; font-size: 16.5px; line-height: 24px; min-height: 24px; overflow-y: auto; }
+.nb-paper .nb-quick textarea:focus { background: none; }
+.nb-quick-cats { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; }
+.nb-quick-say { font-size: 12px; color: #8a8f88; margin-right: 2px; }
+.nb-quick .chip { padding: 3px 10px; font-size: 12.5px; }
+.nb-quick .chip.on { background: #2b2d2c; border-color: #2b2d2c; color: #fff; }
+.nb-quick .chip.guessed { animation: nb-guess 0.3s ease-out; }
+@keyframes nb-guess { from { transform: scale(0.92); } 60% { transform: scale(1.06); } to { transform: none; } }
+.nb-quick-keep { margin-left: auto; padding: 4px 13px; font-size: 13px; border-radius: 999px; }
+@media (pointer: coarse) { .nb-quick .chip { padding: 7px 12px; font-size: 13.5px; } }
+
+/* Who was there */
+.nb-names { list-style: none; margin: 0; padding: 0; overflow-y: auto; columns: 2 220px; column-gap: 24px; }
+.nb-names li { display: flex; justify-content: space-between; gap: 8px; line-height: 30px; break-inside: avoid; font-size: 15px; }
+.nb-names .link { text-decoration: none; color: #a3a8a1; padding: 0 4px; }
+.nb-people { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.nb-person { display: flex; align-items: baseline; gap: 9px; padding: 5px 2px; font-size: 15px; cursor: pointer; }
+.nb-person-name { font-weight: 550; white-space: nowrap; }
+.nb-person-new { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.nb-paper .nb-person-new input { border: 1px solid var(--hair); border-radius: 7px; padding: 6px 9px; background: #fff; font-size: 14px; }
+.nb-person-new button { grid-column: 1 / -1; justify-self: start; }
+.nb-z-names { max-height: 34vh; }
+
+/* ---------- The table the notebooks lie on ---------- */
+.nb-table {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 18px;
+  max-width: 560px; margin: 24px 0 20px; padding: 36px 30px 42px; border-radius: 18px;
+  background:
+    repeating-linear-gradient(92deg, rgba(60, 40, 20, 0.05) 0 2px, transparent 2px 9px, rgba(255, 240, 215, 0.05) 9px 11px, transparent 11px 23px),
+    linear-gradient(178deg, #b98d62 0, #a67c52 55%, #946d46 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22), inset 0 -10px 0 #7d5a38, 0 14px 30px rgba(60, 40, 20, 0.25);
+}
+.nb-tome {
+  position: relative; display: flex; align-items: center; gap: 18px; width: 100%; max-width: 440px; height: 104px; padding: 0 60px 0 24px;
+  border: none; border-radius: 6px 14px 14px 6px; color: #f6f2e7; text-align: left; cursor: pointer;
+  background: linear-gradient(90deg, rgba(0,0,0,0.3) 0, rgba(0,0,0,0.06) 12px, rgba(255,255,255,0.06) 16px, transparent 24px), var(--tome);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 5px 0 -1px #efe9da, 0 7px 0 -1px #cfc8b6, 0 16px 22px rgba(40, 25, 10, 0.4);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.nb-tome:hover:not(:disabled) { background: linear-gradient(90deg, rgba(0,0,0,0.3) 0, rgba(0,0,0,0.06) 12px, rgba(255,255,255,0.06) 16px, transparent 24px), var(--tome); }
+.nb-tome-fn { --tome: #3f5a48; transform: rotate(-1.6deg); }
+.nb-tome-mn { --tome: #2f3a52; transform: rotate(1.1deg) translateX(10px); }
+.nb-tome-ob { --tome: #8a3b2c; transform: rotate(-0.5deg) translateX(-6px); }
+.nb-tome:hover:not(:disabled) { transform: translateY(-5px) rotate(0deg); }
+.nb-tome-band { position: absolute; top: 0; bottom: 0; right: 30px; width: 10px; background: rgba(0, 0, 0, 0.4); }
+.nb-tome-mono { font-size: 44px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; width: 78px; flex: none; font-feature-settings: "ss01"; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+.nb-tome-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nb-tome-name { font-size: 17px; font-weight: 550; }
+.nb-tome-line { font-size: 12.5px; color: rgba(246, 242, 231, 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 619px) {
+  .nb-table { padding: 26px 16px 32px; }
+  .nb-tome { height: 88px; padding: 0 46px 0 18px; gap: 12px; }
+  .nb-tome-mono { font-size: 36px; width: 62px; }
+  .nb-tome-band { right: 20px; }
+}
+
+/* The paper a book is written on: ruled, squared, dotted or plain. */
+.nb-rule-grid .nb-paper .nb-ruled {
+  background-image:
+    repeating-linear-gradient(180deg, transparent 0, transparent 31px, var(--rule) 31px, var(--rule) 32px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 31px, var(--rule) 31px, var(--rule) 32px);
+}
+.nb-rule-dots .nb-paper .nb-ruled { background-image: radial-gradient(circle at 16px 31px, #c3cac5 0, #c3cac5 1.3px, transparent 1.8px); background-size: 32px 32px; }
+.nb-rule-blank .nb-paper .nb-ruled { background-image: none; }

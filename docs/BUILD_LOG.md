@@ -11,6 +11,44 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 13:55 CST
+
+Six things from Jacob on the notebooks, all in `src/components/Notebook.tsx` unless said.
+
+- **Text sits on the ruling.** The page-wide ruling could not line up with writing areas that
+  start wherever the layout puts them. Ruling now belongs to the writing area itself
+  (`.nb-ruled`): drawn at the text's own 32 px line height, scrolling with the text, lifted 6 px
+  so the rule runs just under the baseline. Measured from screenshots at 1× and 3×: the gap from
+  the bottom of the writing to the rule beneath is the same on every line (1 px with
+  descenders, 4 px without; 0 and 3 at 3×).
+- **Weather from GPS.** A visit page with no weather asks the device where it is
+  (`navigator.geolocation`, six-second limit), falls back to the project's location, and looks
+  up the observation nearest the page's time with the existing `weatherAt` (api.weather.gov —
+  US only, last 6.5 days). The field stays editable; ↻ asks again.
+- **People as project data.** `project_people` (name, company, phone, email; migration 0035,
+  applied with Jacob's confirmation) and `src/lib/people.ts`. The Names part of a page picks
+  from them; someone new is added once in a four-field row and is there on every page after.
+  A page still stores its names as `Name | Company | Email` lines, which is what export takes.
+- **Type as it comes; it files itself.** `QuickNote` above the organised notes: one box, the
+  page's categories as chips. As words go in, `guessCategory` (`src/lib/noteSort.ts`) lights
+  the category they point at — the heading's own words, plus the vocabulary of site, structure,
+  envelope, interior, progress, submittals, payment. Enter files the note there. A chip tapped
+  before Enter overrides the guess; tapped after, it moves the last note. Words that point
+  nowhere go to a catch-all (the page's "Additional Notes", or a "General" category made when
+  first needed and removed if emptied). The organised outline below stays editable.
+- **The table.** `/field-notes` is a table top with three books lying on it — Fn, Mn, Ob, three
+  colours — leading to field notes, meeting notes, and the observations list.
+- **Paper.** Ruled, grid, dots or blank, per book, from the corner menu; kept per device
+  (`cazen.pref.notebookPaper.<kind>`). It applies to the writing lines, not the whole sheet.
+
+Verified: `checks/notes.test.ts` (16 cases: guesses, filing, moving, the catch-all);
+`checks/t_notebook.py` on desk and phone with a mocked location and weather service — weather
+filled from the device's coordinates, two people added and offered again on the next page, four
+notes filed by their words, the last one moved by tapping a category, paper cycling through all
+four. Not verified on the iPhone: the location prompt, and how the quick box feels to type in.
+
+---
+
 # Checkpoint — 2026-11-19, 13:10 CST
 
 **Proposal requests, answered.** Each PR in the change register now carries, on its own line,

@@ -73,9 +73,6 @@ function Books() {
         Open a book and turn to today’s page.
       </p>
       <Shelf project={current} />
-      <p className="muted small">
-        <NavLink to="/field-notes/observations">Every observation on the project, and the punch list</NavLink>
-      </p>
     </section>
   )
 }

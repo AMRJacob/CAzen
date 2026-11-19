@@ -143,7 +143,7 @@ export async function startVisit(projectId: string, kind: VisitKind = 'visit', n
  * set of meeting notes without being rewritten. On screen it is a category and the words under
  * it; the numbering and the "a." are put back on the way out.
  */
-export interface Section { heading: string; body: string }
+export { parseSections, writeSections, type Section } from './noteSort'
 
 /** The categories a new page starts with: the firm's own template headings for that kind. */
 export function starterFor(kind: VisitKind): string {
@@ -152,24 +152,3 @@ export function starterFor(kind: VisitKind): string {
     : fieldDef('field_report', 'fr.observations')?.starter) ?? '1. Notes\n  a. '
 }
 
-export function parseSections(text: string | null): Section[] {
-  const out: Section[] = []
-  for (const raw of (text ?? '').split(/\r?\n/)) {
-    const head = raw.match(/^(?:\d+|[IVX]+)[.)]\s+(.*)$/)
-    if (head) { out.push({ heading: head[1].trim(), body: '' }); continue }
-    const line = raw.replace(/^\s+/, '').replace(/^(?:[a-z]{1,2}|\d+|[ivx]+)[.)]\s?/, '')
-    if (!out.length) { if (!line.trim()) continue; out.push({ heading: 'Notes', body: '' }) }
-    const last = out[out.length - 1]
-    last.body = last.body ? `${last.body}\n${line}` : line
-  }
-  return out.map((s) => ({ ...s, body: s.body.replace(/\n+$/, '') }))
-}
-
-const letter = (i: number) => (i < 26 ? String.fromCharCode(97 + i) : `${String.fromCharCode(97 + Math.floor(i / 26) - 1)}${String.fromCharCode(97 + (i % 26))}`)
-
-export function writeSections(sections: Section[]): string {
-  return sections.map((s, i) => {
-    const lines = s.body.split('\n').map((l) => l.trim()).filter(Boolean)
-    return `${i + 1}. ${s.heading.trim() || 'Notes'}\n` + (lines.length ? lines : ['']).map((l, j) => `  ${letter(j)}. ${l}`).join('\n')
-  }).join('\n')
-}

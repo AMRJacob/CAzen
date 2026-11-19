@@ -16,6 +16,10 @@ import {
   clockTime, coverOf, longDay, removeVisit, setVisit, shortDay, startVisit,
   type SiteVisit, type VisitKind,
 } from '../lib/visits'
+import { addPerson, asLine, linesOf, listPeople, nameIn, type Person } from '../lib/people'
+import { catchAll, fileNote, guessCategory, headingsOf, unfileNote } from '../lib/noteSort'
+import { weatherAt } from '../lib/weather'
+import { readPref, writePref } from '../lib/prefs'
 import { message } from '../lib/errors'
 import type { Project } from '../lib/types'
 
@@ -32,6 +36,12 @@ import type { Project } from '../lib/types'
  * The meeting book is the same book with the photographs and observations left out, so there is
  * nothing on the page but the paper.
  */
+
+/** What the writing lines look like, as on the sketch pads: ruled, squared, dotted or plain. */
+const PAPERS = ['lines', 'grid', 'dots', 'blank'] as const
+type Paper = typeof PAPERS[number]
+const PAPER_NAME: Record<Paper, string> = { lines: 'Ruled', grid: 'Grid', dots: 'Dots', blank: 'Blank' }
+const paperKey = (kind: VisitKind) => `cazen.pref.notebookPaper.${kind}`
 
 const BOOK: Record<VisitKind, { title: string; page: string; exportAs: string }> = {
   visit: { title: 'Field notes', page: 'visit', exportAs: 'Make the field report' },
@@ -60,6 +70,8 @@ export function Notebook({ project, kind, pages, onPages }: {
   /** null is the contents page. */
   const [at, setAt] = useState<string | null>(null)
   const [turn, setTurn] = useState<'fwd' | 'back'>('fwd')
+  const [paper, setPaper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
+  const nextPaper = () => { const n = PAPERS[(PAPERS.indexOf(paper) + 1) % PAPERS.length]; setPaper(n); writePref(paperKey(kind), n) }
   const [error, setError] = useState<string | null>(null)
   const [observations, setObservations] = useState<Observation[]>([])
   const [types, setTypes] = useState<ObservationType[]>([])
@@ -100,6 +112,7 @@ export function Notebook({ project, kind, pages, onPages }: {
     <BookMenu
       count={page ? `${pages.length - i} of ${pages.length}` : null}
       onNew={() => void newPage()}
+      paper={PAPER_NAME[paper]} onPaper={nextPaper}
       onContents={page ? () => go(null, 'back') : undefined}
       onBack={page ? () => go(i > 0 ? pages[i - 1].id : null, 'back') : undefined}
       onForward={page && i < pages.length - 1 ? () => go(pages[i + 1].id, 'fwd') : undefined}
@@ -107,7 +120,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   )
 
   return (
-    <div className={`nb nb-${kind}`}>
+    <div className={`nb nb-${kind} nb-rule-${paper}`}>
       {error && <div className="notice error nb-error">{error}</div>}
       {page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
@@ -165,8 +178,11 @@ export function Notebook({ project, kind, pages, onPages }: {
  * done from here, a new page first. It puts itself away once something is chosen, or after a
  * few seconds of not being used.
  */
-function BookMenu({ count, onNew, onContents, onBack, onForward, onClose }: {
+function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper, onPaper }: {
   count: string | null
+  /** The paper in use, and the way to the next kind. */
+  paper: string
+  onPaper: () => void
   onNew: () => void
   onContents?: () => void
   onBack?: () => void
@@ -199,6 +215,7 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose }: {
         {spot('Back', I(<path d="M15 6l-6 6 6 6" />), onBack, true)}
         {count && <span className="nb-menu-count">{count}</span>}
         {spot('Forward', I(<path d="M9 6l6 6-6 6" />), onForward, true)}
+        {spot(paper, I(<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M7 8h10M7 12h10M7 16h10" /></>), onPaper, true)}
         {spot('Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
       </div>
     </nav>
@@ -253,6 +270,35 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
     listMarks(padId).then((m) => { if (!gone) setMarks(m.filter((x) => x.page === 1)) }).catch(() => {})
     return () => { gone = true }
   }, [padId, drawing])
+
+  /**
+   * The weather, from where the phone is standing — or, where it won't say, from where the
+   * project is. Asked once, for a page that has none; the field stays the user's to overwrite.
+   */
+  const [asking, setAsking] = useState(false)
+  const lookUpWeather = useCallback(async () => {
+    setAsking(true)
+    try {
+      const here = await new Promise<{ lat: number; lon: number } | null>((done) => {
+        if (!navigator.geolocation) { done(null); return }
+        navigator.geolocation.getCurrentPosition(
+          (p) => done({ lat: p.coords.latitude, lon: p.coords.longitude }),
+          () => done(null),
+          { timeout: 6000, maximumAge: 10 * 60_000 })
+      })
+      const lat = here?.lat ?? project.latitude, lon = here?.lon ?? project.longitude
+      const when = new Date(`${page.visited_on}T${page.visited_at ?? '12:00:00'}`)
+      const found = await weatherAt(lat, lon, when)
+      if (found) change({ weather: found })
+      else if (lat == null) onTrouble('No location to look the weather up for: the phone would not give one and the project has none set.')
+    } finally { setAsking(false) }
+  }, [project.latitude, project.longitude, page.visited_on, page.visited_at, change, onTrouble])
+  const askedWeather = useRef(false)
+  useEffect(() => {
+    if (!visit || page.weather || askedWeather.current) return
+    askedWeather.current = true
+    void lookUpWeather()
+  }, [visit, page.weather, lookUpWeather])
 
   async function draw() {
     try {
@@ -344,8 +390,10 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
             onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
           <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
             onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
-          <input className="nb-weather" defaultValue={page.weather ?? ''} placeholder="Weather" aria-label="Weather"
+          <input key={page.weather ?? ''} className="nb-weather" defaultValue={page.weather ?? ''} aria-label="Weather"
+            placeholder={asking ? 'Looking up the weather…' : 'Weather'}
             onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
+          {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather()} title="Look the weather up from where you are">↻</button>}
         </div>
         <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
           placeholder={visit ? 'What the visit was for' : 'Which meeting'}
@@ -360,16 +408,12 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
       </section>
 
       {bar}
-      <section className="nb-z nb-z-names">
-        <h2>Names</h2>
-        <textarea className="nb-write" defaultValue={page.names ?? ''} aria-label="Who was there"
-          placeholder={'Who was there, one to a line\nName | Company'}
-          onBlur={(e) => { if (e.target.value !== (page.names ?? '')) change({ names: e.target.value.trim() || null }) }} />
-      </section>
+      <Names projectId={project.id} names={page.names} onChange={(names) => change({ names })} onTrouble={onTrouble} />
 
       <section className="nb-z nb-z-notes">
+        <QuickNote notes={notes} onFiled={(next) => { setNotes(next); change({ notes: next }) }} />
         <div className="nb-z-top"><h2>Notes</h2><OutlineTools textarea={notesBox} value={notes} onChange={setNotes} /></div>
-        <textarea ref={notesBox} className="nb-write nb-outline" value={notes} aria-label="Typed notes"
+        <textarea ref={notesBox} className="nb-write nb-outline nb-ruled" value={notes} aria-label="Notes, organised"
           onChange={(e) => setNotes(e.target.value)}
           onBlur={() => { if (notes !== (page.notes ?? '')) change({ notes }) }} />
       </section>
@@ -470,25 +514,178 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
   )
 }
 
-// ---------- The shelf ----------
+// ---------- Typing as it comes ----------
 
-/** The two books, closed. Opening one is the way into everything in field notes. */
+/**
+ * A note, typed the way it is thought of — and filed where it belongs.
+ *
+ * Walking a site, things are noticed in the order they are passed, not the order a report lists
+ * them. So there is one place to type, always the same, and the page's categories beside it.
+ * As the words go in, the category they point at lights up; Enter keeps the note under it. A
+ * different category can be tapped before Enter, or after — the last note moves. Nothing has to
+ * be decided first, and nothing has to be tidied afterwards.
+ */
+function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) => void }) {
+  const headings = headingsOf(notes)
+  const [text, setText] = useState('')
+  const [picked, setPicked] = useState<number | null>(null)
+  const [last, setLast] = useState<{ heading: number; text: string } | null>(null)
+  const box = useRef<HTMLTextAreaElement | null>(null)
+
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`
+  }, [text])
+
+  const guessed = guessCategory(text, headings)
+  // Words that point nowhere go under the catch-all, not under whatever was used last.
+  const active = Math.min(picked ?? (guessed >= 0 ? guessed : catchAll(headings)), Math.max(0, headings.length - 1))
+
+  function keep() {
+    const said = text.trim()
+    if (!said) return
+    onFiled(fileNote(notes, active, said))
+    setLast({ heading: active, text: said })
+    setText('')
+    setPicked(null)
+    box.current?.focus()
+  }
+
+  function choose(i: number) {
+    // With words in the box the tap says where they will go; with none, it moves the last note.
+    if (text.trim() || !last) { setPicked(i); box.current?.focus(); return }
+    if (i === last.heading) return
+    onFiled(fileNote(unfileNote(notes, last.heading, last.text), i, last.text))
+    setLast({ ...last, heading: i })
+  }
+
+  return (
+    <div className="nb-quick">
+      <textarea ref={box} rows={1} value={text} aria-label="Type a note"
+        placeholder="Type it as you see it — Enter files it"
+        enterKeyHint="done" autoCapitalize="sentences"
+        onChange={(e) => { setText(e.target.value); if (last) setLast(null) }}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); keep() } }} />
+      <div className="nb-quick-cats" role="radiogroup" aria-label={text.trim() || !last ? 'File it under' : 'Move the last note to'}>
+        <span className="nb-quick-say">{text.trim() ? 'Under' : last ? 'Filed under' : 'Under'}</span>
+        {headings.map((h, i) => {
+          const on = text.trim() ? i === active : last ? i === last.heading : i === active
+          return (
+            <button key={i} role="radio" aria-checked={on}
+              className={`chip${on ? ' on' : ''}${text.trim() && picked === null && guessed === i ? ' guessed' : ''}`}
+              onClick={() => choose(i)}>{h.replace(/\s*\(.*\)\s*$/, '')}</button>
+          )
+        })}
+        {text.trim() && <button className="primary-lite nb-quick-keep" onClick={keep}>Keep</button>}
+      </div>
+    </div>
+  )
+}
+
+// ---------- Who was there ----------
+
+/**
+ * The names on a page, picked from the people on the job. Somebody new is added once — name,
+ * company, phone, email, what a sign-in sheet asks — and is there to pick on every page after.
+ */
+function Names({ projectId, names, onChange, onTrouble }: {
+  projectId: string
+  names: string | null
+  onChange: (names: string | null) => void
+  onTrouble: (m: string) => void
+}) {
+  const [people, setPeople] = useState<Person[]>([])
+  const [picking, setPicking] = useState(false)
+  const [fresh, setFresh] = useState({ name: '', company: '', phone: '', email: '' })
+  useEffect(() => { listPeople(projectId).then(setPeople).catch(() => setPeople([])) }, [projectId])
+
+  const lines = linesOf(names)
+  const here = new Set(lines.map((l) => nameIn(l).toLowerCase()))
+  const write = (next: string[]) => onChange(next.length ? next.join('\n') : null)
+  const toggle = (p: Person) => write(here.has(p.name.toLowerCase())
+    ? lines.filter((l) => nameIn(l).toLowerCase() !== p.name.toLowerCase())
+    : [...lines, asLine(p)])
+
+  async function addNew() {
+    if (!fresh.name.trim()) return
+    try {
+      const p = await addPerson(projectId, fresh)
+      setPeople((all) => [...all, p].sort((a, b) => a.name.localeCompare(b.name)))
+      if (!here.has(p.name.toLowerCase())) write([...lines, asLine(p)])
+      setFresh({ name: '', company: '', phone: '', email: '' })
+    } catch (e) { onTrouble(message(e)) }
+  }
+  const set = (k: keyof typeof fresh) => (e: React.ChangeEvent<HTMLInputElement>) => setFresh({ ...fresh, [k]: e.target.value })
+
+  return (
+    <section className="nb-z nb-z-names">
+      <div className="nb-z-top">
+        <h2>Names{lines.length ? ` · ${lines.length}` : ''}</h2>
+        <button className="primary-lite" onClick={() => setPicking(!picking)}>{picking ? 'Done' : 'Add names'}</button>
+      </div>
+      {picking ? (
+        <div className="nb-people">
+          {people.map((p) => (
+            <label key={p.id} className="nb-person">
+              <input type="checkbox" checked={here.has(p.name.toLowerCase())} onChange={() => toggle(p)} />
+              <span className="nb-person-name">{p.name}</span>
+              <span className="muted small">{[p.company, p.phone, p.email].filter(Boolean).join(' · ')}</span>
+            </label>
+          ))}
+          {!people.length && <p className="nb-none">Nobody on this project yet — add the first below.</p>}
+          <form className="nb-person-new" onSubmit={(e) => { e.preventDefault(); void addNew() }}>
+            <input value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
+            <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
+            <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
+            <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
+            <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the project</button>
+          </form>
+        </div>
+      ) : !lines.length ? <p className="nb-none">Nobody yet.</p> : (
+        <ul className="nb-names">
+          {lines.map((l) => {
+            const [name, company] = l.split('|').map((x) => x.trim())
+            return (
+              <li key={l}>
+                <span><strong>{name}</strong>{company ? <span className="muted"> · {company}</span> : null}</span>
+                <button className="link" aria-label={`Take ${name} off this page`} onClick={() => write(lines.filter((x) => x !== l))}>×</button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// ---------- The table ----------
+
+/**
+ * The way in: a table top with the three books lying on it, one above the other — field notes,
+ * meeting notes, observations — each its own colour with its initials on the cover.
+ */
 export function Shelf({ project }: { project: Project | null }) {
   const navigate = useNavigate()
-  const book = (kind: VisitKind, to: string, line: string) => (
-    <button className={`nb-book nb-book-${kind}`} onClick={() => navigate(to)} disabled={!project}>
-      <span className="nb-book-band" aria-hidden="true" />
-      <span className="nb-book-label">
-        <span className="nb-book-name">{BOOK[kind].title}</span>
-        <span className="nb-book-job">{project ? `${project.number} · ${project.name}` : 'Choose a project'}</span>
-      </span>
-      <span className="nb-book-line">{line}</span>
-    </button>
-  )
+  const books: { mono: string; name: string; to: string; tone: string; line: string }[] = [
+    { mono: 'Fn', name: 'Field notes', to: '/field-notes/reports', tone: 'fn', line: 'Site visits' },
+    { mono: 'Mn', name: 'Meeting notes', to: '/field-notes/meetings', tone: 'mn', line: 'Meetings' },
+    { mono: 'Ob', name: 'Observations', to: '/field-notes/observations', tone: 'ob', line: 'Everything observed, and the punch list' },
+  ]
   return (
-    <div className="nb-shelf">
-      {book('visit', '/field-notes/reports', 'Site visits — notes, sketches, photographs, observations')}
-      {book('meeting', '/field-notes/meetings', 'Meetings — notes and sketches, nothing else on the page')}
+    <div className="nb-table" role="list" aria-label="Notebooks">
+      {books.map((b) => (
+        <button key={b.mono} role="listitem" className={`nb-tome nb-tome-${b.tone}`} disabled={!project}
+          onClick={() => navigate(b.to)} aria-label={`Open ${b.name}`}>
+          <span className="nb-tome-band" aria-hidden="true" />
+          <span className="nb-tome-mono" aria-hidden="true">{b.mono}</span>
+          <span className="nb-tome-text">
+            <span className="nb-tome-name">{b.name}</span>
+            <span className="nb-tome-line">{project ? `${project.number} · ${b.line}` : 'Choose a project'}</span>
+          </span>
+        </button>
+      ))}
     </div>
   )
 }
