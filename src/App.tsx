@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { isConfigured } from './lib/supabase'
 import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
@@ -8,17 +8,35 @@ import { Logo } from './components/Logo'
 import { PhoneNav } from './components/PhoneNav'
 import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
-import Documents from './pages/Documents'
-import Manual from './pages/Manual'
-import PayApps from './pages/PayApps'
-import Submittals from './pages/Submittals'
-import CaLogs from './pages/CaLogs'
-import Contracts from './pages/Contracts'
-import Settings from './pages/Settings'
-import Templates from './pages/Templates'
-import FieldNotes from './pages/FieldNotes'
-import Schedule from './pages/Schedule'
 import { useFullscreen } from './lib/fullscreen'
+
+/**
+ * Each page is fetched when it is first opened, so the phone reads only the page in front of it
+ * rather than the whole app on every launch. The service worker has them all on the device, so
+ * this costs nothing with no signal.
+ *
+ * A page asked for by a copy of the app older than the last release may no longer exist on the
+ * server. That is the one failure worth a reload — once, so a real fault can't loop.
+ */
+function page(load: () => Promise<{ default: ComponentType }>) {
+  return lazy(() => load().catch((e) => {
+    const KEY = 'cazen.reloadedForRelease'
+    try {
+      if (!sessionStorage.getItem(KEY)) { sessionStorage.setItem(KEY, '1'); window.location.reload() }
+    } catch { /* fall through to the error */ }
+    throw e
+  }))
+}
+const Documents = page(() => import('./pages/Documents'))
+const Manual = page(() => import('./pages/Manual'))
+const PayApps = page(() => import('./pages/PayApps'))
+const Submittals = page(() => import('./pages/Submittals'))
+const CaLogs = page(() => import('./pages/CaLogs'))
+const Contracts = page(() => import('./pages/Contracts'))
+const Settings = page(() => import('./pages/Settings'))
+const Templates = page(() => import('./pages/Templates'))
+const FieldNotes = page(() => import('./pages/FieldNotes'))
+const Schedule = page(() => import('./pages/Schedule'))
 
 /**
  * The sidebar in three parts.
@@ -118,6 +136,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
             The submittal cover sheet works without it.
           </div>
         )}
+        <Suspense fallback={<p className="muted page-wait">Loading…</p>}>
         <Routes>
           <Route path="/" element={offline ? <p className="muted">Sign-in and projects need the backend.</p> : <Home />} />
           <Route path="/documents" element={offline ? <p className="muted">Drawings need the backend.</p> : <Documents />} />
@@ -132,6 +151,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           {!offline && <Route path="/settings" element={<Settings />} />}
           {!offline && <Route path="/templates" element={<Templates />} />}
         </Routes>
+        </Suspense>
       </main>
     </div>
   )

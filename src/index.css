@@ -1847,3 +1847,7 @@ label.stack select, .obs-row select, .obs-more select {
 }
 .obs-row select { width: auto; font-size: 13px; padding: 5px 28px 5px 9px; }
 @media (pointer: coarse) { .obs-row select { padding: 8px 30px 8px 11px; font-size: 14px; } }
+
+/* A page on its way: say nothing for a moment, since it is nearly always there before the eye is. */
+.page-wait { animation: page-wait 0.4s step-end both; }
+@keyframes page-wait { from { visibility: hidden; } to { visibility: visible; } }
