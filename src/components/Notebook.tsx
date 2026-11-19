@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Mark } from './Logo'
 import { NotePad, PadStill } from './NotePad'
-import { Photos } from './Photos'
+import { ObservationForm } from './ObservationForm'
+import { OutlineTools } from './OutlineTools'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
 import { getPad, listMarks, newPad, type NotePad as Pad, type PadMark } from '../lib/pads'
 import {
-  buildObservation, listObservations, listTypes, nameOf, onDay, photosOf, saveObservation,
+  listObservations, listTypes, nameOf, onDay, photosOf, STATUS_LABELS,
   type Observation, type ObservationType,
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
 import {
-  clockTime, coverOf, longDay, parseSections, removeVisit, setVisit, shortDay, startVisit, writeSections,
-  type Section, type SiteVisit, type VisitKind,
+  clockTime, coverOf, longDay, removeVisit, setVisit, shortDay, startVisit,
+  type SiteVisit, type VisitKind,
 } from '../lib/visits'
 import { message } from '../lib/errors'
 import type { Project } from '../lib/types'
@@ -48,23 +50,6 @@ function Thumb({ project, path }: { project: Project; path: string | null }) {
   return url ? <img src={url} alt="" onError={() => setUrl(null)} /> : null
 }
 
-/** A textarea as tall as what is written in it, so a page reads as a page and not as boxes. */
-function Lines({ value, onChange, onDone, placeholder, label }: {
-  value: string; onChange: (v: string) => void; onDone: () => void; placeholder?: string; label: string
-}) {
-  const box = useRef<HTMLTextAreaElement | null>(null)
-  useEffect(() => {
-    const el = box.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
-  return (
-    <textarea ref={box} className="nb-lines" rows={1} value={value} placeholder={placeholder} aria-label={label}
-      onChange={(e) => onChange(e.target.value)} onBlur={onDone} />
-  )
-}
-
 export function Notebook({ project, kind, pages, onPages }: {
   project: Project
   kind: VisitKind
@@ -91,7 +76,7 @@ export function Notebook({ project, kind, pages, onPages }: {
 
   async function newPage() {
     try {
-      const v = await startVisit(project.id, kind)
+      const v = await startVisit(project.id, kind, pages[0]?.names ?? null)
       onPages([v, ...pages])
       go(v.id, 'fwd')
     } catch (e) { setError(message(e)) }
@@ -111,81 +96,128 @@ export function Notebook({ project, kind, pages, onPages }: {
     return () => window.removeEventListener('keydown', key)
   })
 
+  const turnBar = (
+    <BookMenu
+      count={page ? `${pages.length - i} of ${pages.length}` : null}
+      onNew={() => void newPage()}
+      onContents={page ? () => go(null, 'back') : undefined}
+      onBack={page ? () => go(i > 0 ? pages[i - 1].id : null, 'back') : undefined}
+      onForward={page && i < pages.length - 1 ? () => go(pages[i + 1].id, 'fwd') : undefined}
+      onClose={() => navigate('/field-notes')} />
+  )
+
   return (
     <div className={`nb nb-${kind}`}>
-      <header className="nb-bar">
-        <button className="nb-close" onClick={() => navigate('/field-notes')} aria-label="Close the book">×</button>
-        <span className="nb-bar-title">{BOOK[kind].title}<span className="nb-bar-job"> · {project.number} {project.name}</span></span>
-        <span className="nb-bar-turn">
-          {page && (
-            <>
-              <button onClick={() => go(i > 0 ? pages[i - 1].id : null, 'back')} aria-label="Turn back">‹</button>
-              <span className="nb-bar-count">{pages.length - i} of {pages.length}</span>
-              <button disabled={i >= pages.length - 1} onClick={() => go(pages[i + 1].id, 'fwd')} aria-label="Turn forward">›</button>
-            </>
-          )}
-          {page && <button className="nb-bar-contents" onClick={() => go(null, 'back')}>Contents</button>}
-        </span>
-      </header>
-
       {error && <div className="notice error nb-error">{error}</div>}
-
-      <div className="nb-stage">
-        {page ? (
-          <Page key={page.id} turn={turn} project={project} page={page}
-            observations={observations} types={types}
-            onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
-            onChanged={(v) => onPages(pages.map((x) => (x.id === v.id ? v : x)))}
-            onRemoved={() => { onPages(pages.filter((x) => x.id !== page.id)); go(null, 'back') }}
-            onTrouble={setError} />
-        ) : (
-          <article key="contents" className={`nb-paper nb-contents nb-turn-${turn}`}>
-            <div className="nb-holes" aria-hidden="true" />
-            <h1>{BOOK[kind].title}</h1>
-            <p className="nb-sub">{project.number} · {project.name}</p>
-            <button className="nb-today" onClick={() => void newPage()}>
-              <span className="nb-today-plus" aria-hidden="true">+</span>
-              <span>
-                <strong>New page</strong>
-                <span className="nb-today-day">{longDay(new Date().toISOString().slice(0, 10))}</span>
-              </span>
-            </button>
-            {pages.length > 0 && <h2>Pages</h2>}
-            <ol className="nb-toc">
-              {pages.map((p, n) => {
-                const seen = kind === 'visit' ? onDay(observations, p.visited_on) : []
-                const photos = p.photos.length + photosOf(seen).length
-                return (
-                  <li key={p.id}>
-                    <button onClick={() => go(p.id, 'fwd')}>
-                      {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
-                      <span className="nb-toc-day">{shortDay(p.visited_on)}</span>
-                      <span className="nb-toc-title">{p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
-                      <span className="nb-toc-dots" aria-hidden="true" />
-                      <span className="nb-toc-what">
-                        {[p.visited_at ? clockTime(p.visited_at) : '',
-                          photos ? `${photos} ${photos === 1 ? 'photo' : 'photos'}` : '',
-                          seen.length ? `${seen.length} obs.` : ''].filter(Boolean).join(' · ')}
-                      </span>
-                      <span className="nb-toc-no">{pages.length - n}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ol>
-          </article>
-        )}
-      </div>
+      {page ? (
+        <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
+          observations={observations} types={types}
+          onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
+          onChanged={(v) => onPages(pages.map((x) => (x.id === v.id ? v : x)))}
+          onRemoved={() => { onPages(pages.filter((x) => x.id !== page.id)); go(null, 'back') }}
+          onTrouble={setError} />
+      ) : (
+        <article key="contents" className={`nb-paper nb-contents nb-turn-${turn}`}>
+          {turnBar}
+          <h1>{BOOK[kind].title}</h1>
+          <p className="nb-sub">{project.number} · {project.name}</p>
+          <button className="nb-today" onClick={() => void newPage()}>
+            <span className="nb-today-plus" aria-hidden="true">+</span>
+            <span>
+              <strong>New page</strong>
+              <span className="nb-today-day">{longDay(new Date().toISOString().slice(0, 10))}</span>
+            </span>
+          </button>
+          {pages.length > 0 && <h2>Pages</h2>}
+          <ol className="nb-toc">
+            {pages.map((p, n) => {
+              const seen = kind === 'visit' ? onDay(observations, p.visited_on) : []
+              const photos = p.photos.length + photosOf(seen).length
+              return (
+                <li key={p.id}>
+                  <button onClick={() => go(p.id, 'fwd')}>
+                    {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
+                    <span className="nb-toc-day">{shortDay(p.visited_on)}</span>
+                    <span className="nb-toc-title">{p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
+                    <span className="nb-toc-dots" aria-hidden="true" />
+                    <span className="nb-toc-what">
+                      {[p.visited_at ? clockTime(p.visited_at) : '',
+                        photos ? `${photos} ${photos === 1 ? 'photo' : 'photos'}` : '',
+                        seen.length ? `${seen.length} obs.` : ''].filter(Boolean).join(' · ')}
+                    </span>
+                    <span className="nb-toc-no">{pages.length - n}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </article>
+      )}
     </div>
+  )
+}
+
+// ---------- The corner menu ----------
+
+/**
+ * Getting around the book, from the corner — the same mark and the same gesture as the phone's
+ * own menu: closed it is the ensō and costs the page nothing; open it is a row of what can be
+ * done from here, a new page first. It puts itself away once something is chosen, or after a
+ * few seconds of not being used.
+ */
+function BookMenu({ count, onNew, onContents, onBack, onForward, onClose }: {
+  count: string | null
+  onNew: () => void
+  onContents?: () => void
+  onBack?: () => void
+  onForward?: () => void
+  onClose: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const timer = useRef<number | null>(null)
+  const rest = useCallback((ms: number) => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setOpen(false), ms)
+  }, [])
+  useEffect(() => { if (open) rest(4200); return () => { if (timer.current !== null) window.clearTimeout(timer.current) } }, [open, rest])
+  const I = (d: React.ReactNode) => (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+  )
+  const spot = (label: string, icon: React.ReactNode, act: (() => void) | undefined, stay = false) => (
+    <button className="nb-menu-spot" disabled={!act} onClick={() => { act?.(); if (stay) rest(2600); else setOpen(false) }}>
+      {icon}<span>{label}</span>
+    </button>
+  )
+  return (
+    <nav className={`nb-menu${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
+      <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => setOpen(!open)}>
+        <Mark size={30} />
+      </button>
+      <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
+        {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
+        {spot('Contents', I(<><path d="M5 6h14M5 12h14M5 18h9" /></>), onContents)}
+        {spot('Back', I(<path d="M15 6l-6 6 6 6" />), onBack, true)}
+        {count && <span className="nb-menu-count">{count}</span>}
+        {spot('Forward', I(<path d="M9 6l6 6-6 6" />), onForward, true)}
+        {spot('Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
+      </div>
+    </nav>
   )
 }
 
 // ---------- One page ----------
 
-function Page({ project, page, turn, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
+/**
+ * A day's page, laid out the way Jacob drew it: the day and the weather top left, who was there
+ * top right, and beneath them three columns — typed notes, the sketch, and on the right the
+ * photographs above the observations. A meeting's page is the same sheet without the right-hand
+ * column. Everything is on the one page; nothing is behind a tab.
+ */
+function Page({ project, page, turn, bar, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
+  bar: React.ReactNode
   observations: Observation[]
   types: ObservationType[]
   onObserved: (o: Observation) => void
@@ -194,29 +226,24 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
   onTrouble: (m: string) => void
 }) {
   const visit = page.kind === 'visit'
-  const [sections, setSections] = useState<Section[]>(() => parseSections(page.notes))
+  const [notes, setNotes] = useState(page.notes ?? '')
+  const notesBox = useRef<HTMLTextAreaElement | null>(null)
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
   const [drawing, setDrawing] = useState(false)
   const [exporting, setExporting] = useState(false)
-  /** What the camera button is for: a photograph for the record, or one that is an observation. */
-  const [shot, setShot] = useState<'documentation' | 'observation'>('documentation')
   const [working, setWorking] = useState(false)
-  /** A photograph just taken as an observation, waiting to be told what it shows. */
-  const [naming, setNaming] = useState<{ path: string; text: string } | null>(null)
+  /** The photograph open in the gallery, and whether its label is waiting to be typed. */
+  const [viewing, setViewing] = useState<{ path: string; fresh: boolean } | null>(null)
+  /** The observation being written or changed, in the same form the sheets and the list use. */
+  const [observing, setObserving] = useState<Observation | 'new' | null>(null)
   const camera = useRef<HTMLInputElement | null>(null)
+  const library = useRef<HTMLInputElement | null>(null)
 
   const change = useCallback((patch: Partial<SiteVisit>) => {
     onChanged({ ...page, ...patch })
     setVisit(page.id, patch).catch((e) => onTrouble(message(e)))
   }, [page, onChanged, onTrouble])
-
-  const saveNotes = (next: Section[] = sections) => {
-    const text = writeSections(next)
-    if (text !== (page.notes ?? '')) change({ notes: text })
-  }
-  const editSection = (n: number, patch: Partial<Section>) =>
-    setSections((all) => all.map((s, k) => (k === n ? { ...s, ...patch } : s)))
 
   const padId = page.pad_id
   useEffect(() => {
@@ -240,33 +267,29 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
   }
 
   async function taken(files: FileList | null) {
-    const file = files?.[0]
+    const list = Array.from(files ?? [])
     if (camera.current) camera.current.value = ''
-    if (!file) return
+    if (library.current) library.current.value = ''
+    if (!list.length) return
     setWorking(true)
-    try {
-      const path = await keepPhoto(project, file, page.title || 'Site visit', page.photos.length + 1)
-      if (shot === 'observation') setNaming({ path, text: '' })
-      else change({ photos: [...page.photos, path] })
-    } catch (e) { onTrouble(message(e)) } finally { setWorking(false) }
+    const kept: string[] = []
+    for (const file of list) {
+      try { kept.push(await keepPhoto(project, file, page.title || 'Site visit', page.photos.length + kept.length + 1)) }
+      catch (e) { onTrouble(message(e)) }
+    }
+    setWorking(false)
+    if (!kept.length) return
+    change({ photos: [...page.photos, ...kept] })
+    // One photograph just taken is asked what it shows, there and then. A handful brought in
+    // from the library are not each interrupted for.
+    if (kept.length === 1) setViewing({ path: kept[0], fresh: true })
   }
 
-  async function keepObservation() {
-    if (!naming) return
-    const title = naming.text.trim()
-    // A photograph with nothing said about it is a photograph, so it goes with the others.
-    if (!title) { change({ photos: [...page.photos, naming.path] }); setNaming(null); return }
-    try {
-      const row = buildObservation({
-        projectId: project.id, typeId: types[0]?.id ?? null, title,
-        detail: null, area: null, trade: null, status: 'open',
-        observedOn: page.visited_on, dueOn: null, photos: [naming.path],
-        sheetId: null, revisionId: null, region: null,
-      })
-      await saveObservation(row)
-      onObserved(row)
-      setNaming(null)
-    } catch (e) { onTrouble(message(e)) }
+  const label = (path: string) => page.photo_labels?.[path] ?? ''
+  const setLabel = (path: string, text: string) => {
+    const next = { ...(page.photo_labels ?? {}) }
+    if (text.trim()) next[path] = text.trim(); else delete next[path]
+    change({ photo_labels: next })
   }
 
   const seen = visit ? onDay(observations, page.visited_on) : []
@@ -277,11 +300,11 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
   }
 
   if (exporting) {
-    const notes = writeSections(sections)
     const recorded = seen.length
-      ? `\n${sections.length + 1}. Observations recorded\n` + seen.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
+      ? `\n${(notes.match(/^\d+\.\s/gm)?.length ?? 0) + 1}. Observations recorded\n` + seen.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
       : ''
     const day = usDateOf(new Date(`${page.visited_on}T12:00:00`))
+    const who = page.names?.trim() ? page.names.trim() : null
     return (
       <article className="nb-paper nb-export">
         <div className="pad-head">
@@ -294,6 +317,7 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
             'fr.date': day,
             ...(page.visited_at ? { 'fr.time': clockTime(page.visited_at) } : {}),
             ...(page.weather ? { 'fr.weather': page.weather } : {}),
+            ...(who ? { 'fr.participants': who } : {}),
             'fr.observations': notes + recorded,
           }} />
         ) : (
@@ -301,6 +325,7 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
             'mn.date': day,
             ...(page.visited_at ? { 'mn.time': clockTime(page.visited_at) } : {}),
             ...(page.title ? { 'mn.title': page.title } : {}),
+            ...(who ? { 'mn.participants': who } : {}),
             'mn.notes': notes,
           }} />
         )}
@@ -308,120 +333,140 @@ function Page({ project, page, turn, observations, types, onObserved, onChanged,
     )
   }
 
+  const at = viewing ? page.photos.indexOf(viewing.path) : -1
+
   return (
-    <>
-      <article className={`nb-paper nb-page nb-turn-${turn}`}>
-        <div className="nb-holes" aria-hidden="true" />
-
-        <header className="nb-head">
-          {cover && <div className="nb-cover"><Thumb project={project} path={cover} /></div>}
-          <div className="nb-head-text">
-            <h1>{longDay(page.visited_on)}</h1>
-            <div className="nb-head-fields">
-              <input type="date" value={page.visited_on} aria-label="Day"
-                onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
-              <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
-                onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
-              {visit && (
-                <input className="nb-weather" defaultValue={page.weather ?? ''} placeholder="Weather" aria-label="Weather"
-                  onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
-              )}
-            </div>
-            <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
-              placeholder={visit ? 'What the visit was for' : 'Which meeting'}
-              onBlur={(e) => { if (e.target.value !== (page.title ?? '')) change({ title: e.target.value.trim() || null }) }} />
-          </div>
-        </header>
-
-        <div className="nb-body">
-          <section className="nb-notes" aria-label="Notes">
-            {sections.map((s, n) => (
-              <div className="nb-section" key={n}>
-                <input className="nb-heading" value={s.heading} aria-label="Category"
-                  onChange={(e) => editSection(n, { heading: e.target.value })} onBlur={() => saveNotes()} />
-                <Lines value={s.body} label={`Notes under ${s.heading}`} placeholder="Write here…"
-                  onChange={(v) => editSection(n, { body: v })} onDone={() => saveNotes()} />
-              </div>
-            ))}
-            <button className="nb-add" onClick={() => setSections((all) => [...all, { heading: 'New category', body: '' }])}>+ Category</button>
-          </section>
-
-          <aside className="nb-side">
-            <section className="nb-sketch">
-              <h2>Sketch</h2>
-              <button className="pad-thumb nb-pad" onClick={() => void draw()} aria-label="Open the sketch">
-                <PadStill marks={marks} rule={pad?.rule ?? 'grid'} ink={pad?.rule_ink ?? 40} />
-                {!marks.length && <span className="pad-thumb-empty muted small">Tap to draw or write by hand</span>}
-              </button>
-            </section>
-
-            {visit && (
-              <section>
-                <h2>Photos</h2>
-                <Photos project={project} paths={page.photos} about={page.title || 'Site visit'} editable
-                  cover={cover} onCover={(p) => change({ cover_photo: p })}
-                  onChange={(photos) => change({ photos })} onTrouble={onTrouble} />
-              </section>
-            )}
-
-            {visit && (
-              <section>
-                <h2>Observations</h2>
-                {!seen.length ? <p className="muted small">None on this day yet.</p> : (
-                  <ul className="nb-seen">
-                    {seen.map((o) => (
-                      <li key={o.id}>
-                        {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
-                        <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
-          </aside>
+    <article className={`nb-paper nb-page nb-turn-${turn}`}>
+      <section className="nb-z nb-z-head">
+        <h1>{longDay(page.visited_on)}</h1>
+        <div className="nb-head-fields">
+          <input type="date" value={page.visited_on} aria-label="Day"
+            onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
+          <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
+            onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
+          <input className="nb-weather" defaultValue={page.weather ?? ''} placeholder="Weather" aria-label="Weather"
+            onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
         </div>
-
-        <footer className="nb-foot">
-          <button className="primary" onClick={() => { saveNotes(); setExporting(true) }}>{BOOK[page.kind].exportAs}</button>
+        <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
+          placeholder={visit ? 'What the visit was for' : 'Which meeting'}
+          onBlur={(e) => { if (e.target.value !== (page.title ?? '')) change({ title: e.target.value.trim() || null }) }} />
+        <div className="nb-head-actions">
+          <button className="primary-lite" onClick={() => { if (notes !== (page.notes ?? '')) change({ notes }); setExporting(true) }}>{BOOK[page.kind].exportAs}</button>
           <button className="link danger-link" onClick={() => {
             if (!window.confirm('Tear this page out? Its sketch, photographs and observations are kept.')) return
             removeVisit(page.id).then(onRemoved).catch((e) => onTrouble(message(e)))
-          }}>Tear out this page</button>
-        </footer>
-      </article>
+          }}>Tear out</button>
+        </div>
+      </section>
+
+      {bar}
+      <section className="nb-z nb-z-names">
+        <h2>Names</h2>
+        <textarea className="nb-write" defaultValue={page.names ?? ''} aria-label="Who was there"
+          placeholder={'Who was there, one to a line\nName | Company'}
+          onBlur={(e) => { if (e.target.value !== (page.names ?? '')) change({ names: e.target.value.trim() || null }) }} />
+      </section>
+
+      <section className="nb-z nb-z-notes">
+        <div className="nb-z-top"><h2>Notes</h2><OutlineTools textarea={notesBox} value={notes} onChange={setNotes} /></div>
+        <textarea ref={notesBox} className="nb-write nb-outline" value={notes} aria-label="Typed notes"
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={() => { if (notes !== (page.notes ?? '')) change({ notes }) }} />
+      </section>
+
+      <section className="nb-z nb-z-sketch">
+        <div className="nb-z-top"><h2>Sketch</h2><button className="link" onClick={() => void draw()}>{marks.length ? 'Open' : 'Start'}</button></div>
+        <button className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
+          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} />
+          {!marks.length && <span className="nb-pad-empty">Tap to draw or write by hand</span>}
+        </button>
+      </section>
 
       {visit && (
-        <div className="nb-shutter">
-          {naming ? (
-            <form className="nb-naming" onSubmit={(e) => { e.preventDefault(); void keepObservation() }}>
-              <span className="nb-naming-thumb"><Thumb project={project} path={naming.path} /></span>
-              <input autoFocus value={naming.text} placeholder="What does it show?" enterKeyHint="done"
-                onChange={(e) => setNaming({ ...naming, text: e.target.value })} />
-              <button className="primary">{naming.text.trim() ? 'Keep' : 'Just the photo'}</button>
-            </form>
-          ) : (
-            <>
-              {/* One switch, then the camera: the choice is made before the photograph, with a
-                  thumb, and stays where it was left for the next one. */}
-              <div className={`nb-slide ${shot}`} role="radiogroup" aria-label="What the photograph is">
-                <button role="radio" aria-checked={shot === 'documentation'} onClick={() => setShot('documentation')}>Documentation</button>
-                <button role="radio" aria-checked={shot === 'observation'} onClick={() => setShot('observation')}>Observation</button>
-              </div>
-              <button className="nb-camera" disabled={working} onClick={() => camera.current?.click()}
-                aria-label={`Take a photograph as ${shot}`}>
-                {working ? <span className="nb-camera-wait" /> : (
-                  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M4 8h3l1.6-2.4h6.8L17 8h3v11H4V8Z" /><circle cx="12" cy="13.2" r="3.4" />
-                  </svg>
-                )}
-              </button>
-            </>
+        <section className="nb-z nb-z-photos">
+          <div className="nb-z-top">
+            <h2>Documentation photos{page.photos.length ? ` · ${page.photos.length}` : ''}</h2>
+            <span className="nb-z-do">
+              <button className="link" disabled={working} onClick={() => library.current?.click()}>Library</button>
+              <button className="primary-lite" disabled={working} onClick={() => camera.current?.click()}>{working ? 'Keeping…' : 'Take a photo'}</button>
+            </span>
+          </div>
+          {!page.photos.length ? <p className="nb-none">None yet.</p> : (
+            <div className="nb-gallery">
+              {page.photos.map((p) => (
+                <button key={p} className={`nb-shot${cover === p ? ' cover' : ''}`} onClick={() => setViewing({ path: p, fresh: false })}
+                  aria-label={label(p) || 'Photograph'}>
+                  <Thumb project={project} path={p} />
+                  {label(p) && <span className="nb-shot-label">{label(p)}</span>}
+                </button>
+              ))}
+            </div>
           )}
           <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void taken(e.target.files)} />
+          <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => void taken(e.target.files)} />
+        </section>
+      )}
+
+      {visit && (
+        <section className="nb-z nb-z-seen">
+          <div className="nb-z-top">
+            <h2>Observations{seen.length ? ` · ${seen.length}` : ''}</h2>
+            <button className="primary-lite" onClick={() => setObserving('new')}>New observation</button>
+          </div>
+          {!seen.length ? <p className="nb-none">None on this day yet.</p> : (
+            <ul className="nb-seen">
+              {seen.map((o) => (
+                <li key={o.id}>
+                  <button onClick={() => setObserving(o)}>
+                    {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
+                    <span className="nb-seen-text">
+                      <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
+                      <span className="muted small">{[STATUS_LABELS[o.status], o.area, o.trade].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {viewing && at >= 0 && (
+        <div className="nb-light" role="dialog" aria-label="Photograph" onClick={() => setViewing(null)}>
+          <div className="nb-light-in" onClick={(e) => e.stopPropagation()}>
+            <div className="nb-light-img"><Thumb project={project} path={viewing.path} /></div>
+            <div className="nb-light-row">
+              <button disabled={at <= 0} onClick={() => setViewing({ path: page.photos[at - 1], fresh: false })} aria-label="Previous photograph">‹</button>
+              <input key={viewing.path} autoFocus={viewing.fresh} defaultValue={label(viewing.path)} placeholder="What does it show?"
+                aria-label="Label" enterKeyHint="done"
+                onKeyDown={(e) => { if (e.key === 'Enter') { setLabel(viewing.path, e.currentTarget.value); setViewing(null) } }}
+                onBlur={(e) => { if (e.target.value.trim() !== label(viewing.path)) setLabel(viewing.path, e.target.value) }} />
+              <button disabled={at >= page.photos.length - 1} onClick={() => setViewing({ path: page.photos[at + 1], fresh: false })} aria-label="Next photograph">›</button>
+            </div>
+            <div className="nb-light-row nb-light-foot">
+              <span>{at + 1} of {page.photos.length}</span>
+              <button className={cover === viewing.path ? 'on' : ''} onClick={() => change({ cover_photo: viewing.path })}>{cover === viewing.path ? 'Cover' : 'Make cover'}</button>
+              <button onClick={() => {
+                const next = { ...(page.photo_labels ?? {}) }; delete next[viewing.path]
+                change({ photos: page.photos.filter((x) => x !== viewing.path), photo_labels: next }); setViewing(null)
+              }}>Remove</button>
+              <button onClick={() => setViewing(null)}>Done</button>
+            </div>
+          </div>
         </div>
       )}
-    </>
+
+      {observing && (
+        <div className="nb-light nb-sheet" role="dialog" aria-label="Observation" onClick={() => setObserving(null)}>
+          <div className="nb-sheet-in" onClick={(e) => e.stopPropagation()}>
+            <ObservationForm project={project} types={types} known={observations} day={page.visited_on}
+              existing={observing === 'new' ? undefined : observing}
+              onSaved={(o, another) => { onObserved(o); if (!another) setObserving(null) }}
+              onCancel={() => setObserving(null)} onTrouble={onTrouble} />
+          </div>
+        </div>
+      )}
+    </article>
   )
 }
 

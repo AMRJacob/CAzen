@@ -23,14 +23,18 @@ export interface SiteVisit {
   title: string | null
   weather: string | null
   notes: string | null
+  /** Who was there, one to a line: Name | Company | Email. */
+  names: string | null
   photos: string[]
+  /** What each photograph shows, keyed by its path. */
+  photo_labels: Record<string, string>
   cover_photo: string | null
   pad_id: string | null
   issued_id: string | null
   created_at: string
 }
 
-const COLUMNS = 'id, project_id, kind, visited_on, visited_at, title, weather, notes, photos, cover_photo, pad_id, issued_id, created_at'
+const COLUMNS = 'id, project_id, kind, visited_on, visited_at, title, weather, notes, names, photos, photo_labels, cover_photo, pad_id, issued_id, created_at'
 
 /** The table arrives with migration 0033; until it has been run the page shows what it did before. */
 export class VisitsNotSetUp extends Error {
@@ -55,7 +59,7 @@ const clock = () => {
 }
 
 /** The visit as it starts: now, with the notes already carrying the template's headings. */
-export function buildVisit(projectId: string, kind: VisitKind = 'visit'): SiteVisit {
+export function buildVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null): SiteVisit {
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
@@ -65,7 +69,9 @@ export function buildVisit(projectId: string, kind: VisitKind = 'visit'): SiteVi
     title: null,
     weather: null,
     notes: starterFor(kind),
+    names,
     photos: [],
+    photo_labels: {},
     cover_photo: null,
     pad_id: null,
     issued_id: null,
@@ -122,8 +128,9 @@ export function shortDay(iso: string): string {
 }
 
 /** Start a visit now and hand it back. */
-export async function startVisit(projectId: string, kind: VisitKind = 'visit'): Promise<SiteVisit> {
-  const v = buildVisit(projectId, kind)
+/** `names` carries the last page's people forward: it is mostly the same people every time. */
+export async function startVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null): Promise<SiteVisit> {
+  const v = buildVisit(projectId, kind, names)
   await saveVisit(v)
   return v
 }

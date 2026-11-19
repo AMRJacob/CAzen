@@ -67,7 +67,7 @@ function Books() {
   const { current } = useProject()
   return (
     <section>
-      <PageTitle>Field notes</PageTitle>
+      <PageTitle>Notebooks</PageTitle>
       <p className="lead">
         {current ? <>{current.number} {current.name} · </> : null}
         Open a book and turn to today’s page.

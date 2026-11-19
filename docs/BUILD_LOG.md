@@ -11,6 +11,41 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 12:50 CST
+
+**Notebooks, to Jacob's drawn layout.** He marked up a screenshot: the menu area is called
+*Notebooks*; a book opens as a borderless full-screen page; one page per day or meeting, laid
+out as — day and weather top left, names top right, then typed notes | sketch | documentation
+photos over observations. He also asked for the binder holes to go, and for *New page* to live
+in a collapsible corner menu like the phone's.
+
+- `Page` in `src/components/Notebook.tsx` is a CSS grid in those areas (`.nb-page`), filling the
+  screen; each part scrolls inside itself. Below 760 px it reads top to bottom instead. A
+  meeting page is head | names over notes | sketch.
+- Typed notes are one outline field with the existing `OutlineTools` (promote, demote, bullet,
+  number, bold, italic, underline, caps), starting from the template's headings. The
+  category-per-box editor from the previous checkpoint is gone; `parseSections` /
+  `writeSections` remain in `visits.ts`, unused.
+- Sketch opens the pad full screen. Photos are a gallery: thumbnails with their labels, a
+  click-through viewer with previous/next, *Take a photo* and *Library*; a photograph just taken
+  opens with its label box focused. Labels are `site_visits.photo_labels` (path → text).
+- Observations use the same `ObservationForm` as the sheets and the Observations list, opened
+  over the page, dated to the page's day. The Documentation | Observation camera slide from the
+  previous checkpoint is removed — each part now has its own way in.
+- Names is `site_visits.names`, one to a line, carried forward from the last page and exported
+  as participants.
+- `BookMenu`: the ensō in the corner opens to New page, Contents, Back, Forward, Close, and
+  puts itself away.
+- Migration `0034_notebook_names_and_photo_labels` (two nullable/defaulted columns) applied to
+  production with Jacob's confirmation.
+
+Verified with `checks/t_notebook.py` on desk and phone: paper flush to all four screen edges;
+the five parts present (three for a meeting); names, typed notes, two labelled photos and an
+observation saved; label box focused after a photo; gallery steps between photos; export
+carries notes, observation and names. Not verified on the iPhone or with a real camera.
+
+---
+
 # Checkpoint — 2026-11-19, 12:10 CST
 
 **Field notes is a notebook.** Jacob's direction, replacing the four-zone visit screen built two

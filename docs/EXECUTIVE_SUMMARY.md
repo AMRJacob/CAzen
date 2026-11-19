@@ -41,7 +41,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Setting a contract up in the app, with a pasted schedule of values | Live (2026-11-19) |
 | Construction schedule against pay applications | Live |
 | Schedule read from the contractor's PDF (printed or scanned); activities tied to pay lines by name | Live (2026-11-19); not yet tried on a real scan |
-| Field notes and meeting notes as notebooks: a page a visit, categories from the template, sketch, camera switch for documentation or observation; report exported from the page | Live (2026-11-19); not yet used on the iPhone |
+| Notebooks (field notes and meeting notes): a full-screen page a day — names, typed notes, sketch, labelled photo gallery, observations; report exported from the page | Live (2026-11-19); not yet used on the iPhone |
 | Contract library | Live |
 | Submittal cover sheet | Live |
 | Firm branding in Settings; Requests & issues list | Live |

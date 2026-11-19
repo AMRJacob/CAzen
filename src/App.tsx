@@ -60,7 +60,7 @@ const nav: { label: string; items: { to: string; label: string }[] }[] = [
     ],
   },
   {
-    label: 'Field notes',
+    label: 'Notebooks',
     items: [
       { to: '/field-notes/reports', label: 'Field notes' },
       { to: '/field-notes/meetings', label: 'Meeting notes' },

@@ -34,7 +34,7 @@ const I = (d: ReactElement) => (
 const SPOTS: Spot[] = [
   { to: '/documents', label: 'Drawings', icon: I(<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /></>) },
   { to: '/manual', label: 'Project manual', icon: I(<><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V4Z" /><path d="M9 8h6M9 12h6" /></>) },
-  { to: '/field-notes', label: 'Field notes', icon: I(<><path d="M8 4h9a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" /><path d="M10 9h5M10 13h5" /><path d="M6 4v16" /></>) },
+  { to: '/field-notes', label: 'Notebooks', icon: I(<><path d="M8 4h9a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" /><path d="M10 9h5M10 13h5" /><path d="M6 4v16" /></>) },
 ]
 
 const MORE: Spot[] = [
