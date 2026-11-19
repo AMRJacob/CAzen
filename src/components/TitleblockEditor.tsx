@@ -112,11 +112,16 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
     const el = scroller.current
     if (!el) return
     const wheel = (e: WheelEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return
+      // The wheel zooms where the pointer is, as it does on a sheet. A trackpad's two-finger
+      // swipe — small steps, or sideways — is left to move the sheet, and its pinch (which
+      // arrives with Ctrl) zooms.
+      const lines = e.deltaMode === 1
+      const swipe = !e.ctrlKey && !e.metaKey && !lines && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40)
+      if (swipe) return
       e.preventDefault()
       const pr = pageEl.current!.getBoundingClientRect(), sr = el.getBoundingClientRect()
       const fx = (e.clientX - pr.left) / pr.width, fy = (e.clientY - pr.top) / pr.height
-      zoomAround(zoom * Math.exp(-e.deltaY * 0.0025), fx, fy, e.clientX - sr.left, e.clientY - sr.top)
+      zoomAround(zoom * Math.exp(-(lines ? e.deltaY * 16 : e.deltaY) * 0.0025), fx, fy, e.clientX - sr.left, e.clientY - sr.top)
     }
     el.addEventListener('wheel', wheel, { passive: false })
     return () => el.removeEventListener('wheel', wheel)
@@ -272,7 +277,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
             <button type="button" onClick={() => zoomAround(1, 0.5, 0.5)}>Fit</button>
             <button type="button" className="primary-lite" onClick={toTitleBlock}>Title block</button>
           </div>
-          <p className="muted small tb-hint">Ctrl + scroll (or pinch) to zoom where you point; scroll to move around; hold Space and drag to pan.</p>
+          <p className="muted small tb-hint">Scroll the wheel to zoom where you point. To move around, press the wheel and drag, or hold Space and drag.</p>
           <div className="actions">
             <button type="button" className="primary" onClick={save} disabled={busy || !regions.number}>{busy ? 'Saving…' : 'Save template'}</button>
             <button type="button" onClick={onCancel}>Cancel</button>
@@ -281,7 +286,7 @@ export function TitleblockEditor({ firmId, pages, initialPage = 0, template, onS
         </div>
 
         <div className="tb-scroll" ref={scroller}>
-          <div className={`tb-page ${spaceDown ? 'panning' : ''}`} ref={pageEl} style={{ width, height }} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+          <div className={`tb-page ${spaceDown ? 'panning' : ''}`} ref={pageEl} onMouseDown={(e) => { if (e.button === 1) e.preventDefault() /* no browser auto-scroll: the wheel pressed drags the sheet */ }} style={{ width, height }} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
             {img ? <img src={img} alt="" draggable={false} style={{ width, height }} /> : <p className="muted">Rendering sheet…</p>}
             <canvas ref={sharp} className="tb-sharp" />
             {KEYS.map((k) => regions[k] && (

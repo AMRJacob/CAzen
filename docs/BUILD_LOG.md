@@ -36,6 +36,12 @@ applies to every iPhone, not the Duo alone. The setting is read when the icon is
 an icon added from Chrome on iOS honours this setting the way one added from Safari does was
 not looked up.
 
+Jacob, 16:36: **the wheel zooms in the title block template editor**, about the pointer, and
+the wheel pressed down drags the sheet (it was Ctrl + scroll to zoom; plain scroll moved the
+sheet). Space-and-drag still pans; a trackpad's swipe still moves the sheet and its pinch
+zooms. The hint under the zoom buttons says so. `t_template.py` wheels in over the title
+block and middle-drags.
+
 ---
 
 # Checkpoint — 2026-11-19, 16:30 CST
