@@ -1,6 +1,6 @@
 # CAzen — Executive Summary
 
-The living version of this summary is the Claude doc "AMR CA Platform — Executive Summary". This copy is kept in the repo for reference (last updated 2026-10-29).
+This file in the repository is the source; the project-knowledge copy "CAzen Executive Summary" is written from it (last updated 2026-11-19).
 
 ## Purpose
 
