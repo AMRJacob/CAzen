@@ -30,6 +30,12 @@ delete things, but only after there's a warning that it was created by someone e
 - "Things" was taken as markups on sheets — the only place the database held deletion to its
   author. Pad sketches, notebook pages and observations had no such rule and have no warning.
 
+Jacob, 15:37: **Mark up in the phone's ⋯ menu is centred** (it was laid out as a flex box by
+the "shown only when narrow" rule, so its words sat at the left; measured, every button's
+label is now on its button's centre). **Add link is gone** from the menu on phone and desk.
+The code that draws and follows links is left in place: sheet numbers on a drawing still link
+by themselves. There were no hand-drawn links in the database, so nothing is stranded.
+
 ---
 
 # Checkpoint — 2026-11-19, 15:28 CST

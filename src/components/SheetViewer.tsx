@@ -649,9 +649,6 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 disabled={!sheet.sheetId} title={sheet.sheetId ? undefined : 'Open this sheet from the register to mark it up'}>
                 {tool !== null ? 'Done marking up' : 'Mark up'}
               </button>
-              <button className={linkMode ? 'on' : ''} onClick={() => { setLinkMode(!linkMode); setPending(null); setMore(false) }}>
-                {linkMode ? 'Done linking' : 'Add link'}
-              </button>
               <button disabled={!sheet.sheetId}
                 title={sheet.sheetId ? 'Correct this sheet’s number, title or filing' : 'Open this sheet from the register to change it'}
                 onClick={() => {
