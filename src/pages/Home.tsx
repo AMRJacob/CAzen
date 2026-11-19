@@ -7,7 +7,8 @@ import type { Project } from '../lib/types'
 import { ProjectAdmin } from '../components/ProjectAdmin'
 import { ProjectFolder } from '../components/ProjectFolder'
 import { FieldCopy } from '../components/FieldCopy'
-import { heldAll } from '../lib/offline/store'
+import { heldAll, release, type Held } from '../lib/offline/store'
+import { FIELD_EVENT, isStale, checkedAt, keepCurrent, type FieldNews } from '../lib/offline/keepCurrent'
 import { plans, takeToField, type Plan, type Progress, type Scope } from '../lib/offline/download'
 import { drain, pending } from '../lib/offline/outbox'
 import { message } from '../lib/errors'
@@ -20,12 +21,15 @@ export default function Home() {
   const [editing, setEditing] = useState<string | null>(null)
   // On a phone the row is the project and there is no Edit, so taking it to the field — which is
   // decided on the phone — has its own way in, and a held project says so where it is listed.
-  const [fielding, setFielding] = useState<string | null>(null)
   const [heldIds, setHeldIds] = useState<Set<string>>(new Set())
+  const [notes, setNotes] = useState<Record<string, Held>>({})
   const lookHeld = useCallback(() => {
-    heldAll().then((h) => setHeldIds(new Set(h.map((x) => x.project_id)))).catch(() => {})
+    heldAll().then((h) => {
+      setHeldIds(new Set(h.map((x) => x.project_id)))
+      setNotes(Object.fromEntries(h.map((x) => [x.project_id, x])))
+    }).catch(() => {})
   }, [])
-  useEffect(() => { lookHeld() }, [lookHeld, fielding, editing])
+  useEffect(() => { lookHeld() }, [lookHeld, editing])
 
   // What each project still has to send back. Hatched until it is none; looked at every few
   // seconds while this page is open, and the queue is given a push each time in case the
@@ -50,6 +54,21 @@ export default function Home() {
   // come down at once and the row fills as they do. Held again once it is on the device, it
   // opens what can be done with the copy — refresh it, take every revision, let it go.
   const [loading_, setLoading_] = useState<Record<string, Progress>>({})
+  // The copies on this device are kept current without being asked; this is that work showing.
+  useEffect(() => {
+    const heard = (e: Event) => {
+      const news = (e as CustomEvent<FieldNews>).detail
+      if (news.done) { setLoading_((l) => { const n = { ...l }; delete n[news.project_id]; return n }); lookHeld() }
+      else if (news.progress) setLoading_((l) => ({ ...l, [news.project_id]: news.progress! }))
+    }
+    window.addEventListener(FIELD_EVENT, heard)
+    return () => window.removeEventListener(FIELD_EVENT, heard)
+  }, [lookHeld])
+  // "Checked yesterday" becomes "not up to date" by the clock alone, so the clock is looked at.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t) }, [])
+  /** A held project being asked about: update it, take more of it, or let it go. */
+  const [keeping, setKeeping] = useState<Project | null>(null)
   const [trouble, setTrouble] = useState<string | null>(null)
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
   const pressed = useRef(0)
@@ -58,7 +77,7 @@ export default function Home() {
   // A hold asks first: it says how much would come down, and nothing does until it is chosen.
   async function take(p: Project) {
     if (loading_[p.id]) return
-    if (heldIds.has(p.id)) { setFielding(fielding === p.id ? null : p.id); return }
+    if (heldIds.has(p.id)) { setKeeping(p); return }
     setTrouble(null)
     setAsking({ project: p, plans: null })
     try { const list = await plans(p.id); setAsking((a) => (a?.project.id === p.id ? { project: p, plans: list } : a)) }
@@ -127,6 +146,36 @@ export default function Home() {
           </div>
         </div>
       )}
+      {keeping && (
+        <div className="take-ask" role="dialog" aria-label={`${keeping.name} on this device`}
+          onClick={() => { if (Date.now() - pressed.current > 800) setKeeping(null) }}>
+          <div className="take-card" onClick={(e) => e.stopPropagation()}>
+            <h3>{keeping.name} is on this device</h3>
+            <p className="muted small">
+              {notes[keeping.id] ? `Last matched to the office ${ago(checkedAt(notes[keeping.id]), now)}. ` : ''}
+              It is brought up to date by itself whenever CAzen is open with signal.
+              {waiting[keeping.id] ? ` ${waiting[keeping.id]} ${waiting[keeping.id] === 1 ? 'change' : 'changes'} made here have not been sent yet; removing the drawings does not lose them.` : ''}
+            </p>
+            <div className="take-choices">
+              <button className="primary" onClick={() => { const p = keeping; setKeeping(null); void keepCurrent(true).then(lookHeld).catch((e) => setTrouble(`${p.name}: ${message(e)}`)) }}>
+                <strong>Update it now</strong><span>Brings down anything issued since</span>
+              </button>
+              {notes[keeping.id]?.scope === 'current' && (
+                <button onClick={() => { const p = keeping; setKeeping(null); void download(p, 'all') }}>
+                  <strong>Download every revision</strong><span>Earlier issues of each sheet as well</span>
+                </button>
+              )}
+              <button className="take-remove" onClick={() => {
+                const p = keeping; setKeeping(null)
+                release(p.id).then(lookHeld).catch((e) => setTrouble(`${p.name}: ${message(e)}`))
+              }}>
+                <strong>Remove from this device</strong><span>Frees the space; the project itself is untouched</span>
+              </button>
+            </div>
+            <button className="link" onClick={() => setKeeping(null)}>Close</button>
+          </div>
+        </div>
+      )}
       {showNew && <ProjectForm onCreated={async (p) => { await reload(); setShowNew(false); open(p) }} />}
 
       {loading ? (
@@ -135,14 +184,14 @@ export default function Home() {
         <div className="card muted">No projects yet. Create one to start uploading drawings.</div>
       ) : (
         <>
-        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device with nothing left to send; hatched means something written here — notes, photographs, markups — has not reached the office yet.</p>
+        <p className="muted small p-hint">Press and hold a project to be asked about taking it to the field. A solid colour means it is on this device, matched to the office within the last day, with nothing left to send. Hatched means it has not been matched in that time, or something written here has not reached the office yet. Hold it again to update it or remove it from this device.</p>
         <table className="projects">
           <thead><tr><th>No.</th><th>Name</th><th>Owner</th><th>Contractor</th><th /><th className="p-field" /></tr></thead>
           <tbody>
             {projects.flatMap((p) => [
               // The whole row opens the project; on a phone it becomes one tappable block.
               <tr key={p.id}
-                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}`}
+                className={`opens${p.id === current?.id ? ' selected' : ''}${waiting[p.id] || (notes[p.id] && isStale(notes[p.id], now)) ? ' p-unsynced' : heldIds.has(p.id) ? ' p-held' : ''}${loading_[p.id] ? ' p-loading' : ''}`}
                 style={loading_[p.id] ? { '--p-fill': `${loading_[p.id].total ? Math.round(loading_[p.id].done / loading_[p.id].total * 100) : 3}%` } as React.CSSProperties : undefined}
                 tabIndex={0} role="button" aria-label={`Open ${p.number} ${p.name}`}
                 onPointerDown={(e) => holdStart(e, p)} onPointerMove={holdMove} onPointerUp={holdEnd} onPointerCancel={holdEnd} onPointerLeave={holdEnd}
@@ -161,14 +210,14 @@ export default function Home() {
                 <td className="p-field p-state">
                   {loading_[p.id]
                     ? `Bringing it to this device… ${loading_[p.id].total ? `${loading_[p.id].done} of ${loading_[p.id].total} sheets` : ''}`
-                    : waiting[p.id]
-                      ? `${heldIds.has(p.id) ? 'On this device · ' : ''}${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} still to send`
-                      : heldIds.has(p.id) ? 'On this device · everything sent' : ''}
+                    : [
+                        notes[p.id] && (isStale(notes[p.id], now)
+                          ? `On this device · not updated since ${ago(checkedAt(notes[p.id]), now)}`
+                          : waiting[p.id] ? 'On this device' : 'On this device · up to date'),
+                        waiting[p.id] && `${waiting[p.id]} ${waiting[p.id] === 1 ? 'change' : 'changes'} still to send`,
+                      ].filter(Boolean).join(' · ')}
                 </td>
               </tr>,
-              fielding === p.id && editing !== p.id && (
-                <tr key={p.id + '-field'} className="p-field-row"><td colSpan={6}><FieldCopy project={p} /></td></tr>
-              ),
               editing === p.id && (
                 <tr key={p.id + '-edit'}><td colSpan={6}><ProjectForm project={p} onCreated={async () => { await reload(); setEditing(null) }} /><ProjectFolder project={p} /><FieldCopy project={p} /><ProjectAdmin project={p} isAdmin={isAdmin} /></td></tr>
               ),
@@ -179,6 +228,18 @@ export default function Home() {
       )}
     </section>
   )
+}
+
+/** "today at 2:05 PM", "yesterday", "3 weeks ago" — how long since a copy was matched. */
+function ago(then: number, now: number): string {
+  const mins = Math.round((now - then) / 60_000)
+  if (mins < 2) return 'just now'
+  if (mins < 60) return `${mins} minutes ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return hours === 1 ? 'an hour ago' : `${hours} hours ago`
+  const days = Math.round(hours / 24)
+  if (days < 14) return days === 1 ? 'yesterday' : `${days} days ago`
+  return `${Math.round(days / 7)} weeks ago`
 }
 
 /** Create a project, or edit one when `project` is given. Everything here autofills the forms. */

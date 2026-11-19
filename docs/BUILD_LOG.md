@@ -11,6 +11,46 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:49 CST
+
+**A project on a phone keeps itself current, says when it is not, and can be removed** (Jacob,
+14:45: someone may have downloaded weeks ago and go to a site meeting with an old version;
+updating must be automatic; a download must be removable; hatched if downloaded but not
+connected and updated).
+
+- `src/lib/offline/keepCurrent.ts`, started from `main.tsx`. Whenever CAzen is open with
+  signal — 2.5 s after it starts, when the browser reports it is back online, when the app is
+  brought to the front, and every 15 minutes — each project held on the device is checked
+  against the server (`behind`). If any current sheet is missing, or the last full pull was
+  over 6 hours ago, the same routine as a download runs (new sheets fetched, superseded ones
+  dropped for a "current sheets" copy, rows and notebooks pulled again). Otherwise the copy is
+  only stamped as checked. Not asked about again within 10 minutes.
+- It does not run when: signed out; anything written on the device for that project is still
+  unsent (the pull would replace those rows on screen — the queue is pushed first); or the
+  server answers with no sheets for a project the device holds sheets of (read as a lapsed
+  permission or bad connection, not as a job whose drawings were deleted).
+- **It cannot run while the app is closed.** A web app is given no way to. What it does instead
+  is say so:
+- **Hatched now also means "not matched to the office in the last 24 hours"** (`STALE`, one
+  constant). The row reads "On this device · not updated since 3 weeks ago". Solid means
+  matched within the day and nothing waiting to send. The 24 hours is my choice; Jacob gave no
+  figure.
+- `Held.checked` records when a copy was last matched. Copies made before today have none and
+  go by their download time.
+- **Holding a project that is already on the device** opens a sheet: when it was last matched,
+  *Update it now*, *Download every revision* (if only current sheets are held), *Remove from
+  this device*. Removing clears its drawings and rows; changes not yet sent, unsent photographs
+  and notebook pages stay. The panel that used to open under the row on a phone is gone (it is
+  still under Edit on a desk).
+
+`checks/t_keep.py`, phone size: download → solid "up to date"; copy aged three weeks, a new
+sheet and a new revision issued, app reopened with no signal → hatched "not updated since 3
+weeks ago"; signal back, nothing pressed → both new files fetched, the superseded one dropped,
+solid; hold → the three choices; remove → no files, sheets or held note left. `t_hold` and
+`t_offline_notes` still pass. Not tried on the iPhone.
+
+---
+
 # Checkpoint — 2026-11-19, 14:39 CST
 
 **Notebooks work with no signal** (Jacob: "I need all field notes, meeting notes, etc to be

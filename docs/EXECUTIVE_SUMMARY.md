@@ -56,6 +56,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | File storage on Cloudflare R2, with copies to the project's CA folder | Live, prototype (needs the Cloudflare setup in docs/SETUP.md) |
 | Field mode: take a project to the field, work with no signal, changes sent on return | Live; the app itself now opens with no signal (2026-11-19). Awaiting a check on the iPhone |
 | Notebooks with no signal: pages, typed notes, photographs, sketches and attendees kept on the device and sent when it is back; project list hatched until they are | Live (2026-11-19); checked in a test browser, not yet on the iPhone |
+| Downloaded projects update themselves whenever the app is open with signal; hatched when not matched to the office within a day; removable from the device by holding the project | Live (2026-11-19); checked in a test browser, not yet on the iPhone |
 | Offline search across sheets | Planned |
 | Submittal register, resubmittals, consultant routing | Planned |
 | AI access to project content | Planned |

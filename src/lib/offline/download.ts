@@ -193,7 +193,7 @@ export async function takeToField(
 
   const note: Held = {
     key: `held:${project.id}`, project_id: project.id, scope,
-    at: Date.now(), files: done, bytes,
+    at: Date.now(), files: done, bytes, checked: Date.now(),
   }
   await put('meta', note)
   return note

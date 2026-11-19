@@ -2606,3 +2606,5 @@ table.sets.sizable th:nth-child(6) { width: 170px; }
 .take-choices { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .take-choices button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; text-align: left; border-radius: 12px; }
 .take-choices button span { font-size: 13px; opacity: 0.8; }
+
+.take-choices button.take-remove { color: #a23a2a; border-color: #e3c4bd; background: transparent; }

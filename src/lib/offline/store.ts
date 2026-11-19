@@ -157,6 +157,8 @@ export interface Held {
   at: number
   files: number
   bytes: number
+  /** When it was last confirmed to match the server; absent on a copy made before this was kept. */
+  checked?: number
 }
 
 export const heldKey = (projectId: string) => `held:${projectId}`
