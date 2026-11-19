@@ -2401,3 +2401,7 @@ body:has(.nb) .phone-nav { display: none; }
 /* The editor's Delete was red words on a red button — two rules each right alone. */
 .palette button.danger { background: var(--panel); color: var(--danger); border-color: #e6c4c4; }
 .palette button.danger:hover:not(:disabled) { background: #fbeeee; }
+/* Read by someone who cannot edit: no tools column, so the page takes the wide column it is
+   sized for instead of being squeezed into the tools' 150 px. */
+.editor.readonly { grid-template-columns: minmax(0, 1fr) 260px; }
+@media (max-width: 900px) { .editor.readonly { grid-template-columns: 1fr; } }

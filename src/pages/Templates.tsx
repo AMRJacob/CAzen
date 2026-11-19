@@ -244,7 +244,7 @@ export default function Templates() {
         ))}
       </div>
 
-      <div className="editor">
+      <div className={`editor${isAdmin ? "" : " readonly"}`}>
         {isAdmin && (
           <aside className="palette">
             <div className="palette-title">Add</div>

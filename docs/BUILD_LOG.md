@@ -28,6 +28,12 @@ from it.
   a PR twice once it is rolled in. **This split is my reading**; Jacob asked only for "a total
   cost and time". Totals are over the whole project, not the filter.
 - `checks/t_reg.py`.
+- **Form templates, seen by someone who is not an admin** (Jacob's screenshot, 12:03): the page
+  was squeezed into the 150 px tools column and the options overlapped it, because the grid
+  kept three columns after the tools column was left out. `.editor.readonly` gives it two.
+  Never seen before because every check signed in as the owner. The database shows why he saw
+  it: the account signed in at 11:58 is a second address of his with the firm role `member`;
+  the owner is his AMR address. Also fixed: the editor's Delete label was red on red.
 
 ---
 
