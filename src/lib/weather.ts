@@ -109,3 +109,33 @@ export function momentOf(usDate: string, time: string): Date | null {
   const when = new Date(Number(d[3]), Number(d[1]) - 1, Number(d[2]), hour, min)
   return Number.isNaN(+when) ? null : when
 }
+
+
+/** How far apart two points are, in metres. */
+export function metresBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const rad = Math.PI / 180, R = 6_371_000
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/**
+ * A place, in the words a report would use: number and street, then the town. From
+ * OpenStreetMap, the same source the project's own address search uses. Null when it can't say.
+ */
+export async function placeAt(lat: number, lon: number, signal?: AbortSignal): Promise<string | null> {
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse')
+    url.searchParams.set('format', 'jsonv2')
+    url.searchParams.set('lat', String(lat))
+    url.searchParams.set('lon', String(lon))
+    url.searchParams.set('zoom', '18')
+    const res = await fetch(url, { signal, headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const a = (await res.json())?.address ?? {}
+    const street = [a.house_number, a.road].filter(Boolean).join(' ')
+    const town = a.city ?? a.town ?? a.village ?? a.hamlet ?? a.county ?? ''
+    const place = [a.building ?? a.amenity ?? a.office ?? '', street, [town, a.state].filter(Boolean).join(', ')].filter(Boolean)
+    return place.length ? place.join('\n') : null
+  } catch { return null }
+}

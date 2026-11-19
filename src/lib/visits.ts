@@ -22,6 +22,8 @@ export interface SiteVisit {
   visited_at: string | null
   title: string | null
   weather: string | null
+  /** Where it was, as the report should say it. Absent on a database without the column yet. */
+  location?: string | null
   notes: string | null
   /** Who was there, one to a line: Name | Company | Email. */
   names: string | null
@@ -45,12 +47,26 @@ const notThere = (e: unknown): boolean => {
   return m?.code === '42P01' || m?.code === 'PGRST205' || /site_visits.*(does not exist|schema cache)|Could not find the table/i.test(m?.message ?? '')
 }
 
+/**
+ * Whether pages can carry a location. The column arrives with migration 0036; until it has been
+ * run, asking for it by name would fail the whole list — so it is asked about once, on its own,
+ * and the rest of the app goes by the answer.
+ */
+let locationKnown: boolean | null = null
+export const canHoldLocation = () => locationKnown === true
+async function lookForLocation(): Promise<void> {
+  if (locationKnown !== null) return
+  const { error } = await db().from('site_visits').select('location').limit(1)
+  locationKnown = !error
+}
+
 export async function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisit[]> {
-  const { data, error } = await db().from('site_visits').select(COLUMNS)
+  await lookForLocation().catch(() => { locationKnown = false })
+  const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : ''))
     .eq('project_id', projectId).eq('kind', kind)
     .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
   if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }
-  return (data ?? []) as SiteVisit[]
+  return (data ?? []) as unknown as SiteVisit[]
 }
 
 const clock = () => {
@@ -59,7 +75,7 @@ const clock = () => {
 }
 
 /** The visit as it starts: now, with the notes already carrying the template's headings. */
-export function buildVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null): SiteVisit {
+export function buildVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null, location: string | null = null): SiteVisit {
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
@@ -68,6 +84,7 @@ export function buildVisit(projectId: string, kind: VisitKind = 'visit', names: 
     visited_at: clock(),
     title: null,
     weather: null,
+    ...(locationKnown ? { location } : {}),
     notes: starterFor(kind),
     names,
     photos: [],
@@ -129,8 +146,8 @@ export function shortDay(iso: string): string {
 
 /** Start a visit now and hand it back. */
 /** `names` carries the last page's people forward: it is mostly the same people every time. */
-export async function startVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null): Promise<SiteVisit> {
-  const v = buildVisit(projectId, kind, names)
+export async function startVisit(projectId: string, kind: VisitKind = 'visit', names: string | null = null, location: string | null = null): Promise<SiteVisit> {
+  const v = buildVisit(projectId, kind, names, location)
   await saveVisit(v)
   return v
 }

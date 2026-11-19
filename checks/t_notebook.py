@@ -11,7 +11,11 @@ def visits(req):
 people=[]
 def post_person(req):
     people.append(json.loads(req.post_data)); return []
-extra={'project_people':lambda r: sorted(people,key=lambda p:p['name']),'POST:project_people':post_person,'observations':lambda r: state['obs'],'POST:observations':post_obs,'observation_types':[{'id':T1,'firm_id':FIRM,'code':'N','name':'Note','position':0,'on_punch_list':False}],
+OTHER=[{'id':'0'*8+'-0000-4000-8000-00000000000%d'%i,'project_id':'99999999-9999-4999-8999-999999999999','name':n,'company':c,'phone':None,'email':None} for i,(n,c) in enumerate([('Dana Rep','Owner LLC'),('Lee Inspector','City')])]
+def ppl(r):
+    if 'project_id=neq' in r.url: return OTHER
+    return sorted(people,key=lambda p:p['name'])
+extra={'project_people':ppl,'POST:project_people':post_person,'observations':lambda r: state['obs'],'POST:observations':post_obs,'observation_types':[{'id':T1,'firm_id':FIRM,'code':'N','name':'Note','position':0,'on_punch_list':False}],
  'site_visits':visits,'POST:site_visits':post_visit}
 def run(kw,name):
     ctx=b.new_context(**kw, geolocation={'latitude':34.7465,'longitude':-92.2896}, permissions=['geolocation']); install(ctx,extra); signed_in(ctx)
@@ -23,6 +27,7 @@ def run(kw,name):
         else: body={'features':[{'properties':{'timestamp':time.strftime('%Y-%m-%dT%H:%M:%S+00:00',time.gmtime()),'textDescription':'Mostly Sunny','temperature':{'value':14.4}}}]}
         route.fulfill(status=200,content_type='application/json',body=json.dumps(body))
     ctx.route(re.compile(r'https://api\.weather\.gov/.*'),wx)
+    ctx.route(re.compile(r'https://nominatim\.openstreetmap\.org/reverse.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'address':{'house_number':'201','road':'E Markham St','city':'Little Rock','state':'Arkansas'}})))
     def patch(route):
         req=route.request
         if req.method=='PATCH':
@@ -39,22 +44,24 @@ def run(kw,name):
     jpg=open('site.jpg','rb').read()
     ctx.route(re.compile(r'.*/blob/x'), lambda r: r.fulfill(status=200,content_type='image/jpeg',body=jpg if r.request.method=='GET' else b''))
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes'); pg.wait_for_selector('.nb-tome')
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.goto(BASE+'#/field-notes'); pg.wait_for_selector('main .nb-tome')
     pg.screenshot(path='nb_shelf_%s.png'%name)
-    pg.click('.nb-tome-fn'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(500); pg.screenshot(path='nb_contents_%s.png'%name)
+    pg.click('main .nb-tome-fn'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(500); pg.screenshot(path='nb_contents_%s.png'%name)
     pg.click('.nb-menu-mark'); pg.wait_for_timeout(350); pg.screenshot(path='nb_menu_%s.png'%name); pg.click('.nb-menu-spot:has-text("New page")'); pg.wait_for_selector('.nb-page')
     pg.wait_for_timeout(600)
     box=pg.evaluate("(()=>{const r=document.querySelector('.nb-paper').getBoundingClientRect();return [r.left,r.top,innerWidth-r.right,innerHeight-r.bottom]})()")
     print(name,'page:',pg.inner_text('.nb-page h1'),'| paper to screen edges:',box,'| zones:',pg.evaluate("[...document.querySelectorAll('.nb-z h2')].map(h=>h.textContent)"))
     pg.fill('.nb-title','OAC walk, level 2'); pg.keyboard.press('Tab')
     pg.wait_for_function("document.querySelector('.nb-weather').value!==''",timeout=8000)
+    print('  visit location starts as:',repr(pg.input_value('.nb-location')))
     print('  weather:',repr(pg.input_value('.nb-weather')),'| looked up at',[u.split('/points/')[1] for u in asked if '/points/' in u][:1])
-    pg.click('.nb-z-names button:has-text("Add names")')
+    pg.click('.nb-z-names button:has-text("Add name")')
     if not people:
         for nm,c,ph,em in [('Pat Owner','Owner LLC','501-555-0101','pat@owner.org'),('Sam Super','Builder Inc','501-555-0102','sam@builder.com')]:
-            pg.fill('.nb-person-new input[placeholder=Name]',nm); pg.fill('.nb-person-new input[placeholder=Company]',c); pg.fill('.nb-person-new input[placeholder=Phone]',ph); pg.fill('.nb-person-new input[placeholder=Email]',em); pg.click('.nb-person-new button'); pg.wait_for_timeout(250)
-    else:
-        print('  directory offers:',pg.evaluate("[...document.querySelectorAll('.nb-person-name')].map(e=>e.textContent)")); pg.click('.nb-person:has-text("Pat Owner") input')
+            pg.click('text=+ Add name to list'); pg.fill('.nb-person-new input[placeholder=Name]',nm); pg.fill('.nb-person-new input[placeholder=Company]',c); pg.fill('.nb-person-new input[placeholder=Phone]',ph); pg.fill('.nb-person-new input[placeholder=Email]',em); pg.click('.nb-person-new button'); pg.wait_for_timeout(250)
+        pg.click('.nb-person:has-text("Dana Rep") input'); pg.wait_for_timeout(300)
+    print('  picker groups:',pg.evaluate("[...document.querySelectorAll('.nb-people h3')].map(h=>h.textContent)"),'| heading:',pg.inner_text('.nb-z-names h2'))
+    pg.screenshot(path='attendees_%s.png'%name)
     pg.click('.nb-z-names button:has-text("Done")')
     for t in ['Steel topped out at grid C, deck welds in progress','roofing membrane down on the east half','curb poured at north parking lot','Owner asked about the ribbon cutting']:
         pg.fill('.nb-quick textarea',t); pg.wait_for_timeout(120); g=pg.inner_text('.nb-quick .chip.on'); pg.keyboard.press('Enter'); pg.wait_for_timeout(120); print('  %-52s → %s'%(t[:50],g))
@@ -76,7 +83,9 @@ def run(kw,name):
     print('  saved: title=%r names=%r photos=%d labels=%s observations=%d'%(v['title'],v['names'],len(v['photos']),sorted(v['photo_labels'].values()),len(state['obs'])))
     pg.click('button:has-text("Make the field report")'); pg.wait_for_timeout(1500); c=pg.content(); print('  export has typed note:', 'Steel topped out' in c, '| observation:', 'Blocking missing' in c, '| names:', 'Pat Owner' in c)
     pg.click('text=Back to the page'); pg.click('.nb-menu-mark'); pg.click('.nb-menu-spot:has-text("Contents")'); pg.wait_for_selector('.nb-toc li')
-    pg.click('.nb-menu-mark'); pg.click('.nb-menu-spot:has-text("Close")'); pg.click('.nb-tome-mn'); pg.click('.nb-today'); pg.wait_for_selector('.nb-page')
+    pg.click('.nb-menu-mark'); pg.click('.nb-menu-spot:has-text("Close")'); pg.click('main .nb-tome-mn'); pg.click('.nb-today'); pg.wait_for_selector('.nb-page')
+    print('  meeting page: weather field',pg.locator('.nb-weather').count(),'| location field',pg.locator('.nb-location').count())
+    pg.click('.nb-where button'); pg.wait_for_function("document.querySelector('.nb-location').value!==''",timeout=8000); print('  location from GPS:',repr(pg.input_value('.nb-location')))
     print('  meeting page zones:',pg.evaluate("[...document.querySelectorAll('.nb-z h2')].map(h=>h.textContent)"))
     pg.wait_for_timeout(600); pg.screenshot(path='nb_meeting_%s.png'%name); print('  errors:',errs); ctx.close()
 with sync_playwright() as p:

@@ -1,8 +1,11 @@
 -- A firm's own issue tags, added to the built-in ones (src/lib/tags.ts). A tag is a trade and
 -- a short label; its colour is the trade's unless one is given.
 --
--- NOT YET APPLIED to production as of 2026-11-19: the confirmation was cancelled twice by the
--- client before it could be answered. Until it is, the app offers the built-in tags only.
+-- NOT YET APPLIED to production as of 2026-11-19: the confirmation was cancelled by the client
+-- twice and then timed out unanswered. Until it is, the app offers the built-in tags only.
+-- The same pending step adds where a notebook page was: a site visit's or a meeting's location.
+alter table site_visits add column if not exists location text;
+
 create table if not exists observation_tags (
   id         uuid primary key default gen_random_uuid(),
   firm_id    uuid not null references firms(id) on delete cascade,

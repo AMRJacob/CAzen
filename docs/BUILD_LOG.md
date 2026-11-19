@@ -11,6 +11,46 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 15:40 CST
+
+A run of requests from Jacob, all shipped to `main` except where a database step is waiting.
+
+- **Attendees.** The Names part of a page is *Attendees*. *Add name* lists the people on this
+  project, anyone written on the book's earlier pages, and people from the firm's other projects
+  (`listPeopleElsewhere`; picking one puts them on this project); *Add name to list* takes
+  someone new.
+- **Meeting pages have no weather.** Both kinds of page have a **Location** line; ⌖ fills it from
+  GPS — "Job site" and the project's address when the phone is within 400 m of the project's
+  pin, otherwise a reverse lookup (OpenStreetMap). A new visit starts at the job site; a new
+  meeting where the last one was. **The `location` column is in migration 0036, not applied**:
+  `canHoldLocation()` probes for it once and the line is simply absent until it exists.
+- **The observation form, to Jacob's markup.** The heading is the observation's name and can be
+  clicked and typed into (it is the same text as "What was seen"); under it the date and
+  *Discussed with (optional)*, offered from the project's people. Photos and *Tag to drawing* sit
+  side by side; the tagged sheet shows as a tile with a crop of the drawing around the pin.
+  "Discussed with" is kept as the last line of the detail (`Discussed with: …`) — no new column.
+  One drawing tag per observation; the markup shows several, which needs a column.
+- **Drop to upload** on the schedule's *Read from a PDF* and on Contracts → *Add a document*
+  (`.drop-spot`); a dropped contract names itself from its file name.
+- **Settings by category.** Five folding groups — firm, brand and account; forms and tags;
+  drawings; file storage; requests and issues — remembered per device (`Group` in `Settings.tsx`).
+
+**Waiting on Jacob**
+
+- Migration `0036_observation_tags_and_page_location.sql` (custom tags table + page location).
+  Two confirmations were cancelled by the client within half a second and a third timed out.
+- **User access in Settings is not built.** `firm_members` already lets an admin change a role
+  or remove someone, but the app cannot show who they are (emails live in `auth.users`) or invite
+  anyone without a database function and an edge function with the service key. What ArchMGMT's
+  version did, and which permissions are wanted, is not known here.
+- The Westrock Landing field reports folder has still not been opened (dialog unanswered).
+
+Verified: `t_notebook.py` (attendee groups, no weather on a meeting, location from GPS on the
+stand-in, which has the column), `t_tag.py` (new form, tag, drawing tile, settings groups),
+`t_sched.py` after the drop spot. The contracts drop spot was built and compiled, not driven.
+
+---
+
 # Checkpoint — 2026-11-19, 14:50 CST
 
 **The notebooks are the sidebar menu.** Jacob marked up the Notebooks page: he does not need the

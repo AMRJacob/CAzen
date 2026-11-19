@@ -224,6 +224,8 @@ function AddDocument({ project, kind, onDone, onCancel, onTrouble }: {
   const [picked, setPicked] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const [over, setOver] = useState(false)
+
   async function save() {
     if (!picked || busy) return
     setBusy(true)
@@ -251,8 +253,25 @@ function AddDocument({ project, kind, onDone, onCancel, onTrouble }: {
           <input type="date" value={executedOn} max={today()} onChange={(e) => setExecutedOn(e.target.value)} />
         </label>
       </div>
+      <div className={`drop-spot${over ? ' over' : ''}`} role="button" tabIndex={0}
+        aria-label="Drop the PDF here, or choose it"
+        onClick={() => file.current?.click()}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.current?.click() } }}
+        onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault(); setOver(false)
+          const dropped = Array.from(e.dataTransfer.files).find((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+          if (!dropped) return
+          setPicked(dropped)
+          // A dropped file names the document when nothing has been typed for it yet.
+          if (!title.trim()) setTitle(dropped.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' '))
+        }}>
+        {picked
+          ? <><strong>{picked.name}</strong><span className="muted small">Drop another to replace it, or click to choose</span></>
+          : <><strong>Drop the PDF here</strong><span className="muted small">or click to choose it</span></>}
+      </div>
       <div className="folder-actions">
-        <button onClick={() => file.current?.click()}>{picked ? picked.name : 'Choose a PDF'}</button>
         <button className="primary-lite" disabled={!picked || busy} onClick={() => void save()}>
           {busy ? 'Filing…' : 'File it'}
         </button>

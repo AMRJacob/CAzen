@@ -107,6 +107,7 @@ export default function Settings() {
       <p className="lead">Your firm’s details and brand. Change them any time, for example when rebranding. Every new document uses the current settings.</p>
       {!isAdmin && <div className="notice">Only firm admins can change these settings.</div>}
 
+      <Group id="firm" title="Firm, brand and your account" hint="Name, address, logo, letterhead, colours; your name on documents and your password" open>
       <div className="settings-grid">
         <fieldset disabled={!isAdmin} className="settings-form">
           <h2>Firm</h2>
@@ -183,6 +184,9 @@ export default function Settings() {
         </div>
       </div>
 
+      </Group>
+
+      <Group id="forms" title="Forms and observation tags" hint="Form templates; the issue tags observations are raised under">
       {/* The form templates are a firm-wide setting like the rest of this page, so they live
           here rather than in the sidebar beside the project's own work. */}
       <div className="card settings-link-card">
@@ -194,7 +198,9 @@ export default function Settings() {
       </div>
 
       <TagSettings firmId={firm.id} />
+      </Group>
 
+      <Group id="drawings" title="Drawings" hint="Sheet order, title block templates, how the sheet list looks to you">
       <div className="settings-grid drawings-settings">
         <div className="card">
           <h2>Sheet order</h2>
@@ -214,8 +220,15 @@ export default function Settings() {
         <TitleblockList firmId={firm.id} isAdmin={isAdmin} />
         <ViewPreferences />
       </div>
+      </Group>
+
+      <Group id="storage" title="File storage" hint="How much is used, and the limits">
       <StorageCard firm={firm} isAdmin={isAdmin} onSaved={reload} />
+      </Group>
+
+      <Group id="requests" title="Requests and issues" hint="The wishlist and bug reports">
       <FeedbackList />
+      </Group>
     </section>
   )
 }
@@ -438,5 +451,29 @@ function TagSettings({ firmId }: { firmId: string }) {
       )}
       {error && <div className="notice error">{error}</div>}
     </div>
+  )
+}
+
+
+/**
+ * One category of settings, folded away until it is wanted. The page had grown into one long
+ * scroll; this makes it a short list of what there is, each opening in place. Which are open is
+ * remembered on this device.
+ */
+function Group({ id, title, hint, open = false, children }: { id: string; title: string; hint: string; open?: boolean; children: React.ReactNode }) {
+  const key = `cazen.pref.settingsOpen.${id}`
+  const [isOpen, setIsOpen] = useState<boolean>(() => {
+    try { const v = localStorage.getItem(key); return v === null ? open : v === '1' } catch { return open }
+  })
+  return (
+    <details className="set-group" open={isOpen}
+      onToggle={(e) => {
+        const now = (e.currentTarget as HTMLDetailsElement).open
+        setIsOpen(now)
+        try { localStorage.setItem(key, now ? '1' : '0') } catch { /* fine */ }
+      }}>
+      <summary><span className="set-group-title">{title}</span><span className="set-group-hint">{hint}</span></summary>
+      {isOpen && <div className="set-group-body">{children}</div>}
+    </details>
   )
 }

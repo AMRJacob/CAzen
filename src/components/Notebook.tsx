@@ -13,12 +13,12 @@ import {
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
 import {
-  clockTime, coverOf, longDay, removeVisit, setVisit, shortDay, startVisit,
+  canHoldLocation, clockTime, coverOf, longDay, removeVisit, setVisit, shortDay, startVisit,
   type SiteVisit, type VisitKind,
 } from '../lib/visits'
-import { addPerson, asLine, linesOf, listPeople, nameIn, type Person } from '../lib/people'
+import { addPerson, asLine, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
 import { catchAll, fileNote, guessCategory, headingsOf, unfileNote } from '../lib/noteSort'
-import { weatherAt } from '../lib/weather'
+import { metresBetween, placeAt, weatherAt } from '../lib/weather'
 import { readPref, writePref } from '../lib/prefs'
 import { message } from '../lib/errors'
 import type { Project } from '../lib/types'
@@ -88,7 +88,8 @@ export function Notebook({ project, kind, pages, onPages }: {
 
   async function newPage() {
     try {
-      const v = await startVisit(project.id, kind, pages[0]?.names ?? null)
+      const v = await startVisit(project.id, kind, pages[0]?.names ?? null,
+        kind === 'visit' ? (project.address ? `Job site\n${project.address}` : 'Job site') : pages[0]?.location ?? null)
       onPages([v, ...pages])
       go(v.id, 'fwd')
     } catch (e) { setError(message(e)) }
@@ -124,6 +125,7 @@ export function Notebook({ project, kind, pages, onPages }: {
       {error && <div className="notice error nb-error">{error}</div>}
       {page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar}
+          earlier={pages.filter((x) => x.id !== page.id).flatMap((x) => linesOf(x.names))}
           observations={observations} types={types}
           onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
           onChanged={(v) => onPages(pages.map((x) => (x.id === v.id ? v : x)))}
@@ -230,11 +232,13 @@ function BookMenu({ count, onNew, onContents, onBack, onForward, onClose, paper,
  * photographs above the observations. A meeting's page is the same sheet without the right-hand
  * column. Everything is on the one page; nothing is behind a tab.
  */
-function Page({ project, page, turn, bar, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
+function Page({ project, page, turn, bar, earlier, observations, types, onObserved, onChanged, onRemoved, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
   bar: React.ReactNode
+  /** Attendee lines from the book's other pages. */
+  earlier: string[]
   observations: Observation[]
   types: ObservationType[]
   onObserved: (o: Observation) => void
@@ -306,6 +310,29 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
       else if (lat == null) onTrouble('No location to look the weather up for: the phone would not give one and the project has none set.')
     } finally { setAsking(false) }
   }, [project.latitude, project.longitude, page.visited_on, page.visited_at, change, onTrouble])
+  /**
+   * Where the phone is, in words. Standing on the job it says so — the project's own address —
+   * and anywhere else it is looked up.
+   */
+  const [locating, setLocating] = useState(false)
+  async function locate() {
+    setLocating(true)
+    try {
+      const here = await new Promise<{ lat: number; lon: number } | null>((done) => {
+        if (!navigator.geolocation) { done(null); return }
+        navigator.geolocation.getCurrentPosition(
+          (p) => done({ lat: p.coords.latitude, lon: p.coords.longitude }), () => done(null),
+          { timeout: 8000, maximumAge: 60_000, enableHighAccuracy: true })
+      })
+      if (!here) { onTrouble('This device would not say where it is. Location has to be allowed for CAzen in the browser’s settings.'); return }
+      const atJob = project.latitude != null && project.longitude != null
+        && metresBetween(here, { lat: project.latitude, lon: project.longitude }) < 400
+      const said = atJob ? (project.address ? `Job site\n${project.address}` : 'Job site')
+        : await placeAt(here.lat, here.lon) ?? `${here.lat.toFixed(5)}, ${here.lon.toFixed(5)}`
+      change({ location: said })
+    } finally { setLocating(false) }
+  }
+
   const askedWeather = useRef(false)
   useEffect(() => {
     if (!visit || page.weather || askedWeather.current) return
@@ -376,6 +403,7 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
             'fr.date': day,
             ...(page.visited_at ? { 'fr.time': clockTime(page.visited_at) } : {}),
             ...(page.weather ? { 'fr.weather': page.weather } : {}),
+            ...(page.location ? { 'fr.location': page.location.replace(/, /g, '\n') } : {}),
             ...(who ? { 'fr.participants': who } : {}),
             'fr.observations': notes + recorded,
           }} />
@@ -384,6 +412,7 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
             'mn.date': day,
             ...(page.visited_at ? { 'mn.time': clockTime(page.visited_at) } : {}),
             ...(page.title ? { 'mn.title': page.title } : {}),
+            ...(page.location ? { 'mn.location': page.location.replace(/, /g, '\n') } : {}),
             ...(who ? { 'mn.participants': who } : {}),
             'mn.notes': notes,
           }} />
@@ -403,11 +432,21 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
             onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
           <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
             onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
-          <input key={page.weather ?? ''} className="nb-weather" defaultValue={page.weather ?? ''} aria-label="Weather"
-            placeholder={asking ? 'Looking up the weather…' : 'Weather'}
-            onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
+          {visit && (
+            <input key={page.weather ?? ''} className="nb-weather" defaultValue={page.weather ?? ''} aria-label="Weather"
+              placeholder={asking ? 'Looking up the weather…' : 'Weather'}
+              onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
+          )}
           {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather()} title="Look the weather up from where you are">↻</button>}
         </div>
+        {canHoldLocation() && (
+          <div className="nb-head-fields nb-where">
+            <input key={page.location ?? ''} className="nb-location" defaultValue={(page.location ?? '').replace(/\n/g, ', ')} aria-label="Location"
+              placeholder={locating ? 'Finding where you are…' : 'Location'}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v !== (page.location ?? '').replace(/\n/g, ', ')) change({ location: v || null }) }} />
+            <button className="link nb-weather-again" disabled={locating} onClick={() => void locate()} title="Use where you are" aria-label="Use where you are">⌖</button>
+          </div>
+        )}
         <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
           placeholder={visit ? 'What the visit was for' : 'Which meeting'}
           onBlur={(e) => { if (e.target.value !== (page.title ?? '')) change({ title: e.target.value.trim() || null }) }} />
@@ -421,7 +460,7 @@ function Page({ project, page, turn, bar, observations, types, onObserved, onCha
       </section>
 
       {bar}
-      <Names projectId={project.id} names={page.names} onChange={(names) => change({ names })} onTrouble={onTrouble} />
+      <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
 
       <section className="nb-z nb-z-notes">
         <QuickNote notes={notes} onFiled={(next) => { setNotes(next); change({ notes: next }) }} />
@@ -600,61 +639,87 @@ function QuickNote({ notes, onFiled }: { notes: string; onFiled: (next: string) 
 // ---------- Who was there ----------
 
 /**
- * The names on a page, picked from the people on the job. Somebody new is added once — name,
- * company, phone, email, what a sign-in sheet asks — and is there to pick on every page after.
+ * The attendees on a page, picked rather than typed. "Add name" lists the people already on
+ * this project, then anyone written on an earlier page, then people from the firm's other
+ * projects; "Add name to list" takes somebody new — name, company, phone, email, what a sign-in
+ * sheet asks — who is then there to pick on every page after.
  */
-function Names({ projectId, names, onChange, onTrouble }: {
+function Names({ projectId, names, earlier, onChange, onTrouble }: {
   projectId: string
   names: string | null
+  /** Attendee lines written on this book's other pages. */
+  earlier: string[]
   onChange: (names: string | null) => void
   onTrouble: (m: string) => void
 }) {
   const [people, setPeople] = useState<Person[]>([])
+  const [elsewhere, setElsewhere] = useState<Person[]>([])
   const [picking, setPicking] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [fresh, setFresh] = useState({ name: '', company: '', phone: '', email: '' })
-  useEffect(() => { listPeople(projectId).then(setPeople).catch(() => setPeople([])) }, [projectId])
+  useEffect(() => {
+    listPeople(projectId).then(setPeople).catch(() => setPeople([]))
+    listPeopleElsewhere(projectId).then(setElsewhere).catch(() => setElsewhere([]))
+  }, [projectId])
 
   const lines = linesOf(names)
   const here = new Set(lines.map((l) => nameIn(l).toLowerCase()))
+  const onProject = new Set(people.map((p) => p.name.toLowerCase()))
   const write = (next: string[]) => onChange(next.length ? next.join('\n') : null)
-  const toggle = (p: Person) => write(here.has(p.name.toLowerCase())
-    ? lines.filter((l) => nameIn(l).toLowerCase() !== p.name.toLowerCase())
-    : [...lines, asLine(p)])
+  const toggleLine = (line: string) => write(here.has(nameIn(line).toLowerCase())
+    ? lines.filter((l) => nameIn(l).toLowerCase() !== nameIn(line).toLowerCase())
+    : [...lines, line])
 
-  async function addNew() {
-    if (!fresh.name.trim()) return
+  // Written on an earlier page but never put on the project's list.
+  const typed = [...new Map(earlier.filter((l) => !onProject.has(nameIn(l).toLowerCase())).map((l) => [nameIn(l).toLowerCase(), l])).values()]
+  const others = elsewhere.filter((p) => !onProject.has(p.name.toLowerCase()))
+
+  async function keepPerson(p: { name: string; company?: string | null; phone?: string | null; email?: string | null }) {
     try {
-      const p = await addPerson(projectId, fresh)
-      setPeople((all) => [...all, p].sort((a, b) => a.name.localeCompare(b.name)))
-      if (!here.has(p.name.toLowerCase())) write([...lines, asLine(p)])
-      setFresh({ name: '', company: '', phone: '', email: '' })
-    } catch (e) { onTrouble(message(e)) }
+      const made = await addPerson(projectId, { name: p.name, company: p.company ?? '', phone: p.phone ?? '', email: p.email ?? '' })
+      setPeople((all) => [...all, made].sort((a, b) => a.name.localeCompare(b.name)))
+      if (!here.has(made.name.toLowerCase())) write([...lines, asLine(made)])
+      return true
+    } catch (e) { onTrouble(message(e)); return false }
   }
   const set = (k: keyof typeof fresh) => (e: React.ChangeEvent<HTMLInputElement>) => setFresh({ ...fresh, [k]: e.target.value })
+  const row = (key: string, on: boolean, act: () => void, name: string, rest: (string | null | undefined)[]) => (
+    <label key={key} className="nb-person">
+      <input type="checkbox" checked={on} onChange={act} />
+      <span className="nb-person-name">{name}</span>
+      <span className="muted small">{rest.filter(Boolean).join(' · ')}</span>
+    </label>
+  )
 
   return (
     <section className="nb-z nb-z-names">
       <div className="nb-z-top">
-        <h2>Names{lines.length ? ` · ${lines.length}` : ''}</h2>
-        <button className="primary-lite" onClick={() => setPicking(!picking)}>{picking ? 'Done' : 'Add names'}</button>
+        <h2>Attendees{lines.length ? ` · ${lines.length}` : ''}</h2>
+        <button className="primary-lite" onClick={() => { setPicking(!picking); setAdding(false) }}>{picking ? 'Done' : 'Add name'}</button>
       </div>
       {picking ? (
         <div className="nb-people">
-          {people.map((p) => (
-            <label key={p.id} className="nb-person">
-              <input type="checkbox" checked={here.has(p.name.toLowerCase())} onChange={() => toggle(p)} />
-              <span className="nb-person-name">{p.name}</span>
-              <span className="muted small">{[p.company, p.phone, p.email].filter(Boolean).join(' · ')}</span>
-            </label>
-          ))}
-          {!people.length && <p className="nb-none">Nobody on this project yet — add the first below.</p>}
-          <form className="nb-person-new" onSubmit={(e) => { e.preventDefault(); void addNew() }}>
-            <input value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
-            <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
-            <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
-            <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
-            <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the project</button>
-          </form>
+          {people.length > 0 && <h3>On this project</h3>}
+          {people.map((p) => row(p.id, here.has(p.name.toLowerCase()), () => toggleLine(asLine(p)), p.name, [p.company, p.phone, p.email]))}
+          {typed.length > 0 && <h3>On earlier pages</h3>}
+          {typed.map((l) => row(l, here.has(nameIn(l).toLowerCase()), () => toggleLine(l), nameIn(l), l.split('|').slice(1).map((x) => x.trim())))}
+          {others.length > 0 && <h3>From other projects</h3>}
+          {others.map((p) => row(p.id, false, () => void keepPerson(p), p.name, [p.company, p.phone, p.email]))}
+          {!people.length && !typed.length && !others.length && <p className="nb-none">No names on file yet.</p>}
+          {adding ? (
+            <form className="nb-person-new" onSubmit={async (e) => {
+              e.preventDefault()
+              if (fresh.name.trim() && await keepPerson(fresh)) { setFresh({ name: '', company: '', phone: '', email: '' }); setAdding(false) }
+            }}>
+              <input autoFocus value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
+              <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
+              <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
+              <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
+              <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the list</button>
+            </form>
+          ) : (
+            <button className="link nb-person-add" onClick={() => setAdding(true)}>+ Add name to list</button>
+          )}
         </div>
       ) : !lines.length ? <p className="nb-none">Nobody yet.</p> : (
         <ul className="nb-names">

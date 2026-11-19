@@ -2225,3 +2225,49 @@ body:has(.nb) .phone-nav { display: none; }
 .nb-table.small .nb-tome-mono { font-size: 21px; width: 34px; }
 .nb-table.small .nb-tome-name { font-size: 13px; font-weight: 500; white-space: nowrap; }
 .nb-table.small .nb-tome-band { right: 12px; width: 5px; }
+
+.nb-people h3 { margin: 8px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8a8f88; }
+.nb-people h3:first-child { margin-top: 2px; }
+.nb-person-add { align-self: flex-start; padding: 8px 0 2px; }
+
+.nb-where { flex-wrap: nowrap; }
+.nb-paper .nb-location { flex: 1; min-width: 0; line-height: 32px; height: 32px; color: #5d625c; }
+
+/* ---------- An observation, as a sheet of its own ---------- */
+.obs-head { margin: 0 0 14px; }
+.obs-name { display: block; width: 100%; font: inherit; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink);
+  border: none; border-bottom: 1px dashed transparent; background: none; padding: 0 0 2px; outline: none; cursor: text; }
+.obs-name:hover { border-bottom-color: var(--line); }
+.obs-name:focus { border-bottom-color: var(--moss); }
+.obs-name::placeholder { color: var(--ink); opacity: 1; }
+.obs-name:focus::placeholder { opacity: 0.35; }
+.obs-head-row { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+.obs-head-row input { font: inherit; font-size: 14px; color: var(--muted); padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+.obs-head-row input:not([type="date"]) { flex: 1; min-width: 180px; max-width: 360px; }
+.obs-attach { display: flex; flex-wrap: wrap; gap: 14px 44px; margin: 4px 0 12px; }
+.obs-attach-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.obs-attach .photo-strip { align-items: center; }
+.obs-spot { position: relative; padding: 0; cursor: pointer; overflow: hidden; }
+.obs-spot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.obs-spot-pin { width: 16px; height: 16px; border-radius: 50%; background: #c0392b; box-shadow: 0 0 0 3px #fff, 0 1px 5px rgba(0, 0, 0, 0.3); }
+.obs-spot-no { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 5px 3px; font-size: 11.5px; font-family: ui-monospace, Consolas, monospace; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); text-align: left; }
+
+/* Somewhere to drop a file. */
+.drop-spot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 120px; padding: 18px; margin: 10px 0 4px; text-align: center;
+  border: 1.5px dashed #b9c4bc; border-radius: 12px; background: var(--panel); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.drop-spot:hover, .drop-spot:focus-visible { border-color: var(--moss); outline: none; }
+.drop-spot.over { border-color: var(--moss); border-style: solid; background: var(--moss-soft); }
+.drop-spot.busy { cursor: progress; border-style: solid; }
+
+/* ---------- Settings, by category ---------- */
+.set-group { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin: 0 0 10px; }
+.set-group > summary { display: flex; align-items: baseline; gap: 14px; padding: 15px 18px; cursor: pointer; list-style: none; border-radius: 12px; }
+.set-group > summary::-webkit-details-marker { display: none; }
+.set-group > summary::before { content: '›'; font-size: 18px; color: var(--muted); width: 12px; flex: none; transition: transform 0.15s; transform-origin: 40% 55%; }
+.set-group[open] > summary::before { transform: rotate(90deg); }
+.set-group > summary:hover { background: var(--wash); }
+.set-group-title { font-size: 16px; font-weight: 550; white-space: nowrap; }
+.set-group-hint { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-group-body { padding: 4px 18px 16px; border-top: 1px solid var(--line); }
+.set-group-body > .card, .set-group-body .settings-grid > .card { box-shadow: none; }
+@media (max-width: 619px) { .set-group > summary { flex-wrap: wrap; gap: 2px 10px; } .set-group-hint { white-space: normal; flex-basis: 100%; padding-left: 22px; } .set-group-body { padding: 4px 10px 12px; } }

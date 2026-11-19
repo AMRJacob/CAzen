@@ -13,7 +13,28 @@ import type { CurrentSheet } from '../lib/types'
  * by number or title; then the sheet itself, to be touched once. The spot can be touched again
  * until it is right.
  */
-export interface Spot { sheetId: string; revisionId: string; number: string; region: { x: number; y: number } }
+export interface Spot {
+  sheetId: string; revisionId: string; number: string; region: { x: number; y: number }
+  /** A small picture of the drawing around the spot, to show where it is without opening the sheet. */
+  thumb?: string
+}
+
+/** The piece of the sheet around a point, as a picture. */
+function cropAround(img: HTMLImageElement, at: { x: number; y: number }): string | undefined {
+  try {
+    const side = Math.round(img.naturalWidth * 0.16)
+    const c = document.createElement('canvas')
+    c.width = c.height = 220
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, 220, 220)
+    ctx.drawImage(img, at.x * img.naturalWidth - side / 2, at.y * img.naturalHeight - side / 2, side, side, 0, 0, 220, 220)
+    ctx.fillStyle = '#c0392b'
+    ctx.beginPath(); ctx.arc(110, 110, 9, 0, Math.PI * 2); ctx.fill()
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke()
+    return c.toDataURL('image/jpeg', 0.8)
+  } catch { return undefined }
+}
 
 export function SheetSpot({ project, start, onPick, onClose }: {
   project: ProjectStore
@@ -72,7 +93,10 @@ export function SheetSpot({ project, start, onPick, onClose }: {
           : <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a sheet by number or title" aria-label="Find a sheet" />}
         {sheet && <span className="spot-name"><span className="mono">{sheet.number}</span> {sheet.title}</span>}
         {sheet && <button onClick={() => setBig(!big)}>{big ? 'Fit' : 'Larger'}</button>}
-        {sheet && at && <button className="primary" onClick={() => onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at })}>Tag it here</button>}
+        {sheet && at && <button className="primary" onClick={() => {
+          const img = document.querySelector<HTMLImageElement>('.spot-page img')
+          onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
+        }}>Tag it here</button>}
         <button onClick={onClose} aria-label="Close">×</button>
       </header>
       {error && <div className="notice error">{error}</div>}

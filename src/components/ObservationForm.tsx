@@ -2,6 +2,19 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { SheetSpot } from './SheetSpot'
 import { byTrade, colourOf, listCustomTags, type Tag } from '../lib/tags'
 import { useFirm } from '../lib/firm'
+import { listPeople } from '../lib/people'
+
+/**
+ * Who it was talked over with, kept as the last line of the detail — "Discussed with: …" — so
+ * it travels with the observation into a report without the observation needing another field.
+ */
+const WITH = /\n?^Discussed with:\s*(.*)$/im
+const splitDetail = (d: string | null | undefined) => {
+  const m = (d ?? '').match(WITH)
+  return { detail: (d ?? '').replace(WITH, '').trimEnd(), discussed: m?.[1]?.trim() ?? '' }
+}
+const joinDetail = (detail: string, discussed: string) =>
+  [detail.trim(), discussed.trim() ? `Discussed with: ${discussed.trim()}` : ''].filter(Boolean).join('\n') || null
 import { Photos } from './Photos'
 import { today } from '../lib/dates'
 import { message } from '../lib/errors'
@@ -46,7 +59,10 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
     return types.some((t) => t.id === last) ? last : types[0]?.id ?? null
   })
   const [title, setTitle] = useState(existing?.title ?? '')
-  const [detail, setDetail] = useState(existing?.detail ?? '')
+  const [detail, setDetail] = useState(() => splitDetail(existing?.detail).detail)
+  const [discussed, setDiscussed] = useState(() => splitDetail(existing?.detail).discussed)
+  const [people, setPeople] = useState<string[]>([])
+  useEffect(() => { listPeople(project.id).then((p) => setPeople(p.map((x) => x.name))).catch(() => setPeople([])) }, [project.id])
   const [area, setArea] = useState(existing?.area ?? '')
   const [trade, setTrade] = useState(existing?.trade ?? '')
   const [status, setStatus] = useState<ObservationStatus>(existing?.status ?? 'open')
@@ -56,7 +72,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
   const [more, setMore] = useState(!!(existing?.area || existing?.trade || existing?.due_on))
   // Where on the drawings it is: given by the sheet it was raised from, already on the
   // observation, or chosen here with "Tag to drawing".
-  const [spot, setSpot] = useState<{ sheetId: string; revisionId: string; region: { x: number; y: number }; number?: string } | null>(
+  const [spot, setSpot] = useState<{ sheetId: string; revisionId: string; region: { x: number; y: number }; number?: string; thumb?: string } | null>(
     pin ?? (existing?.sheet_id && existing.region ? { sheetId: existing.sheet_id, revisionId: existing.revision_id ?? '', region: existing.region } : null))
   const [spotting, setSpotting] = useState(false)
   const [tagging, setTagging] = useState(false)
@@ -78,7 +94,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
     setBusy(true)
     try {
       const patch = {
-        type_id: typeId, title: title.trim(), detail: detail.trim() || null,
+        type_id: typeId, title: title.trim(), detail: joinDetail(detail, discussed),
         area: area.trim() || null, trade: trade.trim() || null,
         status, observed_on: observedOn, due_on: dueOn || null, photos,
         sheet_id: spot?.sheetId ?? null, revision_id: spot?.revisionId || null, region: spot?.region ?? null,
@@ -117,31 +133,28 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
 
   return (
     <div className="card obs-form">
+      {/* The heading is the observation: it says what was seen as it is typed, and can be
+          clicked and typed into itself. Under it, the day, and who it was talked over with. */}
+      <header className="obs-head">
+        <input className="obs-name" value={title} onChange={(e) => setTitle(e.target.value)}
+          placeholder={existing ? 'Observation' : 'New observation'} aria-label="Name — click to edit" title="Click to edit" />
+        <div className="obs-head-row">
+          <input type="date" value={observedOn} onChange={(e) => setObservedOn(e.target.value)} aria-label="Date" />
+          <input value={discussed} onChange={(e) => setDiscussed(e.target.value)} placeholder="Discussed with (optional)"
+            aria-label="Discussed with" list={`${listId}-people`} />
+          <datalist id={`${listId}-people`}>{people.map((n) => <option key={n} value={n} />)}</datalist>
+        </div>
+      </header>
+
       <div className="obs-types">
         {types.map((t) => (
           <button key={t.id} type="button" className={`chip${typeId === t.id ? ' on' : ''}`}
             onClick={() => setTypeId(t.id)}>{t.name}</button>
         ))}
-      </div>
-
-      <label className="stack">What was seen
-        <input ref={titleBox} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
-          enterKeyHint="done" autoCapitalize="sentences"
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); void save(!existing && !pin && kept > 0) } }}
-          placeholder="Sealant missing at the head of the storefront" />
-      </label>
-
-      {/* What kind of thing it is, by the trade that owns it. A tag names the observation when it
-          has no name yet, and says whose it is either way. */}
-      <div className="obs-tagrow">
         <button type="button" className="chip obs-tag-open" onClick={() => setTagging(!tagging)}>
           {tradeColour && <span className="tag-dot" style={{ background: tradeColour }} />}
-          {trade || 'Tag'}
+          {trade || 'Trade tag'}
         </button>
-        <button type="button" className="chip" onClick={() => setSpotting(true)}>
-          {spot ? `On ${spot.number ?? 'a drawing'} — move` : 'Tag to drawing'}
-        </button>
-        {spot && !pin && <button type="button" className="link" onClick={() => setSpot(null)}>Take off the drawing</button>}
       </div>
       {tagging && (
         <div className="obs-tags">
@@ -158,7 +171,6 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
                 <button key={t.label} type="button" className="chip" style={{ borderColor: g.colour }}
                   onClick={() => {
                     setTrade(g.trade)
-                    setMore(true)
                     // The tag is what was seen until somebody says more; it never overwrites what was typed.
                     if (!title.trim()) setTitle(t.label)
                     else if (!title.toLowerCase().includes(t.label.toLowerCase())) setTitle(`${t.label} — ${title.trim()}`)
@@ -166,18 +178,48 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
                     titleBox.current?.focus()
                   }}>{t.label}</button>
               ))}
-              <button type="button" className="chip" onClick={() => { setTrade(g.trade); setMore(true); setTagging(false) }}>Just {g.trade}</button>
+              <button type="button" className="chip" onClick={() => { setTrade(g.trade); setTagging(false) }}>Just {g.trade}</button>
             </div>
           ))}
         </div>
       )}
 
+      <label className="stack">What was seen
+        <input ref={titleBox} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
+          enterKeyHint="done" autoCapitalize="sentences"
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); void save(!existing && !pin && kept > 0) } }}
+          placeholder="Sealant missing at the head of the storefront" />
+      </label>
+
       <label className="stack">More, if it needs it
         <textarea rows={3} value={detail} onChange={(e) => setDetail(e.target.value)} />
       </label>
 
-      <Photos project={project} paths={photos} about={title.trim() || 'Observation'}
-        editable onChange={setPhotos} onTrouble={onTrouble} />
+      <div className="obs-attach">
+        <div>
+          <span className="obs-attach-label">Photos</span>
+          <Photos project={project} paths={photos} about={title.trim() || 'Observation'}
+            editable onChange={setPhotos} onTrouble={onTrouble} />
+        </div>
+        <div>
+          <span className="obs-attach-label">Tag to drawing</span>
+          <div className="photo-strip">
+            {spot && (
+              <button type="button" className="photo obs-spot" onClick={() => setSpotting(true)} title="Move it">
+                {spot.thumb ? <img src={spot.thumb} alt="" /> : <span className="obs-spot-pin" aria-hidden="true" />}
+                <span className="obs-spot-no">{spot.number ?? 'On a sheet'}</span>
+              </button>
+            )}
+            {!spot && (
+              <button type="button" className="photo photo-add" onClick={() => setSpotting(true)}>
+                <span aria-hidden="true">+</span>
+                <span className="small">Drawing</span>
+              </button>
+            )}
+            {spot && !pin && <button type="button" className="link" onClick={() => setSpot(null)}>Take off</button>}
+          </div>
+        </div>
+      </div>
 
       {!more ? (
         <button type="button" className="link" onClick={() => setMore(true)}>
@@ -192,9 +234,6 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
           <label className="stack">Trade
             <input value={trade} onChange={(e) => setTrade(e.target.value)} placeholder="Glazing" list={`${listId}-trades`} />
             <datalist id={`${listId}-trades`}>{trades.map((a) => <option key={a} value={a} />)}</datalist>
-          </label>
-          <label className="stack">Seen on
-            <input type="date" value={observedOn} onChange={(e) => setObservedOn(e.target.value)} />
           </label>
           <label className="stack">Wanted by
             <input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />

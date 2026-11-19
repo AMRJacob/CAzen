@@ -43,3 +43,21 @@ export const asLine = (p: Pick<Person, 'name' | 'company' | 'email'>) =>
 export const linesOf = (names: string | null) =>
   (names ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
 export const nameIn = (line: string) => line.split('|')[0].trim()
+
+/**
+ * Everyone on the firm's other projects, once each — the same superintendent and the same
+ * owner's rep turn up job after job. They are offered when adding attendees, and picking one
+ * puts them on this project too.
+ */
+export async function listPeopleElsewhere(projectId: string): Promise<Person[]> {
+  const { data, error } = await db().from('project_people')
+    .select('id, project_id, name, company, phone, email').neq('project_id', projectId).order('name').limit(1000)
+  if (error) throw error
+  const seen = new Set<string>()
+  return ((data ?? []) as Person[]).filter((p) => {
+    const key = `${p.name.trim().toLowerCase()}|${(p.company ?? '').trim().toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}

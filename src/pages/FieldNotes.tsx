@@ -436,12 +436,6 @@ function Observations() {
   if (current && (writing || editing)) {
     return (
       <section>
-        <div className="page-head">
-          <div>
-            <PageTitle>{editing ? 'Observation' : 'New observation'}</PageTitle>
-            <p className="lead">{editing ? 'What was seen, and where it stands.' : HEADING.observations.lead}</p>
-          </div>
-        </div>
         {error && <div className="notice error">{error}</div>}
         <ObservationForm project={current} types={types} existing={editing ?? undefined} known={all}
           onSaved={(o, another) => {

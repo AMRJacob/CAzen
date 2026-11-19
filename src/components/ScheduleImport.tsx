@@ -36,6 +36,7 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
   const [scanned, setScanned] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [over, setOver] = useState(false)
 
   const label = useMemo(() => {
     const by = new Map((lines ?? []).map((l) => [l.id, `${l.item_no ? `${l.item_no} · ` : ''}${l.description}`]))
@@ -102,11 +103,23 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
             Choose the PDF they sent — printed from their scheduling program or scanned from paper.
             It is read on this computer and nothing is added until you have looked it over.
           </p>
-          <div className="actions">
-            <button className="primary" disabled={!!progress} onClick={() => file.current?.click()}>
-              {progress ? 'Reading…' : 'Choose a PDF'}
-            </button>
-            {progress && <span className="muted small" role="status">{progress}</span>}
+          {/* Dragged from a folder or out of an email, or chosen: either way it lands here. */}
+          <div className={`drop-spot${over ? ' over' : ''}${progress ? ' busy' : ''}`}
+            role="button" tabIndex={0} aria-label="Drop the schedule PDF here, or choose it"
+            onClick={() => { if (!progress) file.current?.click() }}
+            onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !progress) { e.preventDefault(); file.current?.click() } }}
+            onDragOver={(e) => { e.preventDefault(); if (!progress) setOver(true) }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault(); setOver(false)
+              if (progress) return
+              const dropped = Array.from(e.dataTransfer.files).find((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+              if (dropped) void open(dropped)
+              else setError('That isn’t a PDF. The schedule needs to be the PDF the contractor sent.')
+            }}>
+            {progress
+              ? <span role="status">{progress}</span>
+              : <><strong>Drop the schedule PDF here</strong><span className="muted small">or click to choose it</span></>}
           </div>
           <input ref={file} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void open(e.target.files?.[0])} />
           <label className="stack sched-paste">Or paste the rows
