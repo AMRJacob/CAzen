@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   addMark, listMarks, removeMarks, setMarkBody, setPad, watchPad,
   HIGHLIGHTS, PAD_COLOURS,
   type MarkKind, type NotePad as Pad, type PadMark, type PadRule,
 } from '../lib/pads'
-import { inkRuns, samplesFrom, type InkPoint } from '../lib/ink'
+import { samplesFrom, type InkPoint } from '../lib/ink'
+import { PadSurface, type InkStyle, type PadInk } from './PadSurface'
 import { message } from '../lib/errors'
+import { handOf, outlineOf, pathOf, seedOf, type Nib } from '../lib/nib'
 import { Mark } from './Logo'
 
 /**
@@ -39,7 +41,6 @@ const WIDTHS = { fine: 0.003, medium: 0.005, broad: 0.013 } as const
  * that also means it thins to nothing as you zoom out, and a stroke you cannot see is a
  * stroke you have lost. Below this it stops shrinking.
  */
-const THINNEST = 1.4
 type Width = keyof typeof WIDTHS
 
 /**
@@ -75,7 +76,6 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [highlight, setHighlight] = useState<string>(HIGHLIGHTS[0])
   const [width, setWidth] = useState<Width>('medium')
   const [fingerDraws, setFingerDraws] = useState(() => !penSeen())
-  const [wet, setWet] = useState<InkPoint[] | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [mine, setMine] = useState<string[]>([])
   const [view, setView] = useState<View>({ scale: 600, x: 40, y: 40 })
@@ -89,11 +89,23 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const frame = useRef<HTMLDivElement | null>(null)
   const drawing = useRef<number | null>(null)
   const wetRef = useRef<InkPoint[] | null>(null)
+  const nowId = useRef<string>('')
+  /** What the nib would lay down at this moment. */
+  const nibNow = (): InkStyle => ({
+    colour: tool === 'highlight' ? highlight : colour,
+    width: tool === 'highlight' ? 0.03 : WIDTHS[width],
+    nib: tool === 'highlight' ? 'highlight' : tool === 'pencil' ? 'pencil' : 'pen',
+  })
+  /** Show the stroke in progress. Straight onto the canvas: no render, no reconciliation. */
+  const showWet = () => ink.current?.wet(wetRef.current, nibNow(), seedOf(nowId.current))
   const erasing = useRef<Set<string>>(new Set())
   const fingers = useRef<Map<number, { x: number; y: number }>>(new Map())
   const gesture = useRef<{ dist: number; mid: { x: number; y: number }; view: View } | null>(null)
   const penAt = useRef(0)
   const palms = useRef<Set<number>>(new Set())
+  /** Lays one finished stroke onto the paper without redrawing the rest. */
+  const ink = useRef<PadInk | null>(null)
+  const took = useCallback((api: PadInk) => { ink.current = api }, [])
   /**
    * The view as the pointer handlers see it.
    *
@@ -204,8 +216,11 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     forget()
     drawing.current = e.pointerId
     if (tool === 'erase') { erasing.current = new Set(); rub(e); return }
+    // The stroke is named before it is drawn, so what is on the glass while writing and what
+    // is saved when the pen lifts are one and the same stroke, down to the last speck.
+    nowId.current = crypto.randomUUID()
     wetRef.current = samplesFrom(e.nativeEvent as PointerEvent, at)
-    setWet(wetRef.current)
+    showWet()
   }
 
   function move(e: React.PointerEvent) {
@@ -218,7 +233,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     if (tool === 'erase') { rub(e); return }
     const more = samplesFrom(e.nativeEvent as PointerEvent, at)
     wetRef.current = wetRef.current ? [...wetRef.current, ...more] : more
-    setWet(wetRef.current)
+    showWet()
   }
 
   /** One finger drags the canvas; two pinch it and drag it at once. */
@@ -286,10 +301,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    * continues; if it really has gone, what was drawn is kept.
    */
   const doubt = useRef<number | undefined>(undefined)
-  const forget = useCallback(() => {
+  const forget = () => {
     if (doubt.current) { clearTimeout(doubt.current); doubt.current = undefined }
-  }, [])
-  useEffect(() => () => forget(), [forget])
+  }
+  useEffect(() => () => { if (doubt.current) clearTimeout(doubt.current) }, [])
 
   function cancelled(e: React.PointerEvent) {
     palms.current.delete(e.pointerId)
@@ -319,7 +334,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     }
     let points = wetRef.current
     wetRef.current = null
-    if (!points || !points.length) { setWet(null); return }
+    if (!points || !points.length) { showWet(); return }
     // A tap is a dot — an i, a bullet, a full stop. One point draws nothing, so it is given a
     // second a hair away and the round cap makes it a dot.
     if (points.length === 1) {
@@ -332,6 +347,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       width: kind === 'highlight' ? 0.03 : WIDTHS[width],
       ...(tool === 'pencil' ? { nib: 'pencil' as const } : {}),
     }
+
     /**
      * The stroke goes up as a finished mark in the same breath as it stops being the wet one.
      *
@@ -340,14 +356,18 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
      * back. Choosing the id here means the finished mark exists before anybody is told about
      * it, so there is no gap to see.
      */
-    const id = crypto.randomUUID()
+    const id = nowId.current
     const here_and_now: PadMark = {
       id, pad_id: pad.id, project_id: pad.project_id, page, kind,
       geometry: { points }, style, body: null,
       created_by: null, created_at: new Date().toISOString(),
     }
+    // The finished mark goes into the drawing, which paints it onto the paper in the same
+    // breath, and only then is the wet stroke taken away. Both happen before the browser
+    // paints again, so the ink is never nowhere — which is what the blinking was.
     setMarks((all) => [...all, here_and_now])
-    setWet(null)
+    wetRef.current = null
+    showWet()
     setMine((m) => [...m, id])
     try {
       await addMark({ id, pad_id: pad.id, project_id: pad.project_id, page, kind, geometry: { points }, style })
@@ -463,28 +483,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     })
   }
 
-  // Ink and graphite are drawn in separate groups: one filter over all the pencil, rather
-  // than one per stroke, and none at all over the ink.
-  const inks = here.filter((m) => m.kind !== 'text' && m.style?.nib !== 'pencil')
-  const leads = here.filter((m) => m.kind !== 'text' && m.style?.nib === 'pencil')
+  const strokes = here.filter((m) => m.kind !== 'text')
   const texts = here.filter((m) => m.kind === 'text')
 
-  /**
-   * Everything already written, built once and kept.
-   *
-   * A pointer move arrives 240 times a second with a Pencil, and each one used to make React
-   * walk every path on the canvas again. By the time a page has a few thousand points in it
-   * that is most of the frame, and the pen starts to lag behind the hand. This only changes
-   * when the ink or the zoom does, which is never in the middle of a stroke.
-   */
-  const written = useMemo(
-    () => inks.map((m) => <Stroke key={m.id} mark={m} scale={view.scale} />),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [marks, page, view.scale])
-  const pencilled = useMemo(
-    () => leads.map((m) => <Stroke key={m.id} mark={m} scale={view.scale} />),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [marks, page, view.scale])
   const nib = tool === 'highlight' ? highlight : colour
   const inky = tool === 'pen' || tool === 'pencil'
   return (
@@ -496,27 +497,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       <div className="padview-frame" ref={frame} onWheel={wheel}
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onPointerCancel={cancelled}>
-        <svg className="pad-ink" aria-label="The pad">
-          <Graphite scale={view.scale} />
-          <Ground rule={pad.rule} ink={pad.rule_ink ?? 40} view={view} />
-          <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-            {pencilled.length > 0 && (
-              <g filter="url(#graphite)" opacity={GRAPHITE}>{pencilled}</g>
-            )}
-            {written}
-            {wet && (
-              <g className={tool === 'highlight' ? 'pad-hl' : undefined}
-                filter={tool === 'pencil' ? 'url(#graphite)' : undefined}
-                opacity={tool === 'pencil' ? GRAPHITE : undefined}>
-                {inkRuns(wet, tool === 'highlight' ? 0.03 : WIDTHS[width]).map((r, i) => (
-                  <path key={i} d={r.d} stroke={nib}
-                    strokeWidth={Math.max(r.width, THINNEST / view.scale)}
-                    fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                ))}
-              </g>
-            )}
-          </g>
-        </svg>
+        <PadSurface
+          marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
+          onReady={took} />
 
         <div className="pad-texts" style={{
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
@@ -589,7 +572,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           <div className="padpop-row">
             {(tool === 'highlight' ? HIGHLIGHTS : PAD_COLOURS).map((c) => (
               <button key={c} className={`pad-swatch${nib === c ? ' on' : ''}`} style={{ background: c }}
-                onClick={() => { tool === 'highlight' ? setHighlight(c) : setColour(c); goingAway() }}
+                onClick={() => { if (tool === 'highlight') setHighlight(c); else setColour(c); goingAway() }}
                 aria-label={c} />
             ))}
           </div>
@@ -654,15 +637,6 @@ const LABEL: Record<Tool, string> = {
   pen: 'Pen', pencil: 'Pencil', highlight: 'Highlighter', text: 'Type', erase: 'Erase',
 }
 
-/**
- * Graphite, as distinct from ink.
- *
- * A pencil does not lay down a solid line. It leaves the dark of itself where it was pressed
- * and lets the paper show through the rest, and its edge is broken by the grain of the sheet.
- * So a pencil stroke is drawn a little transparent and a little displaced; ink is drawn as
- * ink — flat, opaque and clean-edged, which is what a rollerball actually does.
- */
-const GRAPHITE = 0.82
 
 const RULES: { rule: PadRule; label: string }[] = [
   { rule: 'lines', label: 'Lines' },
@@ -695,58 +669,6 @@ function capture(e: React.PointerEvent): void {
   try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* not fatal */ }
 }
 
-/**
- * The ruling, drawn as a texture over the whole screen rather than onto a page.
- *
- * It is a pattern in screen space offset by the view, so it carries on wherever the canvas is
- * pushed, and it fades out when zoomed far enough that it would be noise.
- */
-function Ground({ rule, ink, view }: { rule: PadRule; ink: number; view: View }) {
-  if (rule === 'blank' || ink <= 0) return null
-  // Keep the ruling about a finger's width apart on screen, doubling as you zoom out so it
-  // never turns into a grey wash.
-  let step = 0.042 * view.scale
-  while (step < 14) step *= 2
-  while (step > 90) step /= 2
-  const ox = view.x % step
-  const oy = view.y % step
-  const id = `ground-${rule}`
-  return (
-    <>
-      <defs>
-        <pattern id={id} width={step} height={step} patternUnits="userSpaceOnUse" x={ox} y={oy}>
-          {rule === 'dots'
-            ? <circle cx={step / 2} cy={step / 2} r={Math.max(0.7, step * 0.022)}
-                className="ground-dot" opacity={ink / 100} />
-            : <>
-              <path d={`M 0 ${step} H ${step}`} className="ground-line" opacity={ink / 100} />
-              {rule === 'grid' && <path d={`M ${step} 0 V ${step}`} className="ground-line" opacity={ink / 100} />}
-            </>}
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill={`url(#${id})`} />
-    </>
-  )
-}
-
-export function Stroke({ mark, scale }: { mark: PadMark; scale?: number }) {
-  const g = mark.geometry as { points: InkPoint[] }
-  if (!g?.points?.length) return null
-  const runs = inkRuns(g.points, mark.style.width ?? 0.005)
-  // Zoomed out, a stroke would be drawn thinner than a pixel and disappear. It stops
-  // shrinking at the point where it would stop being ink.
-  const floor = scale ? THINNEST / scale : 0
-  return (
-    <g className={mark.kind === 'highlight' ? 'pad-hl' : undefined}>
-      {runs.map((r, i) => (
-        <path key={i} d={r.d} stroke={mark.style.colour ?? '#2b2d2c'}
-          strokeWidth={Math.max(r.width, floor)}
-          fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      ))}
-    </g>
-  )
-}
-
 /** Whether a mark passes within `reach` of a point — how the eraser finds what it is over. */
 function touches(mark: PadMark, p: { x: number; y: number }, reach: number): boolean {
   const g = mark.geometry as { points?: InkPoint[]; x?: number; y?: number; w?: number }
@@ -773,6 +695,24 @@ export function extentOf(marks: PadMark[]): { x1: number; y1: number; x2: number
     }
   }
   return Number.isFinite(x1) ? { x1, y1, x2, y2 } : null
+}
+
+/**
+ * A stroke in a still picture of a pad.
+ *
+ * The same outline the canvas fills, as an SVG path — so a thumbnail is made of the same ink
+ * as the pad, rather than of a second idea of what ink looks like.
+ */
+export function Stroke({ mark, across = 1 }: { mark: PadMark; across?: number }) {
+  const g = mark.geometry as { points: InkPoint[] }
+  if (!g?.points?.length) return null
+  const nib: Nib = mark.kind === 'highlight' ? 'highlight'
+    : mark.style?.nib === 'pencil' ? 'pencil' : 'pen'
+  // Roughness is measured in pixels, so in a still it is scaled to the window being shown.
+  const width = Math.max(mark.style?.width ?? 0.005, across / 600)
+  const d = pathOf(outlineOf(g.points, width, nib, seedOf(mark.id)))
+  if (!d) return null
+  return <path d={d} fill={mark.style?.colour ?? '#2b2d2c'} opacity={handOf(nib).alpha} />
 }
 
 /**
@@ -808,7 +748,7 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
     <svg className="pad-still" viewBox={`${x} ${y} ${w} ${h}`} preserveAspectRatio="xMidYMid meet"
       aria-hidden="true">
       <StillGround rule={rule} ink={ink} x={x} y={y} w={w} h={h} />
-      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} scale={1 / w} />)}
+      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} across={w} />)}
       {marks.filter((m) => m.kind === 'text').map((m) => {
         const g = m.geometry as { x: number; y: number; w: number }
         return (
@@ -885,31 +825,5 @@ export function PadPages({ pad, onTrouble }: { pad: Pad; onTrouble: (m: string) 
         )
       })}
     </div>
-  )
-}
-
-/**
- * The grain a pencil leaves.
- *
- * A displacement map driven by noise, which breaks the edge of a stroke the way the tooth of
- * paper does. Both numbers are divided by the zoom so the grain stays the same size on screen
- * however far in you are — graphite does not get coarser when you lean closer to the page.
- *
- * It is one filter over the whole group of pencil strokes rather than one per stroke, and the
- * group is memoised, so the cost is paid when the ink or the zoom changes and not on every
- * sample of a pen that reports 240 times a second.
- */
-function Graphite({ scale }: { scale: number }) {
-  // A grain about two pixels across, displaced by about one.
-  const grain = Math.min(400, Math.max(4, scale / 2.2))
-  const rough = 1.1 / scale
-  return (
-    <defs>
-      <filter id="graphite" x="-8%" y="-8%" width="116%" height="116%">
-        <feTurbulence type="fractalNoise" baseFrequency={grain} numOctaves={2} seed={11} result="grain" />
-        <feDisplacementMap in="SourceGraphic" in2="grain" scale={rough}
-          xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </defs>
   )
 }
