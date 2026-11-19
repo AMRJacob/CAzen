@@ -86,7 +86,10 @@ h2.flush { margin: 0; }
 .lead { color: var(--muted); margin: 0 0 28px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13.5px; }
+/* Numbers — sheet, project and document numbers — are set in the text face with figures of
+   one width, so columns still line up. They were in the system's monospace, whose zero is
+   slashed or dotted: right for code, harsh down a column of job numbers. */
+.mono { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-size: 14px; }
 
 /* A figure keeps its decimal point in the column even when it has no cents to show: the
    padding is the same width as ".00" and simply isn't drawn. */
@@ -360,7 +363,7 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .tb-key.on { border-color: var(--ink); background: var(--paper); }
 .tb-key-head { display: flex; gap: 7px; align-items: center; font-weight: 500; font-size: 13.5px; }
 .tb-clear { margin-left: auto; }
-.tb-read { font-size: 12.5px; color: var(--muted); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; word-break: break-word; }
+.tb-read { font-size: 12.5px; color: var(--muted); font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; word-break: break-word; }
 .tb-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
 .key-number { --c: #c8323a; }
 .key-title { --c: #4a6b82; }
@@ -393,7 +396,7 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
   border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink);
 }
 .sv-details input:focus, .sv-details select:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
-.sv-details input.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; width: 128px; }
+.sv-details input.mono { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; width: 128px; }
 .sv-details .sv-details-title { flex: 1 1 200px; }
 .sv-details button { padding: 6px 12px; }
 @media (max-width: 619px) {
@@ -711,7 +714,7 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 }
 .sv-index-list button:hover { background: var(--wash); }
 .sv-index-list button.on { background: var(--moss-soft); }
-.sv-index-list .sv-ix-number { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.sv-index-list .sv-ix-number { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-size: 13px; }
 .sv-index-list .sv-ix-title { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sv-index-empty { padding: 12px 10px; font-size: 13px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .sv-index { transition: none; } }
@@ -829,7 +832,7 @@ tr.opens.editing td { background: var(--moss-soft); cursor: default; }
 }
 .sheet-edit input:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
 .sheet-edit .f-number { flex: 0 1 150px; }
-.sheet-edit .f-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.sheet-edit .f-number input { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 .sheet-edit .f-title { flex: 1 1 260px; }
 /* Headings to add with a tap rather than type, under a rich outline box. */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
@@ -880,7 +883,7 @@ tr.skipped .page-thumb { opacity: 0.45; }
 .pv-strip .pv-field input:focus { outline: 2px solid var(--moss); outline-offset: -1px; border-color: var(--moss); }
 .pv-strip .pv-field input:disabled { opacity: 0.5; }
 .pv-strip .pv-number { flex: 0 1 140px; }
-.pv-strip .pv-number input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.pv-strip .pv-number input { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 .pv-strip .pv-title { flex: 1 1 240px; }
 .pv-strip .pv-rev { flex: 0 1 110px; }
 .pv-check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink); padding-bottom: 7px; white-space: nowrap; }
@@ -965,7 +968,7 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
   }
   .projects tr.opens:hover td { background: none; }
   .projects td { border: none; padding: 1px 0; }
-  .projects td.p-number { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; color: var(--muted); }
+  .projects td.p-number { font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-size: 13px; color: var(--muted); }
   .projects td.p-name { font-size: 17px; font-weight: 500; }
   .projects td.p-who, .projects td.p-edit { display: none; }
   .projects td.p-field { display: block; padding-top: 6px; }
@@ -1035,7 +1038,7 @@ body.immersive .content { padding-top: 10px; padding-bottom: 96px; }
 .mk-dim {
   position: absolute; transform: translate(-50%, -50%); pointer-events: none;
   background: var(--paper); border-radius: 3px; padding: 1px 5px;
-  font-size: 12px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: nowrap;
+  font-size: 12px; font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; white-space: nowrap;
 }
 .mk-hit { position: absolute; pointer-events: auto; background: rgba(192, 57, 43, 0.12); border: 1px dashed var(--danger); padding: 0; }
 .mk-hit.theirs { background: rgba(43, 45, 44, 0.06); border-style: dotted; cursor: not-allowed; }
@@ -2265,7 +2268,7 @@ body:has(.nb) .phone-nav { display: none; }
 .obs-spot { position: relative; padding: 0; cursor: pointer; overflow: hidden; }
 .obs-spot img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .obs-spot-pin { width: 16px; height: 16px; border-radius: 50%; background: #c0392b; box-shadow: 0 0 0 3px #fff, 0 1px 5px rgba(0, 0, 0, 0.3); }
-.obs-spot-no { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 5px 3px; font-size: 11.5px; font-family: ui-monospace, Consolas, monospace; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); text-align: left; }
+.obs-spot-no { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 5px 3px; font-size: 11.5px; font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); text-align: left; }
 
 /* Somewhere to drop a file. */
 .drop-spot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 120px; padding: 18px; margin: 10px 0 4px; text-align: center;
@@ -2385,7 +2388,7 @@ body:has(.nb) .phone-nav { display: none; }
 /* No pointer to hover with: a little larger, so a finger can find it. */
 @media (hover: none) { .obs-dot-mark { transform: scale(0.6); } }
 .access-link { display: flex; gap: 8px; margin-top: 8px; }
-.access-link input { flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.access-link input { flex: 1; min-width: 0; font-family: var(--sans); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; font-size: 12px; }
 .obs-dot:hover, .obs-dot:active, .obs-dot:focus { background: none; }
 .access-mail { margin-top: 10px; }
 .access-mail-body { padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

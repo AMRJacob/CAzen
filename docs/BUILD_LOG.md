@@ -34,6 +34,11 @@ from it.
   Never seen before because every check signed in as the owner. The database shows why he saw
   it: the account signed in at 11:58 is a second address of his with the firm role `member`;
   the owner is his AMR address. Also fixed: the editor's Delete label was red on red.
+- **Numbers are no longer in monospace** (Jacob: the zeros are harsh). Sheet, project and
+  document numbers were set in the system monospace (Cascadia Mono / Consolas on Windows),
+  whose zero is slashed or dotted. Ten rules now use the text face with tabular figures, so
+  columns still align. Left alone: the outline text boxes (`textarea.mono-ish`), where the
+  fixed width is what keeps indents lined up. Issued PDFs were never affected.
 
 ---
 
