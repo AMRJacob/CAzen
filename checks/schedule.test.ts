@@ -53,3 +53,10 @@ import { diffSchedule, afterIssue, summary, finishSlip } from '../src/lib/schedu
   eq(finishSlip(before,after),7,'the last finish moved a week')
   eq(diffSchedule([],issue).map(c=>c.kind),['added','added','added'],'a first issue is all additions, with nothing missing')
 }
+{
+  // From a real scan (a contractor's MS Project printout): weekday run into the date, a stray
+  // letter pair after the name, the chart's copy of the name beside it.
+  const r=readSchedule([{no:'3',text:'Mobilization 12days ~~ Mon2/16/26 Fri2/27/26',label:'Mobilization pss'},{no:'6',text:'Site Demo, Clearing, Prep BN 33 days Mon 2/16/26 Fri 3/20/26',label:'Site Demo, Clearing, Prep puss'},{no:'20',text:'Gabion Baskets/Masonry Walls C32 days Mon 1/18/27 Thu 2/18/27',label:'Gabion Baskets/Mos'},{no:'9',text:'Footings 10 days Mon 3/17/26 Fri 3/27/26'},{no:'11',text:'Office Section I'},{no:'12',text:'Steel 5 days Mon 6/15/26 Fri 6/19/26'}],{scanned:true})
+  eq(r.map(a=>[a.no??'',a.name,a.starts_on,a.ends_on]),[['3','Mobilization','2026-02-16','2026-02-27'],['6','Site Demo, Clearing, Prep','2026-02-16','2026-03-20'],['20','Gabion Baskets/Masonry Walls','2027-01-18','2027-02-18'],['9','Footings','2026-03-17','2026-03-27'],['','Office Section',null,null],['12','Steel','2026-06-15','2026-06-19']],'a real scan\'s rows: glued weekdays, stray letters, a cut-off chart label')
+  eq(r.map(a=>Object.keys(a.unsure??{}).join('+')),['','','','starts','',''],'only the date whose printed weekday it is not is doubted')
+}

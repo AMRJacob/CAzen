@@ -11,6 +11,52 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 14:25 CST
+
+**The schedule reader, against a real scan.** Jacob sent the contractor's schedule (an MS
+Project printout, scanned, one tabloid page, 57 lines) and what the app made of it: 39
+activities and 13 headings, Mobilization missing, "Little Rock, …" as a heading. Reproduced
+here: 36 and 12. After the changes below: **53 activities, 4 headings** — every line of the
+schedule, each under its own number — with 4 cells in red.
+
+What was wrong, found by reading what the reader actually saw (`__schedule`, left on the page
+for checks):
+
+- The rows *were* found by number (56 of 57 numbers read). **The dates were not read as
+  dates**: the scan runs the weekday into the date ("Mon2/16/26") and the date pattern wanted a
+  word break in front. A row with no dates is not an activity, so Mobilization went. Fixed in
+  `datesIn`.
+- The address is the sheet's own heading above the table; the bar chart's labels to the right
+  ("Elec, HVAC", "Block") became headings too. Now: the table ends where its dates end, and
+  everything right of that is not row text; where rows sit at an even pitch (they do), each
+  word goes to its row by position, rows whose number was not read get their number from the
+  pitch, and what is above line 1 or below the last line is dropped.
+- Names: the chart repeats each name beside its bar, so it is used as a second reading — the
+  name is kept as far as the two agree, unless the chart's copy was cut off by the page edge
+  (`tidyScanned`). Stray one- and two-letter leavings and misread durations are trimmed.
+- **Red cells** (Jacob: show where the app is unsure). Tried the reader's own confidence
+  first: useless — it scored correct dates at zero. What is used instead is the line checking
+  itself: a date that is not the weekday printed beside it; a pair that is not as long as the
+  duration says (calendar or working days); only one date read; finish before start; a row
+  placed by position; a date far from the rest. A cell clears when changed or clicked into.
+  On this scan: line 24 (its start is under a mouse pointer in the scan) and line 22.
+- Not checked line by line against the sheet by me beyond the names and a sample of dates.
+  Lines 36–37 read 12/1/25–12/18/25, which is what the sheet prints.
+
+**Delete set showed "[object Object]".** Two things. The confirmation printed the error object
+instead of its message (`ConfirmDelete`, now `message(e)`). And the reason for the error: that
+"Bid set · 0 sheets" is not empty — it is the upload that holds the **project manual, 116
+section revisions**. The database refused to delete it. `deleteIssuance` now checks and says
+so. Deleting such a set is not built; whether it should take the manual with it is Jacob's
+call.
+
+**Still not applied:** migration 0039 (schedule history).
+**Asked, not built:** reading pay applications from the contractor's PDF with unsure cells in
+red; re-reading titles and dates on sheets already uploaded; the iPhone cannot get back from a
+tagged sheet to the observation.
+
+---
+
 # Checkpoint — 2026-11-19, 13:45 CST
 
 **The schedule is read by its line numbers, and its issues are kept.**

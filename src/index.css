@@ -2444,3 +2444,9 @@ body:has(.nb) .phone-nav { display: none; }
 .sched-old .right { text-align: right; }
 .sched-old-head td { font-weight: 600; background: var(--wash); }
 @media (max-width: 700px) { .sched-issue-body { padding-left: 6px; } }
+
+/* What the reader was not sure of. */
+.sched-read td.doubt { background: #fbe3df; box-shadow: inset 0 0 0 1.5px #c0392b; }
+.sched-read td.doubt input.cell { background: transparent; }
+.sched-doubts { color: #8a2a1f; margin: 6px 0; }
+.doubt-key { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; background: #fbe3df; box-shadow: inset 0 0 0 1.5px #c0392b; border-radius: 2px; }

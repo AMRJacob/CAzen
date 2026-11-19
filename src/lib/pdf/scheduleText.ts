@@ -25,7 +25,7 @@ export interface ScheduleText {
 const MAX_PAGES = 40
 const base = () => new URL('./ocr/', document.baseURI).href
 
-interface OcrWord { text: string; bbox: { x0: number; y0: number; x1: number; y1: number } }
+interface OcrWord { text: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }
 interface OcrData { text: string; blocks?: { paragraphs: { lines: { words: OcrWord[] }[] }[] }[] | null }
 type Reader = {
   recognize: (image: HTMLCanvasElement, options?: object, output?: object) => Promise<{ data: OcrData }>
@@ -91,8 +91,10 @@ export async function scheduleText(
       const { data } = await ocr.recognize(canvas, {}, { text: true, blocks: true })
       const placed: PlacedWord[] = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)))
         .filter((w) => w.text.trim())
-        .map((w) => ({ text: w.text.trim(), x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0 }))
+        .map((w) => ({ text: w.text.trim(), x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0, conf: w.confidence }))
       const rows = placed.length ? linesByNumber(placed, canvas.width) : null
+      // Left where a check can read it: what the reader saw, and the rows made of it.
+      ;(globalThis as { __schedule?: unknown }).__schedule = { width: canvas.width, height: canvas.height, placed, rows, text: data.text }
       if (rows) {
         numbered++
         lines.push(...rows)

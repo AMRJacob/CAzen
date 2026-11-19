@@ -78,6 +78,7 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
   const change = (i: number, patch: Partial<Row>) =>
     setRows((all) => (all ?? []).map((r, n) => (n === i ? { ...r, ...patch } : r)))
 
+  const doubts = (rows ?? []).filter((r) => r.keep).reduce((n, r) => n + (r.unsure?.starts ? 1 : 0) + (r.unsure?.ends ? 1 : 0) + (r.unsure?.name ? 1 : 0), 0)
   const kept = (rows ?? []).filter((r) => r.keep && r.name.trim())
   const updating = (r: Row): Activity | undefined =>
     r.is_heading ? undefined : existing.find((e) => !e.is_heading && same(e.name, r.name))
@@ -142,9 +143,12 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
             Read {rows.filter((r) => !r.is_heading).length} activities
             {rows.some((r) => r.is_heading) ? ` and ${rows.filter((r) => r.is_heading).length} headings` : ''}.
             {scanned > 0 && (
-              <strong> {scanned === 1 ? 'A page was' : `${scanned} pages were`} read from a scan — check the dates against the page before keeping them.</strong>
+              <strong> {scanned === 1 ? 'A page was' : `${scanned} pages were`} read from a scan.</strong>
             )}
           </p>
+          {doubts > 0 && (
+            <p className="small sched-doubts"><span className="doubt-key" /> {doubts} {doubts === 1 ? 'cell is' : 'cells are'} in red: the reader was not sure of {doubts === 1 ? 'it' : 'them'}. Hover for why; a cell clears once it has been changed or clicked into.</p>
+          )}
           <div className="sov-preview sched-read">
             <table>
               <thead><tr><th /><th className="right" title="The line number printed on the schedule">Line</th><th>Activity</th><th>Starts</th><th>Ends</th><th>Covers</th><th /></tr></thead>
@@ -152,12 +156,17 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
                 {rows.map((r, i) => (
                   <tr key={i} className={`${r.is_heading ? 'sov-heading' : ''}${r.keep ? '' : ' sched-left-out'}`}>
                     <td><input type="checkbox" checked={r.keep} aria-label={`Keep ${r.name}`} onChange={(e) => change(i, { keep: e.target.checked })} /></td>
-                    <td className="right sched-no">{r.is_heading ? '' : r.no ?? ''}</td>
+                    <td className={`right sched-no${r.unsure?.name ? ' doubt' : ''}`} title={r.unsure?.name}>{r.is_heading ? '' : r.no ?? ''}</td>
                     <td><input className="cell" value={r.name} aria-label="Activity name" onChange={(e) => change(i, { name: e.target.value })} /></td>
                     {r.is_heading ? <td colSpan={3} /> : (
                       <>
-                        <td><input className="cell" type="date" value={r.starts_on ?? ''} aria-label="Starts" onChange={(e) => change(i, { starts_on: e.target.value || null })} /></td>
-                        <td><input className="cell" type="date" value={r.ends_on ?? ''} aria-label="Ends" onChange={(e) => change(i, { ends_on: e.target.value || null })} /></td>
+                        {/* Red until it has been looked at: changing the cell, or clicking it and leaving it, clears it. */}
+                        <td className={r.unsure?.starts ? 'doubt' : undefined} title={r.unsure?.starts}><input className="cell" type="date" value={r.starts_on ?? ''} aria-label="Starts"
+                          onChange={(e) => change(i, { starts_on: e.target.value || null, unsure: { ...r.unsure, starts: undefined } })}
+                          onBlur={() => { if (r.unsure?.starts) change(i, { unsure: { ...r.unsure, starts: undefined } }) }} /></td>
+                        <td className={r.unsure?.ends ? 'doubt' : undefined} title={r.unsure?.ends}><input className="cell" type="date" value={r.ends_on ?? ''} aria-label="Ends"
+                          onChange={(e) => change(i, { ends_on: e.target.value || null, unsure: { ...r.unsure, ends: undefined } })}
+                          onBlur={() => { if (r.unsure?.ends) change(i, { unsure: { ...r.unsure, ends: undefined } }) }} /></td>
                         <td className="small">
                           {r.lines.map((id) => (
                             <span key={id} className="tag sched-tie">{label(id)}

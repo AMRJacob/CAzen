@@ -377,6 +377,11 @@ const asPaths = (data: unknown) => ((data ?? []) as unknown[]).map((x) => (typeo
 
 /** Delete one upload round (firm admins): its records, then its files. Sheets fall back to their previous revision. */
 export async function deleteIssuance(project: ProjectStore, issuanceId: string, alsoFolder: boolean) {
+  // A set can be the upload that brought in the project manual, with no drawings in it at all.
+  // The drawings list shows that as "0 sheets", which reads as empty; it is not, and the
+  // database will not delete it. Said plainly here rather than as a foreign-key error.
+  const { count } = await db().from('spec_revisions').select('id', { count: 'exact', head: true }).eq('issuance_id', issuanceId)
+  if (count) throw new Error(`This set is not empty: it holds ${count} project manual ${count === 1 ? 'section' : 'sections'}. Deleting it here would leave the manual without them, so it has been left alone.`)
   const { data, error } = await db().rpc('delete_issuance', { p_issuance: issuanceId })
   if (error) throw error
   return deleteStoredFiles(project, asPaths(data), alsoFolder)

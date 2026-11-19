@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { message } from '../lib/errors'
 
 /**
  * An inline "are you sure" for deleting: says exactly what goes, optionally asks for a typed
@@ -24,7 +25,7 @@ export function ConfirmDelete({ what, detail, typeToConfirm, folderOption, busyL
     setBusy(true)
     setError(null)
     try { await onConfirm(alsoFolder) } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(message(e))
       setBusy(false)
     }
   }

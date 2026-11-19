@@ -14,6 +14,8 @@
 export interface ReadActivity {
   /** The line number printed on the schedule, for finding the row on the sheet. Not kept. */
   no?: string | null
+  /** What the reader was not sure of, and why — shown in red in the preview until looked at. */
+  unsure?: { starts?: string; ends?: string; name?: string }
   name: string
   is_heading: boolean
   starts_on: string | null
@@ -49,7 +51,8 @@ export function datesIn(line: string): Found[] {
     (m) => iso(+m[3], MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()) + 1, +m[1]))
   take(new RegExp(`\\b${MON}\\s*(\\d{1,2}),?\\s+(20\\d{2}|'?\\d{2})\\b`, 'gi'),
     (m) => iso(+m[3].replace("'", ''), MONTHS.indexOf(m[1].slice(0, 3).toLowerCase()) + 1, +m[2]))
-  take(/\b(\d{1,2})[/\-.](\d{1,2})[/\-.]((?:20)?\d{2})\b/g, (m) => iso(+m[3], +m[1], +m[2]))
+  // Not \b in front: a scan runs the weekday into the date ("Mon2/16/26").
+  take(/(?<![\d/.-])(\d{1,2})[/\-.](\d{1,2})[/\-.]((?:20)?\d{2})\b/g, (m) => iso(+m[3], +m[1], +m[2]))
   return out.sort((a, b) => a.at - b.at)
 }
 
@@ -58,7 +61,7 @@ export function datesIn(line: string): Found[] {
  * shaped like a date are touched, so no word of a name is ever "corrected".
  */
 export function mendDates(line: string): string {
-  return line.replace(/(?<![A-Za-z0-9])[\dOoIl|SsBZ]{1,2}[/\-][\dOoIl|SsBZ]{1,2}[/\-][\dOoIl|SsBZ]{2,4}(?![A-Za-z0-9])/g, (t) =>
+  return line.replace(/(?<![0-9/])[\dOoIl|SsBZ]{1,2}[/\-][\dOoIl|SsBZ]{1,2}[/\-][\dOoIl|SsBZ]{2,4}(?![A-Za-z0-9])/g, (t) =>
     t.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5').replace(/B/g, '8').replace(/Z/g, '2'))
 }
 
@@ -97,8 +100,55 @@ function nameFrom(before: string, after: string): string {
   return right.replace(/[^A-Za-z]/g, '').length >= 3 ? right : ''
 }
 
+/** A date a long way from the rest is more often a misread digit than a real outlier. */
+function flagStrays(list: ReadActivity[]): void {
+  const days = list.flatMap((a) => [a.starts_on, a.ends_on]).filter((d): d is string => !!d).sort()
+  if (days.length < 8) return
+  const t = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86400000
+  const lo = t(days[Math.floor(days.length * 0.1)]), hi = t(days[Math.floor(days.length * 0.9)]), slack = Math.max(120, (hi - lo) * 0.5)
+  for (const a of list) {
+    for (const k of ['starts', 'ends'] as const) {
+      const d = k === 'starts' ? a.starts_on : a.ends_on
+      if (d && (t(d) < lo - slack || t(d) > hi + slack)) (a.unsure ??= {})[k] ??= 'This date is far from the rest of the schedule'
+    }
+  }
+}
+
 /** A line as text alone, or with the line number it was found by (`scheduleRows`). */
-export type ScheduleLine = string | { no: string | null; text: string }
+export type ScheduleLine = string | { no: string | null; text: string; label?: string; /** The reader's lowest confidence in this row's dates, 0–100. */ dateConf?: number; /** Whether the row's number was read or worked out from its place. */ guessedNo?: boolean }
+
+const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/**
+ * A scanned name, tidied. Rulings and bars leave stray letters at the end of a name ("Prep BN",
+ * "Fence )") and a misread duration in the middle of it ("Slab 6ldays"). Where the chart beside
+ * the table repeats the name, the name is kept as far as the two readings agree; otherwise only
+ * what cannot be a word is trimmed.
+ */
+export function tidyScanned(name: string, label: string | undefined, heading: boolean): string {
+  let words = name.replace(/\s[-–]?\s?\S{0,3}\s?days?\b.*$/i, '').split(/\s+/).filter(Boolean)
+  if (label) {
+    const against = squash(label)
+    for (const skip of [0, 1]) {
+      const from = words.slice(skip), whole = squash(from.join(''))
+      let same = 0
+      while (same < whole.length && same < against.length && whole[same] === against[same]) same++
+      if (same < 4) continue
+      // The chart's own copy can be cut short by the edge of the page; a label that ran out
+      // while still agreeing says nothing against the rest of the name.
+      if (same >= against.length - 2) { words = from; break }
+      let k = 0
+      for (let n = 1; n <= from.length; n++) if (squash(from.slice(0, n).join('')).length <= same) k = n
+      // Only a little may be cut on the chart's say-so: a few stray letters, never real words.
+      if (k >= 1 && squash(from.slice(k).join('')).length <= 4) { words = from.slice(0, k); break }
+      words = from; break
+    }
+  }
+  const junk = (w: string) => !/[A-Za-z0-9]/.test(w) || (/^[^A-Za-z0-9]*[A-Za-z]{1,2}[^A-Za-z0-9]*$/.test(w) && !/^(of|to|at|in|on|by|or|&|@)$/i.test(w) && w !== w.toUpperCase())
+    || (heading && w.replace(/[^A-Za-z0-9]/g, '').length <= 3)
+  while (words.length > 1 && junk(words[words.length - 1])) words.pop()
+  return words.join(' ').replace(/[\s(]+$/, '').trim()
+}
 
 export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } = {}): ReadActivity[] {
   const out: ReadActivity[] = []
@@ -112,14 +162,17 @@ export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } 
     const no = typeof given === 'string' ? (line.match(/^(\d{1,4})\s+\S/)?.[1] ?? null) : given.no
     const dates = datesIn(line)
     if (!dates.length) {
-      const letters = line.replace(/[^A-Za-z]/g, '').length
-      const clean = line.replace(/[|[\]{}_=~]+/g, ' ').replace(/\s+/g, ' ').trim()
+      let clean = line.replace(/[|[\]{}_=~]+/g, ' ').replace(/\s+/g, ' ').trim()
+      // A numbered row with no dates is a summary row: its name, less what the rulings left on it.
+      if (opts.scanned && typeof given !== 'string') clean = tidyScanned(clean, undefined, true)
+      const letters = clean.replace(/[^A-Za-z]/g, '').length
       // A heading is mostly words. What a scan makes of a row of bars is mostly not.
-      if (letters >= 4 && letters / line.replace(/\s/g, '').length >= 0.75 && clean.length <= 70 && !JUNK.test(clean)) pendingHeading = clean
+      if (letters >= 4 && letters / clean.replace(/\s/g, '').length >= 0.75 && clean.length <= 70 && !JUNK.test(clean)) pendingHeading = clean
       continue
     }
     const tail = dates.length > 1 ? dates[1].end : dates[0].end
-    const name = nameFrom(line.slice(0, dates[0].at), line.slice(tail))
+    let name = nameFrom(line.slice(0, dates[0].at), line.slice(tail))
+    if (opts.scanned && typeof given !== 'string') name = tidyScanned(name, given.label, false)
     if (!name || JUNK.test(name)) continue
     if (pendingHeading) {
       out.push({ name: pendingHeading, is_heading: true, starts_on: null, ends_on: null, percent: 0 })
@@ -128,11 +181,41 @@ export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } 
     let [a, b] = [dates[0].day, (dates[1] ?? dates[0]).day]
     if (b < a) [a, b] = [b, a]
     const pc = line.match(/(\d{1,3})(?:\.\d+)?\s?%/)
+    const unsure: NonNullable<ReadActivity['unsure']> = {}
+    if (dates.length < 2) { unsure.ends = 'Only one date was read on this line'; unsure.starts = unsure.ends }
+    else if (dates[1].day < dates[0].day) { unsure.starts = 'The finish read is before the start'; unsure.ends = unsure.starts }
+    // The line checks itself where the schedule prints enough to check it with: the weekday
+    // beside each date, and the duration beside the pair. A date whose weekday is wrong was
+    // misread; so, where no weekday could be read, was one of a pair that is not as long as
+    // the line says. (The reader's own confidence was tried and says little: on a real scan
+    // it gave correct dates a score of nothing.)
+    if (dates.length >= 2) {
+      const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+      const printed = dates.slice(0, 2).map((d) => line.slice(Math.max(0, d.at - 7), d.at).match(/(sun|mon|tue|wed|thu|fri|sat)[a-z]*\.?\s*$/i)?.[1].toLowerCase() ?? null)
+      const agrees = dates.slice(0, 2).map((d, i) => (printed[i] ? DAYS[new Date(`${d.day}T00:00:00Z`).getUTCDay()] === printed[i] : null))
+      if (agrees[0] === false) unsure.starts ??= `The line says ${printed[0]![0].toUpperCase()}${printed[0]!.slice(1)}, and this date is not one`
+      if (agrees[1] === false) unsure.ends ??= `The line says ${printed[1]![0].toUpperCase()}${printed[1]!.slice(1)}, and this date is not one`
+      const long = line.slice(0, dates[0].at).match(/(\d{1,4})\s?d(?:ays?)?\b(?!.*\d\s?d(?:ays?)?\b)/i)
+      if (long && !(agrees[0] && agrees[1]) && dates[1].day >= dates[0].day) {
+        const t = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86400000
+        const span = t(dates[1].day) - t(dates[0].day) + 1
+        let working = 0
+        for (let x = t(dates[0].day); x <= t(dates[1].day); x++) { const wd = new Date(x * 86400000).getUTCDay(); if (wd !== 0 && wd !== 6) working++ }
+        const said = Number(long[1])
+        if (said !== span && said !== working && said !== span - 1) {
+          const why = `The line says ${said} days, and these dates are ${span} apart`
+          if (agrees[0] !== true) unsure.starts ??= why
+          if (agrees[1] !== true) unsure.ends ??= why
+        }
+      }
+    }
+    if (typeof given !== 'string' && given.guessedNo) unsure.name = 'The line number was not read; this row was placed by its position'
     out.push({
-      no, name, is_heading: false, starts_on: a, ends_on: b,
+      no, name, is_heading: false, starts_on: a, ends_on: b, ...(Object.keys(unsure).length ? { unsure } : {}),
       percent: pc ? Math.max(0, Math.min(100, Number(pc[1]))) : 0,
     })
   }
+  flagStrays(out)
   return out
 }
 
