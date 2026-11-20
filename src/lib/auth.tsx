@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export const useAuth = () => useContext(AuthContext)
 
-type Mode = 'password' | 'link' | 'forgot'
+type Mode = 'password' | 'forgot'
 
 export function SignIn() {
   const { linkError } = useAuth()
@@ -136,9 +136,6 @@ export function SignIn() {
     let err: { message: string } | null = null
     if (mode === 'password') {
       err = (await supabase.auth.signInWithPassword({ email, password })).error
-    } else if (mode === 'link') {
-      err = (await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: appUrl() } })).error
-      if (!err) setMessage(`Sign-in link sent to ${email}. Open it on this device.`)
     } else {
       err = (await supabase.auth.resetPasswordForEmail(email, { redirectTo: appUrl() })).error
       if (!err) setMessage(`If ${email} has an account, a reset link is on its way. Open it on this device.`)
@@ -147,7 +144,7 @@ export function SignIn() {
     if (err) setError(err.message === 'Invalid login credentials' ? 'Email or password is wrong.' : err.message)
   }
 
-  const label = { password: 'Sign in', link: 'Email me a sign-in link', forgot: 'Send reset link' }[mode]
+  const label = { password: 'Sign in', forgot: 'Send reset link' }[mode]
 
   return (
     <div className="signin">
@@ -164,7 +161,6 @@ export function SignIn() {
         <div className="signin-links">
           {mode !== 'password' && <button type="button" className="link" onClick={() => setMode('password')}>Sign in with password</button>}
           {mode !== 'forgot' && <button type="button" className="link" onClick={() => setMode('forgot')}>Forgot password?</button>}
-          {mode !== 'link' && <button type="button" className="link" onClick={() => setMode('link')}>Email me a link</button>}
         </div>
         {message && <div className="notice">{message}</div>}
         {error && <div className="notice error">{error}</div>}
