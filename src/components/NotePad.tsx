@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  addMark, listMarks, removeMarks, setMarkBody, setMarkGeometry, setMarkStyle, setPad, watchPad,
+  addMark, isPicture, listMarks, removeMarks, setMarkBody, setMarkGeometry, setMarkStyle, setPad, watchPad,
   HIGHLIGHTS, PAD_COLOURS,
   type MarkKind, type NotePad as Pad, type PadMark, type PadRule,
 } from '../lib/pads'
@@ -8,6 +8,10 @@ import { enterInList, indent, outdent, toggleBullets, type Edit } from '../lib/p
 import { PALM_ACROSS, PALM_SURE, PEN_TAIL, PINCH_TOGETHER, isHandContact, samplesFrom, type InkPoint } from '../lib/ink'
 import { PadSurface, type InkStyle, type PadInk } from './PadSurface'
 import { message } from '../lib/errors'
+import { useProject } from '../lib/project'
+import { keepPhoto, photoUrl } from '../lib/photos'
+import type { ProjectStore } from '../lib/files'
+import { SheetClip } from './SheetClip'
 import { handOf, outlineOf, pathOf, seedOf, type Nib } from '../lib/nib'
 import { Mark } from './Logo'
 
@@ -85,7 +89,9 @@ interface View { scale: number; x: number; y: number }
 /** What the canvas looks like when nothing has been written yet: a page's worth, centred. */
 const HOME = 1.2
 
-export function NotePad({ pad, onChanged, onClose, onTrouble }: {
+export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver }: {
+  /** A photograph already on the page, to be laid on the paper and drawn over: its file's path. */
+  drawOver?: string | null
   pad: Pad
   onChanged: (pad: Pad) => void
   onClose: () => void
@@ -184,8 +190,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   // ---- what is on the canvas ----------------------------------------------------------------
 
+  const [loaded, setLoaded] = useState(false)
   const load = useCallback(() => {
-    listMarks(pad.id).then(setMarks).catch((e) => complain(message(e)))
+    listMarks(pad.id).then((m) => { setMarks(m); setLoaded(true) }).catch((e) => complain(message(e)))
   }, [pad.id, complain])
   useEffect(() => { load() }, [load])
 
@@ -681,7 +688,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   function rub(e: React.PointerEvent) {
     const p = at(e)
     for (const m of here) {
-      if (erasing.current.has(m.id)) continue
+      // A picture is paper to draw over: the eraser takes ink off it, not the picture away.
+      if (erasing.current.has(m.id) || isPicture(m)) continue
       if (touches(m, p, 0.02 * atZoom())) erasing.current.add(m.id)
     }
     if (erasing.current.size) setMarks((all) => all.filter((m) => !erasing.current.has(m.id)))
@@ -759,6 +767,84 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y))
     return lay(clipboard, where.x - x, where.y - y)
   }
+
+  // ---- pictures to draw over ----------------------------------------------------------------
+
+  const { current: project } = useProject()
+  const photoIn = useRef<HTMLInputElement>(null)
+  const [clipping, setClipping] = useState(false)
+  /** Lay a picture on the paper in the middle of what is on screen, about half the window wide. */
+  async function placePicture(file: Blob, shape: { w: number; h: number }, about: string) {
+    if (!project) return
+    try {
+      await layPicture(await keepPhoto(project as ProjectStore, file, about), shape)
+    } catch (e) { complain(message(e)) }
+  }
+  /** A picture whose file is already kept, laid on the paper. */
+  async function layPicture(path: string, shape: { w: number; h: number }) {
+    try {
+      const v = viewRef.current, box = frame.current?.getBoundingClientRect()
+      const across = (box?.width ?? 800) / v.scale, down = (box?.height ?? 600) / v.scale
+      let w = across * 0.55, h = w * shape.h / shape.w
+      if (h > down * 0.7) { h = down * 0.7; w = h * shape.w / shape.h }
+      const saved = await addMark({
+        pad_id: pad.id, project_id: pad.project_id, page, kind: 'text',
+        geometry: { x: -v.x / v.scale + (across - w) / 2, y: -v.y / v.scale + (down - h) / 2, w, h },
+        style: { image: path }, body: '',
+      })
+      setMine((m) => [...m, saved.id]); setUndone([])
+      setMarks((all) => [...all, saved])
+      // Picked up at once, so it can be put where it belongs and made the size wanted.
+      setTool('select'); setPicked([saved.id])
+    } catch (e) { complain(message(e)) }
+  }
+  // Sent here from a photograph on the page: it is laid down once, unless it is already here.
+  const laid = useRef(false)
+  useEffect(() => {
+    if (!drawOver || !project || laid.current || !loaded) return
+    laid.current = true
+    if (marks.some((m) => m.style?.image === drawOver)) return
+    let gone = false
+    photoUrl(project as ProjectStore, drawOver).then((url) => {
+      const im = new Image()
+      im.onload = () => { URL.revokeObjectURL(url); if (!gone) void layPicture(drawOver, { w: im.naturalWidth, h: im.naturalHeight }) }
+      im.onerror = () => URL.revokeObjectURL(url)
+      im.src = url
+    }).catch((e) => complain(message(e)))
+    return () => { gone = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawOver, project, loaded])
+
+  async function photoChosen(file: File | undefined) {
+    if (!file) return
+    try {
+      const bmp = await createImageBitmap(file)
+      await placePicture(file, { w: bmp.width, h: bmp.height }, 'Pad photo')
+    } catch (e) { complain(message(e)) } finally { if (photoIn.current) photoIn.current.value = '' }
+  }
+  /** A corner of the one picture picked: it grows or shrinks about the opposite corner, keeping its shape. */
+  const sizingPic = useRef<{ id: string; x: number; g: { x: number; y: number; w: number; h: number }; corner: 'nw' | 'ne' | 'sw' | 'se' } | null>(null)
+  const picGrip = (m: PadMark, corner: 'nw' | 'ne' | 'sw' | 'se') => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.stopPropagation(); e.preventDefault()
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      sizingPic.current = { id: m.id, x: e.clientX, g: boxOf(m), corner }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const z = sizingPic.current
+      if (!z || z.id !== m.id) return
+      const dx = (e.clientX - z.x) / viewRef.current.scale
+      const west = z.corner === 'nw' || z.corner === 'sw'
+      const w = Math.max(z.g.w * 0.08, z.g.w + (west ? -dx : dx)), k = w / z.g.w, h = z.g.h * k
+      const geometry = { x: west ? z.g.x + z.g.w - w : z.g.x, y: z.corner === 'nw' || z.corner === 'ne' ? z.g.y + z.g.h - h : z.g.y, w, h }
+      setMarks((all) => all.map((x) => (x.id === m.id ? { ...x, geometry } : x)))
+    },
+    onPointerUp: () => {
+      if (sizingPic.current?.id !== m.id) return
+      sizingPic.current = null
+      setMarkGeometry(m.id, m.geometry).catch((err) => complain(message(err)))
+    },
+  })
 
   // ---- the words in the box being typed in ------------------------------------------------
 
@@ -918,7 +1004,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   }, [])
 
   const strokes = here.filter((m) => m.kind !== 'text')
-  const texts = here.filter((m) => m.kind === 'text')
+  const onePicture = picked.length === 1 ? here.find((m) => m.id === picked[0] && isPicture(m)) ?? null : null
+  const texts = here.filter((m) => m.kind === 'text' && !isPicture(m))
+  const pictures = here.filter(isPicture)
 
   const nib = tool === 'highlight' ? highlight : colour
   const chosen = here.filter((m) => picked.includes(m.id))
@@ -954,6 +1042,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     const touch = (e: TouchEvent) => {
       const on = e.target as Element | null
       // A formatting key acts on pointerdown and must not take the cursor out of the box.
+      // The clip picker laid over the pad is an ordinary screen: it scrolls and taps as usual.
+      if (on?.closest('.pad-over')) return
       if (on?.closest('.pad-fmt')) { if (e.cancelable) e.preventDefault(); return }
       if (on?.closest('button, input, textarea, select, label, a, .pad-text')) return
       if (e.cancelable) e.preventDefault()
@@ -996,6 +1086,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         }}
         // The wheel pressed down drags the paper, and must not start the browser's own scrolling.
         onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}>
+        {/* Pictures lie under the ink: a photograph or a piece of a drawing, there to be drawn over. */}
+        <div className="pad-pics" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale / TEXT_UNIT})` }}>
+          {pictures.map((m) => {
+            const b = boxOf(m)
+            return <PadPicture key={m.id} project={project as ProjectStore | null} path={m.style.image!}
+              style={{ left: b.x * TEXT_UNIT, top: b.y * TEXT_UNIT, width: b.w * TEXT_UNIT, height: b.h * TEXT_UNIT }} />
+          })}
+        </div>
         <PadSurface
           marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
           onReady={took} />
@@ -1108,6 +1206,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
               </div>
             )
           })}
+          {onePicture && (() => {
+            const b = boxOf(onePicture)
+            return (
+              <div className="pad-textbox shown pad-picframe" style={{ left: b.x * TEXT_UNIT, top: b.y * TEXT_UNIT, width: b.w * TEXT_UNIT, height: b.h * TEXT_UNIT }}>
+                {(['nw', 'ne', 'sw', 'se'] as const).map((c) => <span key={c} className={`pad-textgrip corner ${c}`} title="Drag to make the picture larger or smaller" {...picGrip(onePicture, c)} />)}
+              </div>
+            )
+          })()}
           {pickedBox && (
             <div className="pad-picked" style={{ left: pickedBox.x * TEXT_UNIT, top: pickedBox.y * TEXT_UNIT, width: pickedBox.w * TEXT_UNIT, height: pickedBox.h * TEXT_UNIT }} />
           )}
@@ -1276,6 +1382,11 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
             <button className="padpop-word" onClick={() => void addPage()}>Add a page</button>
             <button className="padpop-word" onClick={() => { home(); goingAway() }}>Find my writing</button>
           </div>
+          <div className="padpop-row">
+            <button className="padpop-word" disabled={!project} onClick={() => { photoIn.current?.click(); goingAway() }}>Add a photo to draw over</button>
+            <button className="padpop-word" disabled={!project} onClick={() => { setClipping(true); setMenu(null); setOpen(false) }}>Clip from a drawing</button>
+            <input ref={photoIn} type="file" accept="image/*" hidden onChange={(e) => void photoChosen(e.target.files?.[0])} />
+          </div>
           <label className="check small">
             <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
             Draw with a finger
@@ -1288,8 +1399,26 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           </p>
         </div>
       )}
+      {clipping && project && (
+        <div className="pad-over" onPointerDown={(e) => e.stopPropagation()}>
+          <SheetClip project={project as ProjectStore} onClose={() => setClipping(false)}
+            onClip={(blob, shape, from) => { setClipping(false); void placePicture(blob, shape, `Clip ${from}`) }} />
+        </div>
+      )}
     </div>
   )
+}
+
+/** One picture on the paper. The device's own copy shows first, so it is there with no signal. */
+function PadPicture({ project, path, style }: { project: ProjectStore | null; path: string; style: React.CSSProperties }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!project) return
+    let gone = false, made: string | null = null
+    photoUrl(project, path).then((u) => { made = u; if (gone) URL.revokeObjectURL(u); else setUrl(u) }).catch(() => {})
+    return () => { gone = true; if (made) URL.revokeObjectURL(made) }
+  }, [project, path])
+  return <div className={`pad-pic${url ? '' : ' waiting'}`} style={style}>{url && <img src={url} alt="" draggable={false} />}</div>
 }
 
 const LABEL: Record<Tool, string> = {

@@ -3175,3 +3175,19 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 }
 
 .shell.home .projects { border: none; background: none; box-shadow: none; border-radius: 0; }
+
+/* ---------- Pad: pictures to draw over ---------- */
+.pad-pics { position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; }
+.pad-pic { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(43, 45, 44, 0.12); }
+.pad-pic.waiting { background: repeating-linear-gradient(135deg, #eeece4 0 12px, #f6f4ec 12px 24px); }
+.pad-pic img { display: block; width: 100%; height: 100%; object-fit: fill; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pad-textbox.pad-picframe { pointer-events: none; outline-style: solid; outline-color: var(--moss); background: none; }
+.pad-textbox.pad-picframe .pad-textgrip { pointer-events: auto; display: block; }
+.pad-texts.selecting .pad-textbox.pad-picframe { pointer-events: none; }
+.pad-over { position: fixed; inset: 0; z-index: 90; }
+.pad-over, .pad-over * { touch-action: auto; -webkit-user-select: auto; user-select: auto; }
+.clip .clip-do { margin-left: auto; display: flex; gap: 8px; }
+.clip-sheet { flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; padding: 12px; position: relative; }
+.clip-page { position: relative; touch-action: none; cursor: crosshair; max-width: 100%; }
+.clip-page img { display: block; max-width: 100%; max-height: calc(100dvh - 90px); user-select: none; -webkit-user-select: none; box-shadow: 0 1px 6px rgba(0,0,0,0.12); background: #fff; }
+.clip-box { position: absolute; border: 2px solid var(--moss); background: rgba(95, 122, 97, 0.14); pointer-events: none; }

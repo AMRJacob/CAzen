@@ -390,6 +390,8 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
   const [drawing, setDrawing] = useState(false)
+  /** A photograph of this page sent to the pad to be drawn over. */
+  const [drawOver, setDrawOver] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [working, setWorking] = useState(false)
   /** The photograph open in the gallery, and whether its label is waiting to be typed. */
@@ -543,7 +545,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   const cover = visit ? coverOf(page, photosOf(seen)) : null
 
   if (drawing && pad) {
-    return <NotePad pad={pad} onChanged={setPadRow} onClose={() => setDrawing(false)} onTrouble={onTrouble} />
+    return <NotePad pad={pad} drawOver={drawOver} onChanged={setPadRow} onClose={() => { setDrawing(false); setDrawOver(null) }} onTrouble={onTrouble} />
   }
 
   if (exporting) {
@@ -720,6 +722,8 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             <div className="nb-light-row nb-light-foot">
               <span>{at + 1} of {page.photos.length}</span>
               <button className={cover === viewing.path ? 'on' : ''} onClick={() => change({ cover_photo: viewing.path })}>{cover === viewing.path ? 'Cover' : 'Make cover'}</button>
+              {/* The same tools as the sketch: the photograph is laid on the page's pad and drawn over there. */}
+              <button onClick={() => { const p = viewing.path; setViewing(null); setDrawOver(p); void draw() }}>Draw on it</button>
               <button onClick={() => {
                 const next = { ...(page.photo_labels ?? {}) }; delete next[viewing.path]
                 change({ photos: page.photos.filter((x) => x !== viewing.path), photo_labels: next }); setViewing(null)

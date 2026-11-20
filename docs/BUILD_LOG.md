@@ -11,6 +11,39 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:30 CST
+
+**Pictures on the pad, to draw over** (Jacob, 15:26: a tool to add a photo to draw over, or
+clip from a drawing; and the pad's tools in the photo viewer).
+
+- **Add a photo to draw over** — pad → More. The camera or the library; the photo is kept
+  like any site photo (on the device first, sent when there is signal) and laid on the paper
+  in the middle of what is on screen, under the ink.
+- **Clip from a drawing** — pad → More. Choose a sheet, drag a box round the part wanted,
+  *Use this part*; that part is drawn again from the sheet at a finer size and laid on the
+  paper the same way. `src/components/SheetClip.tsx`. The sheet is shown whole in the picker —
+  no zooming there yet, so a small detail on a large sheet is a small box to drag.
+- **Draw on it** — in a notebook page's photo viewer. The photograph is laid on that page's
+  pad (made if the page has none) and the pad opens: the same pen, pencil, highlighter, text
+  and eraser. It uses the photograph's own file, not a copy.
+- A picture arrives picked up: with Select it is dragged to where it belongs, and a dot at
+  each corner makes it larger or smaller, keeping its shape. Delete removes it. **The eraser
+  does not**: it takes ink off a picture and leaves the picture.
+- **How it is kept:** as a `text` mark with no words and `style.image` holding the file's
+  path. The database allows three kinds of mark (ink, highlight, text) and a fourth would have
+  needed its rule changed; this needed nothing. A copy of the app from before today shows such
+  a mark as an empty text box.
+- **Not done / to know:** the annotation is on the pad, not on the photograph — the photo in
+  the page's gallery and in the report is unchanged, and the marked-up version is the sketch.
+  The pad's thumbnail on the page does not show pictures (only the ink over them). Removing a
+  photograph from the page, or tearing the page out, deletes the file a picture on the pad
+  points at. Observation photos have no *Draw on it* yet.
+- `checks/t_padpic.py` (photo in, resized, drawn over, eraser leaves it, clip from A-101),
+  `checks/t_drawon.py` (phone, from the page's photo viewer). Test browser; the camera on a
+  phone was not driven.
+
+---
+
 # Checkpoint — 2026-11-20, 15:21 CST
 
 Eight from Jacob, 15:08–15:18. Test browser only throughout; nothing seen on the iPhone.

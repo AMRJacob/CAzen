@@ -49,7 +49,11 @@ export interface PadMark {
   /** `nib` says whether a stroke is ink or graphite; they are drawn differently. */
   /** `size` is a text box's type size, in page units like everything else on the pad. */
   /** `align`, `bold`, `italic`, `underline` are a text box's, and apply to the whole box. */
-  style: { colour?: string; width?: number; nib?: 'pencil'; size?: number; align?: 'left' | 'center' | 'right'; bold?: boolean; italic?: boolean; underline?: boolean }
+  style: { colour?: string; width?: number; nib?: 'pencil'; size?: number; align?: 'left' | 'center' | 'right'; bold?: boolean; italic?: boolean; underline?: boolean;
+    /** A picture laid on the paper to draw over — a photograph, or a piece cut from a drawing: the
+     *  path of its file. It is kept as a `text` mark with no words (the database knows three
+     *  kinds of mark and this needed no fourth); `isPicture` tells the two apart. */
+    image?: string }
   body: string | null
   created_by: string | null
   created_at: string
@@ -224,3 +228,6 @@ export function watchPad(padId: string, on: {
     .subscribe()
   return () => { void db().removeChannel(channel) }
 }
+
+/** A mark that is a picture on the paper rather than words. */
+export const isPicture = (m: { kind: MarkKind; style?: { image?: string } }): boolean => m.kind === 'text' && !!m.style?.image
