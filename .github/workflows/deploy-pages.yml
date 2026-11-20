@@ -16,12 +16,12 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Built in one job and published in the next. Done in a single job, the publish step asked for
+# the upload half a second after it was made and three times on 2026-11-20 was told there was
+# none; a separate job starts after the upload has settled.
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,5 +37,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -11,6 +11,27 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:38 CST
+
+**"I am not seeing the circle menu from the main menu notebook path"** (Jacob, 15:36). The
+tagging screen is one screen however it is reached (`SheetSpot`, used only by the observation
+form); opened from a notebook page here, the mark is there and on top, desk and phone. What he
+saw was the old screen: **the 15:33 deploy failed at GitHub's publish step**, the third time
+today, the same way ("no artifacts named github-pages" half a second after the upload).
+
+- **The deploy workflow is now two jobs** (`.github/workflows/deploy-pages.yml`): *build*
+  makes and uploads the site, *deploy* (`needs: build`) publishes it. Publishing in the same
+  job asked for the upload the instant it was made. This is the layout I remember GitHub's own
+  Pages starter workflow using; **that was not looked up**, and whether it ends the failures
+  will only be known from the next several deploys.
+- **A touch places the tag** (15:36: "Tag it here" is not necessary). On the drawing, a touch
+  that did not drag puts the tag there and returns to the observation; the *Tag it here*
+  button is gone. Dragging and pinching still move the sheet. So the kind of tag is chosen
+  (corner menu → Tag type) before the touch, or on the form after. Reopened on a tagged
+  observation, a touch moves the tag. `checks/t_spotmenu.py`.
+
+---
+
 # Checkpoint — 2026-11-20, 15:33 CST
 
 **Tagging an observation to a drawing** (Jacob, 15:31, with a screenshot of A102: the tag

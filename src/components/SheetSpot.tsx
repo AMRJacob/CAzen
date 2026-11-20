@@ -147,13 +147,6 @@ export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade
           ? null
           : <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a sheet by number or title" aria-label="Find a sheet" />}
         {sheet && <span className="spot-name"><span className="mono">{sheet.number}</span> {sheet.title}</span>}
-        {/* Always there once a sheet is open: appearing only after the touch made the bar taller,
-            which slid the drawing down under the tag just placed. */}
-        {sheet && <button className="primary" disabled={!at} onClick={() => {
-          if (!at) return
-          const img = document.querySelector<HTMLImageElement>('.spot-page img')
-          onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
-        }}>Tag it here</button>}
         {!sheet && <button onClick={onClose} aria-label="Close">×</button>}
       </header>
       {error && <div className="notice error">{error}</div>}
@@ -208,7 +201,13 @@ export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade
             if (h.moved || !pageEl.current) return
             const box = pageEl.current.getBoundingClientRect()
             const x = (e.clientX - box.left) / box.width, y = (e.clientY - box.top) / box.height
-            if (x >= 0 && x <= 1 && y >= 0 && y <= 1) setAt({ x, y })
+            if (x < 0 || x > 1 || y < 0 || y > 1) return
+            // A touch that did not drag is the tag: it is placed and the screen is done with.
+            // (There was a Tag it here button to press afterwards; Jacob, 11/20: not needed.)
+            const at = { x, y }
+            setAt(at)
+            const img = pageEl.current.querySelector('img')
+            onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
           }}
           onPointerCancel={(e) => { ptrs.current.delete(e.pointerId); if (!ptrs.current.size) hand.current = null }}>
           {!image ? <p className="muted">Opening {sheet.number}…</p> : (
@@ -221,7 +220,7 @@ export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade
               )}
             </div>
           )}
-          {image && !at && <p className="spot-hint">Drag and pinch to get there, then touch the drawing where it was seen.</p>}
+          {image && <p className="spot-hint">{at ? 'Touch the drawing to move the tag.' : 'Drag and pinch to get there, then touch the drawing where it was seen.'}</p>}
         </div>
       )}
       {sheet && (() => {
