@@ -48,7 +48,11 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Construction schedule against pay applications | Live |
 | Schedule read from the contractor's PDF (printed or scanned), rows found by their line numbers, unsure cells in red; activities tied to pay lines by name | Live (2026-11-19); on the one real scan tried, all 57 lines read |
 | Re-read titles and dates on sheets already uploaded (select several, right-click) | Live (2026-11-19); not yet tried on real sheets |
-| Pay applications read from the contractor's PDF | Not built |
+| Pay applications read from the contractor's PDF: each row matched to its schedule-of-values line and checked by its own arithmetic, unsure figures in red, reviewed before kept | Live (2026-11-19); tried on a printed sample made here, not on a contractor's PDF or a scan |
+| Change orders in the register offered as schedule-of-values lines with their figure (their own, or the sum of the proposal requests they cover), and tied to them | Live (2026-11-19); checked in a test browser only |
+| A second contract on a project, added from Pay applications | Live (2026-11-19) |
+| Forms shown as the printed page and edited by clicking a part of it; the list of fields one tab away | Live (2026-11-19); checked in a test browser only |
+| Gantt colour per activity | Built (2026-11-19); waiting on migration 0041 |
 | Schedule issues: each read-in kept with what it changed and the schedule as it stood | Built (2026-11-19); waiting on migration 0039 |
 | Notebooks (field notes and meeting notes): a full-screen page a day — names, typed notes, sketch, labelled photo gallery, observations; report exported from the page | Live (2026-11-19); not yet used on the iPhone |
 | Contract library | Live |
@@ -58,8 +62,9 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Field mode: take a project to the field, work with no signal, changes sent on return | Live; the app itself now opens with no signal (2026-11-19). Awaiting a check on the iPhone |
 | Notebooks with no signal: pages, typed notes, photographs, sketches and attendees kept on the device and sent when it is back; project list hatched until they are | Live (2026-11-19); checked in a test browser, not yet on the iPhone |
 | Downloaded projects update themselves whenever the app is open with signal; hatched when not matched to the office within a day; removable from the device by holding the project | Live (2026-11-19); checked in a test browser, not yet on the iPhone |
-| Offline search across sheets | Planned |
-| Submittal register, resubmittals, consultant routing | Planned |
+| Search of the words on drawings with no signal, from the copy on the device | Live (2026-11-19); checked in a test browser only |
+| Submittal register: log received, send to a consultant and back, review and return, resubmittals (R1, R2…), days out and late | Live (2026-11-19); checked in a test browser only; no submittal logged on a real project yet |
+| Several drawing tags per observation | Not built — needs a column on observations and changes to the offline path |
 | AI access to project content | Planned |
 
 ## Decisions made

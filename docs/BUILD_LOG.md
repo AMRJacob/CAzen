@@ -11,6 +11,84 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 22:20 CST
+
+**Working down the not-built list** (Jacob, 21:58–22:00: is every feature discussed in; then
+"work through these overnight"). Seven commits, `2b…` → `HEAD`. Everything below was checked in
+the test browser against fixtures; **none of it on the iPhone, the PC, or real project data.**
+
+**Two migrations are written and not applied.** `0039_schedule_versions` was sent to the
+database at 22:01 and the confirmation it asks for went unanswered (nobody there). `0041` was
+not sent for the same reason. Until they are applied: schedule issues are still not kept, and
+the Gantt offers no colours. Nothing else below needs the database changed.
+
+- **Change orders reach the pay application.** On a draft application, change orders in the
+  change register that are not on the schedule of values are listed above *Add a line*.
+  Choosing one fills the line — number, subject, the change order's figure (its own, or the
+  sum of the proposal requests it covers), its date as the approval date — and ties the line
+  to the register entry (`sov_lines.change_order_id`, a column that was already there). The
+  contract sum then follows, because a change-order line is what moves it. **Not done:** a
+  line already tied does not follow a later change to the register's figure, and nothing says
+  when the two differ. `checks/t_co_line.py`.
+- **A second contract.** *Add another contract* on Pay applications: a name, contractor, sum,
+  retainage and a pasted schedule of values; the contracts then show as buttons across the
+  top. The Overview and the schedule comparison still read the project's first contract.
+  `checks/t_contract2.py`.
+- **Search with no signal.** Searching the words on drawings answers from the device's copy
+  when there is no connection, or when the server does not answer (`src/lib/sheetSearch.ts`,
+  `localSearch` in `sheets.ts`). It is a plainer search than the server's: every word typed
+  must appear, at the start of a word; most matches first; no stemming. Only for a project
+  that has been downloaded. `checks/search.test.ts`, `checks/t_search_off.py`.
+- **Forms as the printed page** (Jacob, 16:05). Every form — field report, meeting notes, ASI,
+  PR, CCD, RFI response, submittal — opens as the page it will print: the real PDF, redrawn
+  0.4 s after anything changes. Each part that takes typing is a box over the page; clicking
+  one opens that field beside the page (a sheet at the bottom on a phone), using the same
+  editor as before (outline tools, suggestions, reset). A blank part with no printed label
+  shows its name faintly. *List of fields* is the old form, one tab away, remembered per
+  device. `src/components/PrintedForm.tsx`, `checks/t_printed.py`. **Not what was literally
+  asked:** typing happens beside the page, not in place on it — typing into the page itself
+  would not be the printed page any more (the PDF's own line breaks, fonts and page breaks).
+  Only the first twelve pages are drawn. On a phone the page is small; it is the same page.
+- **Submittal register** (`src/pages/Submittals.tsx`, `src/lib/submittalLog.ts`). *Log a
+  submittal* the day it comes in (typing a section gives that section's next number); *Send to
+  a consultant* (who, and the day); *Back from consultant*; *Review and return* opens the
+  transmittal filled from the entry, and issuing it replaces the entry with the returned
+  package; a package returned *Revise & Resubmit* or *Rejected* offers *Log the resubmittal*,
+  numbered R1, R2… and listed under its original. Four counts at the top: out for review,
+  with a consultant, out more than 14 days, waiting on a resubmittal. **No new table**: a
+  logged submittal is an entry among the project's issued documents with no file, and its
+  dates are the ones the transmittal prints. **The 14 days is my figure** (`REVIEW_DAYS`),
+  calendar days, not taken from any contract. The consultant is a typed name, not a login,
+  and nothing is sent to them. `checks/submittals.test.ts`, `checks/t_subs.py`.
+- **Pay application read from the contractor's PDF** (`src/lib/payRead.ts`,
+  `src/components/PayRead.tsx`). On a draft application: *Read this period from the
+  contractor's PDF*, or drop it. Each row of the G703 is matched to a schedule-of-values line
+  by item number and name. The row is not read by column position: the app already knows the
+  scheduled value and what was billed before, so *this period* and *stored* are the figures on
+  the row that make completed-to-date and balance-to-finish come out. Where they do, the
+  figure is plain; where they do not — nothing adds up, the balance is missing, the scheduled
+  value or "from previous" on the PDF differs from the record — it is red, with the reason and
+  the PDF's own line. Nothing is kept until *Put these in the application*. Lines the PDF does
+  not have are left alone. Scans go through the same reader as the schedule's.
+  `checks/payread.test.ts`, `checks/t_payread.py`. **Tried only on a two-line printed G703
+  made here.** Not tried on a scan, on a contractor's real application, or on one whose rows
+  wrap onto two lines.
+- **Gantt colours** — built, hidden until migration 0041: six colours and none, in a row's
+  editor; a late coloured bar is outlined in red. `checks/t_colour.py`.
+- Requests & issues: the three entries from 11/04 that described work already built are
+  marked complete.
+
+**Not built, and why**
+
+- *Several drawing tags per observation.* Needs a new column and changes to the path that
+  saves observations with no signal. A mistake there loses field data, and the column cannot
+  be added tonight; it was left rather than shipped unseen.
+- *Deleting a set that holds the project manual* — whether the manual goes with it is Jacob's
+  decision.
+- *Google Photos* — needs a Google Cloud OAuth client.
+- *A free-canvas notes board*, *outside logins*, *AI access* — not specified enough to build.
+- *UARM L-sheet titles* — still needs one of those PDFs.
+
 # Checkpoint — 2026-11-19, 18:46 CST
 
 **Four things, one message and three entries from Requests & issues** (Jacob, 18:3x: "move the
