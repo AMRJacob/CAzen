@@ -11,6 +11,34 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 17:30 CST (field report)
+
+**"SEE ATTACHMENT FOR PHOTOGRAPHS" at the foot of a field report** (Jacob, 17:17) whenever the
+photographs go behind it as a table. Commit `3418b3b`. A `doc.closing` value added to the flowing
+body *after* the outline is pruned — pruning takes a lone top-level line for an empty heading and
+dropped it the first time. Prints bold, as the outline's top level does. In the issued PDF and the
+printed-page preview. Checked with `t_photos.py` and the PDF's text.
+
+**AMR's field report template redrawn from Jacob's 11/16 Westrock report** (17:20: "using the
+template tools to recreate the field report header … including the red title and gray line").
+The firm's saved template (`doc_templates`, kind `field_report`) had **no title at all**. It now
+has: logo top left, red title 14 pt, a light grey bar 3.6 pt, project and owner 12 pt bold, the red
+bar and firm address/contact at the right, bold DATE/TIME/LOCATION/WEATHER labels (separate text
+elements — a field's own label prints grey and plain), participants in three columns, the
+disclaimer in grey italics between two rules, the notes at 11 pt from x 72, "Page X of Y" centred.
+Header elements repeat on every page. **It no longer draws the shared letterhead**
+(`useLetterhead: false`) so that its corner sits where the firm's report puts it; the letterhead's
+rule under the header and its licence line are therefore not on field reports. Positions were
+measured from the PDF (100 dpi render, ×0.72). The previous row is kept in
+`_backup_doc_templates_20261120` (RLS on, no policies). Checked by issuing a report in the test app
+with this layout — no logo there (the stand-in has none). Not checked against the live app.
+
+Template tools gained, for it (commit `7a66b8d`): colour **Light grey** (`light`, 0.8 grey) and
+**Italic** on text elements. A notebook page's location now breaks into lines only at commas not
+followed by a state abbreviation ("Job Site, Roland, AR" → two lines, not three).
+
+---
+
 # Checkpoint — 2026-11-20, 17:20 CST (trade board)
 
 **Pay lines and schedule activities filed under CSI divisions, on a board** (Jacob, 16:36: how
