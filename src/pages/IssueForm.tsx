@@ -30,7 +30,7 @@ import { remember, remembered } from '../lib/remembered'
 export interface ReportPhoto { path: string; label: string }
 
 /** Fill in a form and download it on the firm's template. Most fields fill themselves in. */
-export default function IssueForm({ kind, prefill, photos, sheetKey }: {
+export default function IssueForm({ kind, prefill, photos, sheetKey, onIssued }: {
   kind: FormKind
   /** Fields filled in before anybody types — a report written from the day's observations. */
   prefill?: Record<string, string>
@@ -38,13 +38,15 @@ export default function IssueForm({ kind, prefill, photos, sheetKey }: {
   photos?: ReportPhoto[]
   /** What the table's crops and choices are remembered under — the page they belong to. */
   sheetKey?: string
+  /** Told once the document has been issued and kept — a register that sent it here can move on. */
+  onIssued?: () => void
 }) {
   return isConfigured
-    ? <SignedIn kind={kind} prefill={prefill} photos={photos} sheetKey={sheetKey} />
+    ? <SignedIn kind={kind} prefill={prefill} photos={photos} sheetKey={sheetKey} onIssued={onIssued} />
     : <Form kind={kind} brand={PLACEHOLDER_BRAND} layouts={{ general: defaultLayout('general'), [kind]: defaultLayout(kind) }} project={null} signer="" />
 }
 
-function SignedIn({ kind, prefill, photos, sheetKey }: { kind: FormKind; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string }) {
+function SignedIn({ kind, prefill, photos, sheetKey, onIssued }: { kind: FormKind; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string; onIssued?: () => void }) {
   const { firm } = useFirm()
   const { current } = useProject()
   const { session } = useAuth()
@@ -63,14 +65,14 @@ function SignedIn({ kind, prefill, photos, sheetKey }: { kind: FormKind; prefill
     <>
       {current && <ProjectFolder project={current} compact />}
       <Form key={`${kind}-${current?.id ?? ''}`} kind={kind} brand={brand} layouts={layouts}
-        project={current} signer={signer} prefill={prefill} photos={photos} sheetKey={sheetKey} />
+        project={current} signer={signer} prefill={prefill} photos={photos} sheetKey={sheetKey} onIssued={onIssued} />
     </>
   )
 }
 
-function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey }: {
+function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey, onIssued }: {
   kind: FormKind; brand: Brand; layouts: Record<string, Layout>; project: Project | null
-  signer: string; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string
+  signer: string; prefill?: Record<string, string>; photos?: ReportPhoto[]; sheetKey?: string; onIssued?: () => void
 }) {
   const sheetAt = sheetKey ? `cazen.photoSheet.${sheetKey}` : null
   const [sheet, setSheet] = useState<SheetState>(() => sheetFor(photos ?? [], sheetAt ? remembered<SheetState>(sheetAt) : null))
@@ -183,7 +185,12 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
     return seen
   }, [kind, log])
 
-  const values = () => Object.fromEntries(fields.map((f) => [f.key, value(f.key)]))
+  // What came with the form and is not one of its fields — who a submittal was routed to — is
+  // kept with it, so the register still has it once the document is issued.
+  const values = () => ({
+    ...Object.fromEntries(Object.entries(prefill ?? {}).filter(([k]) => !fields.some((f) => f.key === k))),
+    ...Object.fromEntries(fields.map((f) => [f.key, value(f.key)])),
+  })
   const set = (k: string, v: string) => setOverrides((o) => ({ ...o, [k]: v }))
   const reset = (k: string) => setOverrides((o) => { const n = { ...o }; delete n[k]; return n })
 
@@ -217,6 +224,7 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
         setAttachment(null)
         await loadLog()
         setStatus(`${FORM_LABELS[kind]} ${num ?? ''} saved to ${project.name}. The next one is ready below.`)
+        onIssued?.()
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String((e as { message?: string }).message ?? e))

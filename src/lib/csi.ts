@@ -71,7 +71,8 @@ export function sectionOf(number: string): string | null {
 
 /** Next submittal number within a section, given the numbers already used on the project. */
 export function nextInSection(section: string, used: string[]): string {
-  const seqs = used.filter((u) => sectionOf(u) === section).map((u) => Number(u.match(/(\d+)\D*$/)?.[1] ?? 0))
+  // A resubmittal carries its original's number with R1, R2… after it; that is not a sequence.
+  const seqs = used.filter((u) => sectionOf(u) === section).map((u) => Number(u.replace(/\s*R\d+\s*$/i, '').match(/(\d+)\D*$/)?.[1] ?? 0))
   const next = (seqs.length ? Math.max(...seqs) : 0) + 1
   return `${section} - ${String(next).padStart(3, '0')}`
 }

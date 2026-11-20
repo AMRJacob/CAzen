@@ -354,3 +354,35 @@ export function changeTotals(rows: RegisterRow[]) {
     loose: sum(rows.filter((r) => r.kind === 'pr' && !r.rolledInto && prDecision(r) !== 'rejected')),
   }
 }
+
+/* ---------- Submittals that have come in and not gone back yet ---------- */
+
+/** Log a submittal as received: an entry with no file, which the register reads as still out. */
+export async function logSubmittal(projectId: string, values: Record<string, string>): Promise<IssuedForm> {
+  const client = db()
+  const { data: u } = await client.auth.getSession()
+  const row = {
+    id: crypto.randomUUID(), project_id: projectId, kind: 'submittal_cover' as FormKind,
+    number: values['sub.number'] || null, title: values['sub.title'] || null, values, file_path: null,
+    issued_by: u.session?.user.id ?? null,
+  }
+  const { data, error } = await client.from('issued_forms').insert(row).select('*').single()
+  if (error) throw error
+  return data as IssuedForm
+}
+
+/** Change what a logged submittal says — who has it, when it went, when it came back. */
+export async function setSubmittalValues(row: Pick<IssuedForm, "id" | "number" | "title" | "values">, patch: Record<string, string>): Promise<Record<string, string>> {
+  const values = { ...(row.values ?? {}), ...patch }
+  for (const k of Object.keys(patch)) if (patch[k] === '') delete values[k]
+  const { error } = await db().from('issued_forms')
+    .update({ values, number: values['sub.number'] ?? row.number, title: values['sub.title'] ?? row.title }).eq('id', row.id)
+  if (error) throw error
+  return values
+}
+
+/** Take a logged submittal off the register. Only ever an entry with no file: a returned package stays. */
+export async function removeLoggedSubmittal(id: string): Promise<void> {
+  const { error } = await db().from('issued_forms').delete().eq('id', id).eq('kind', 'submittal_cover').is('file_path', null)
+  if (error) throw error
+}

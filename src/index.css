@@ -2969,3 +2969,35 @@ a.ov-card:hover { border-color: var(--moss); }
   .pf-editing .pf-pages { padding-bottom: 64dvh; }
   .pf-form textarea { min-height: 150px; }
 }
+
+/* ---------- Submittal register ---------- */
+.subs-head-do { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.subs-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.subs-totals > div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.subs-totals strong { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.subs-totals span { font-size: 12.5px; color: var(--muted); }
+.subs-totals .warn strong { color: #a2452f; }
+.subs-log { margin-bottom: 16px; }
+.subs-tools { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.subs-find { min-width: 220px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--panel); }
+.subs-table { overflow-x: auto; }
+.subs-table td { vertical-align: top; }
+.subs-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; background: var(--wash); border: 1px solid var(--line); white-space: nowrap; }
+.subs-tag.st-with_consultant { background: #eef1f7; border-color: #cfd6e6; color: #2f436b; }
+.subs-tag.st-back_from_consultant { background: #f7f1e1; border-color: #e6d9b0; color: #6b5514; }
+.subs-tag.act-approved, .subs-tag.act-approved_noted { background: var(--moss-soft); border-color: #c5d3c8; color: #2f4a38; }
+.subs-tag.act-revise_resubmit, .subs-tag.act-rejected { background: #f8ebe7; border-color: #e6c7bd; color: #8a3a26; }
+.subs-late td:first-child { box-shadow: inset 3px 0 0 #a2452f; }
+.subs-over { color: #a2452f; font-size: 12px; }
+.subs-again td:first-child { padding-left: 22px; }
+.subs-turn { color: var(--muted); }
+.subs-do { white-space: nowrap; }
+.subs-do > * { margin-left: 10px; }
+.subs-do .subs-remove { color: var(--muted); }
+.subs-route { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.subs-route input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; font: inherit; }
+@media (max-width: 760px) {
+  .subs-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .subs-do { white-space: normal; }
+  .subs-do > * { margin: 0 0 6px 8px; }
+}
