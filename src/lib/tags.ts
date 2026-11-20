@@ -187,3 +187,11 @@ export async function removeCustomTag(id: string): Promise<void> {
   const { error } = await db().from('observation_tags').delete().eq('id', id)
   if (error) throw error
 }
+
+/**
+ * The colour an observation wears in a list: its trade's, as on the drawing; with no trade, a
+ * warm amber for a punch item and the app's moss for anything else.
+ */
+export function glowOf(trade: string | null | undefined, title: string | null | undefined, punch = false, custom: Tag[] = []): string {
+  return markOf(trade, title, custom)?.colour ?? (punch ? '#c98a2b' : '#6b7f6a')
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { TagMark } from '../components/TagMark'
-import { markOf } from '../lib/tags'
+import { glowOf, markOf } from '../lib/tags'
 import { NotePad, PadPages, PadStill } from '../components/NotePad'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
@@ -513,7 +513,7 @@ function ObservationRow({ o, types, project, onOpen, onStatus }: {
 }) {
   const type = types.find((t) => t.id === o.type_id)
   return (
-    <div className={`obs-row obs-${o.status}`}>
+    <div className={`obs-row obs-pillrow obs-${o.status}`} style={{ ['--tc' as string]: glowOf(o.trade, o.title, type?.is_punch) }}>
       <div className="obs-row-main">
         {/* The tag as it is on the drawing — in the list, and so in the punch list. */}
         {markOf(o.trade, o.title) && <span className="obs-row-mark" title={o.trade ?? undefined}><TagMark mark={markOf(o.trade, o.title)!} size={22} /></span>}

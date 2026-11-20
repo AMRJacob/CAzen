@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Mark } from './Logo'
 import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
+import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
@@ -723,7 +724,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             <ul className="nb-seen">
               {own.map((o) => (
                 <li key={o.id}>
-                  <button onClick={() => setObserving(o)}>
+                  <button className="obs-pill" style={{ ['--tc' as string]: glowOf(o.trade, o.title, types.find((t) => t.id === o.type_id)?.is_punch) }} onClick={() => setObserving(o)}>
                     {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
                     <span className="nb-seen-text">
                       <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
@@ -737,7 +738,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
               {before.length > 0 && <li className="nb-seen-rule" role="separator">Previous observations · {before.length}</li>}
               {before.map((o) => (
                 <li key={o.id} className="nb-seen-old">
-                  <button onClick={() => setObserving(o)}>
+                  <button className="obs-pill" style={{ ['--tc' as string]: glowOf(o.trade, o.title, types.find((t) => t.id === o.type_id)?.is_punch) }} onClick={() => setObserving(o)}>
                     {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
                     <span className="nb-seen-text">
                       <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
