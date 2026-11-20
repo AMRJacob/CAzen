@@ -40,6 +40,7 @@ const Settings = page(() => import('./pages/Settings'))
 const Templates = page(() => import('./pages/Templates'))
 const FieldNotes = page(() => import('./pages/FieldNotes'))
 const Schedule = page(() => import('./pages/Schedule'))
+const Trades = page(() => import('./pages/Trades'))
 
 /**
  * The sidebar in three parts.
@@ -156,6 +157,7 @@ function Shell({ offline = false }: { offline?: boolean }) {
           <Route path="/field-notes/:area" element={<FieldNotes />} />
           <Route path="/pay" element={offline ? <p className="muted">Pay applications need the backend.</p> : <PayApps />} />
           <Route path="/schedule" element={offline ? <p className="muted">The schedule needs the backend.</p> : <Schedule />} />
+          <Route path="/trades" element={offline ? <p className="muted">The trade board needs the backend.</p> : <Trades />} />
           <Route path="/contracts" element={<Contracts />} />
           {!offline && <Route path="/settings" element={<Settings />} />}
           {!offline && <Route path="/templates" element={<Templates />} />}

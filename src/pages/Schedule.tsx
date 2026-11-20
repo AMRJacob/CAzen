@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { Gantt } from '../components/Gantt'
 import { useProject } from '../lib/project'
@@ -175,6 +176,7 @@ export default function Schedule() {
             <button className="primary" onClick={() => { setImporting(true); setSaid(null) }} disabled={!projectId || importing}>Read from a PDF</button>
             <button onClick={() => void add(false)} disabled={!projectId}>Add activity</button>
             <button onClick={() => void add(true)} disabled={!projectId}>Add heading</button>
+            <Link className="trb-open" to="/trades">Sort into trades</Link>
           </div>
         )}
       </div>

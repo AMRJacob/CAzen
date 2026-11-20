@@ -364,7 +364,10 @@ function AgainstTheSchedule({ data, figures }: { data: LoadedContract; figures: 
 
   return (
     <div className="card">
-      <h3>Against the schedule</h3>
+      <div className="pay-sched-head">
+        <h3>Against the schedule</h3>
+        <Link className="trb-open" to="/trades">Sort into trades</Link>
+      </div>
       {absent ? (
         <p className="muted small">The construction schedule is not set up on this project yet.</p>
       ) : !rows ? <p className="muted small">Loading…</p>
