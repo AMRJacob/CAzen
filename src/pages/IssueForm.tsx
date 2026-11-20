@@ -201,13 +201,17 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
       chips={f.key === 'fr.observations' ? tradeSuggestions(value(f.key), trades).slice(0, 10) : []} />
   )
 
+  /** With the photographs going behind the report as a table, the report says so at its foot. */
+  const closing = (): Record<string, string> =>
+    kind === 'field_report' && sheet.on && sheet.items.some((i) => i.use) ? { 'doc.closing': '------------SEE ATTACHMENT FOR PHOTOGRAPHS-----------' } : {}
+
   async function build(mode: 'issue' | 'preview') {
     setBusy(true)
     setError(null)
     setStatus(null)
     try {
       const v = values()
-      let bytes = await renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand) } })
+      let bytes = await renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand), ...closing() } })
       if (attachment) bytes = await prependTo(bytes, attachment)
       if (project && sheet.on && sheet.items.some((i) => i.use)) {
         bytes = await appendPhotoPages(bytes, await photosForPdf(project, sheet), {
@@ -268,7 +272,7 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
       {printed && (
         <PrintedForm layout={layout} fields={shown} value={value}
           stamp={JSON.stringify(fields.map((f) => value(f.key)))}
-          render={() => { const v = values(); return renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand) } }) }}
+          render={() => { const v = values(); return renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand), ...closing() } }) }}
           input={one} />
       )}
       <div className={`form card${printed ? ' pf-rest' : ''}`}>

@@ -377,9 +377,14 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
   if (flow) {
     const { vw, vh } = fieldParts(flow)
     const text = fieldText(flow, (k) => values[k] ?? '')
+    // A line the document ends on, after its body — "see attachment for photographs" when the
+    // field report's photographs go behind it. Added after pruning, which would take a lone
+    // top-level line for an empty heading.
+    const closing = (values['doc.closing'] ?? '').trim()
+    const end = (t: string) => (closing ? `${t.replace(/\s+$/, '')}\n\n${closing}` : t)
     const all = flow.rich
-      ? richLines(pruneOutline(text, flow.headings ? 'heading' : 'line'), fonts, flow.size, vw, flow.serif, flow.spaced, flow.headings)
-      : wrap(text, fontFor(fonts, flow.serif, flow.bold), flow.size, vw).map((t) => ({ text: t, bold: false, indent: 0 }))
+      ? richLines(end(pruneOutline(text, flow.headings ? 'heading' : 'line')), fonts, flow.size, vw, flow.serif, flow.spaced, flow.headings)
+      : wrap(end(text), fontFor(fonts, flow.serif, flow.bold), flow.size, vw).map((t) => ({ text: t, bold: false, indent: 0 }))
     const lh = flow.size * LINE_HEIGHT
     const cap1 = Math.max(1, Math.floor((vh + flow.size * 0.3) / lh))
     const capN = Math.max(1, Math.floor((cont.bottom - cont.top) / lh))
