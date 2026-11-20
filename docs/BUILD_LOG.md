@@ -11,6 +11,14 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 17:05 CST
+
+**The phone menu stays in its corner while a page scrolls** (Jacob, 16:5x: the circle moved up the screen as he scrolled, in the observation window and everywhere on the phone). The mark was placed by its top — `100dvh` less its own height — so the bar could grow upward, with a 0.26 s transition on `top`. While the browser's toolbars slide away during a scroll the browser's 100dvh changes, and the mark followed it. It is now held by its bottom edge (`bottom: var(--corner-y)`, `top: auto`), grows upward by its height alone, and `top` is no longer transitioned. In the test browser: 22 px from the bottom before and after a 600 px scroll; the open bar and the More bar both end at the same bottom edge. **The moving itself could not be reproduced here** (no iOS toolbars in a headless browser); this is the cause as read from the stylesheet. The pad's mark still uses the 100dvh rule — the pad does not scroll.
+
+He wrote "bottom right"; the mark stays at the **bottom left**, as asked at 14:35 ("consistently on the bottom left").
+
+**The observation form's head** (same message). Under the name, the **trade as a tag** (its mark and name, outlined in its colour; dashed "+ Trade tag" when none) — touching it opens the trade chooser that was a chip in the type row. Beside *Discussed with*, the **status**. On a phone the date takes its own line so *Discussed with* and the status share the next. **Area and Wanted by are gone** with the *Where, who and when* section; an observation that already has either keeps it unchanged. `checks/t_obshead.py`; `t_generic`, `t_multitag` rerun. `t_obs` and `t_tag` are stale (old tab row, old *Tag it here*).
+
 # Checkpoint — 2026-11-20, 16:48 CST
 
 Jacob, 16:47: on the phone the resolution "is great now" and the tag type is working — the 16:37 change, seen on his device.

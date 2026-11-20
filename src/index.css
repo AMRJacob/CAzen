@@ -1270,18 +1270,12 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
     overflow: hidden;
     transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
   }
-  @supports (height: 100dvh) {
-    .phone-nav {
-      bottom: auto;
-      top: calc(100dvh - var(--pn-h, 52px) - 10px - env(safe-area-inset-bottom));
-    }
-  }
   .phone-nav.open {
     width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right));
   }
   /* The rest of the destinations are more than fit a phone in one row, so they take two and
      the bar grows for them. Three across the front row keeps those labels full width. */
-  .phone-nav { transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), top 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
+  .phone-nav { transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
   .phone-nav.more .pn-bar { align-content: stretch; }
   @supports (width: 100dvw) {
     .phone-nav.open {
@@ -1867,7 +1861,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 
 /* A select that isn't inside a form block was left as the browser draws it, which on a phone is
    a small grey box beside fields that are not. One look for all of them. */
-label.stack select, .obs-row select, .obs-more select {
+label.stack select, .obs-row select, .obs-more select, .obs-head-row select {
   font: inherit; padding: 9px 30px 9px 11px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23777' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
   appearance: none; -webkit-appearance: none; width: 100%;
@@ -2275,7 +2269,20 @@ body:has(.nb) .phone-nav { display: none; }
 .obs-name:focus::placeholder { opacity: 0.35; }
 .obs-head-row { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
 .obs-head-row input { font: inherit; font-size: 14px; color: var(--muted); padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
-.obs-head-row input:not([type="date"]) { flex: 1; min-width: 180px; max-width: 360px; }
+.obs-head-row input:not([type="date"]) { flex: 1; min-width: 130px; max-width: 360px; }
+/* Status sits at the right of "Discussed with" (Jacob, 11/20), dressed like the fields beside it. */
+.obs-head-row .obs-status { font-size: 14px; color: var(--ink); padding: 5px 28px 5px 9px; border-radius: 7px; flex: 0 0 auto; width: auto; }
+/* The trade, as a tag under the name. */
+.obs-head-tag { margin-top: 6px; }
+/* On a phone the three do not fit one line: the date takes its own, and "Discussed with" and the
+   status share the next, so the status is always at its right. */
+@media (max-width: 559px) {
+  .obs-head-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .obs-head-row input[type="date"] { grid-column: 1 / -1; justify-self: start; }
+  .obs-head-row input:not([type="date"]) { min-width: 0; max-width: none; }
+}
+.obs-head-tag .obs-tag-open { display: inline-flex; align-items: center; gap: 6px; }
+.obs-head-tag .obs-tag-open:not(.set) { color: var(--muted); border-style: dashed; }
 .obs-attach { display: flex; flex-wrap: wrap; gap: 14px 44px; margin: 4px 0 12px; }
 .obs-attach-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
 .obs-attach .photo-strip { align-items: center; }
@@ -3119,14 +3126,9 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
     background: var(--paper); box-shadow: 0 3px 14px rgba(43, 45, 44, 0.18);
     overflow: hidden;
     transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
-@supports (height: 100dvh) {
-.shell.home .phone-nav {
-      bottom: auto;
-      top: calc(100dvh - var(--pn-h, 52px) - 10px - env(safe-area-inset-bottom)); }
-}
 .shell.home .phone-nav.open {
     width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
-.shell.home .phone-nav { transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), top 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.shell.home .phone-nav { transition: width 0.26s cubic-bezier(0.2, 0.8, 0.3, 1), height 0.26s cubic-bezier(0.2, 0.8, 0.3, 1); }
 .shell.home .phone-nav.more .pn-bar { align-content: stretch; }
 @supports (width: 100dvw) {
 .shell.home .phone-nav.open {
@@ -3243,7 +3245,13 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .padpop { left: var(--corner-x); bottom: calc(var(--corner) + 62px + env(safe-area-inset-bottom)); max-width: calc(100vw - var(--corner-room)); }
 .spot-tags { left: var(--corner-x); bottom: calc(var(--corner) + 64px + env(safe-area-inset-bottom)); }
 .phone-nav, .shell.home .phone-nav { left: var(--corner-x); bottom: var(--corner-y); }
-@supports (height: 100dvh) { .phone-nav, .shell.home .phone-nav { bottom: auto; top: calc(100dvh - var(--pn-h, 52px) - var(--corner) - env(safe-area-inset-bottom)); } }
+/* Held by its bottom edge, never by a top worked out from the window's height (Jacob, 11/20:
+   the circle crept up the screen while scrolling, on every page of the phone app). A top of
+   100dvh minus the mark was used so the bar could grow upward; but the browser's idea of 100dvh
+   changes while its toolbars slide away during a scroll, and the mark followed it — with a
+   0.26 s transition on top as well. Anchored at the bottom, the bar grows upward by its height
+   alone, and the browser keeps it on the visible bottom edge. */
+.phone-nav, .shell.home .phone-nav { top: auto; }
 .phone-nav.open, .shell.home .phone-nav.open { width: calc(100vw - var(--corner-room)); }
 @supports (width: 100dvw) { .phone-nav.open, .shell.home .phone-nav.open { width: calc(100dvw - var(--corner-room)); } }
 @media (min-width: 900px) { .shell.home .phone-nav.open { width: min(520px, calc(100vw - var(--corner-room))); } }
