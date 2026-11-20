@@ -2936,3 +2936,6 @@ a.ov-card:hover { border-color: var(--moss); }
 .pay-from-register { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 6px; }
 .pay-from-chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
 .pay-from-chip.on { border-color: var(--moss); background: var(--moss-soft); }
+
+.pay-contracts .pay-another { margin-left: auto; border: none; background: none; font-size: 13px; }
+@media (max-width: 760px) { .pay-contracts .pay-another { display: none; } }

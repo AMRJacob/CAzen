@@ -36,6 +36,7 @@ export default function PayApps() {
   const [tab, setTab] = useState<'summary' | string>('summary')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   const projectId = current?.id
   useEffect(() => {
@@ -105,17 +106,24 @@ export default function PayApps() {
         }} />
       )}
 
-      {contracts && contracts.length > 1 && (
+      {contracts && contracts.length > 0 && !adding && (
         <div className="pay-contracts">
-          {contracts.map((c) => (
+          {contracts.length > 1 && contracts.map((c, i) => (
             <button key={c.id} className={c.id === chosen ? 'on' : ''} onClick={() => { setChosen(c.id); setTab('summary') }}>
-              {c.name ?? 'Contract'}
+              {c.name ?? (i === 0 ? 'Contract' : `Contract ${i + 1}`)}
             </button>
           ))}
+          <button className="link pay-another" onClick={() => setAdding(true)}>Add another contract</button>
         </div>
       )}
+      {adding && (
+        <ContractSetup project={current} another onCancel={() => setAdding(false)} onCreated={(id, name) => {
+          setContracts([...(contracts ?? []), { id, name }])
+          setChosen(id); setTab('summary'); setAdding(false)
+        }} />
+      )}
 
-      {data && (
+      {data && !adding && (
         <>
           <div className="tabs pay-tabs" role="tablist">
             <button role="tab" aria-selected={tab === 'summary'} className={tab === 'summary' ? 'on' : ''}

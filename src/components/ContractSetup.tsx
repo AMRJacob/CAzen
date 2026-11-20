@@ -15,8 +15,15 @@ import type { Project } from '../lib/types'
  * is kept. A schedule that doesn't add up to the contract is the contractor's to correct, so the
  * difference is stated and not refused: the first application will say the same thing.
  */
-export function ContractSetup({ project, onCreated }: { project: Project; onCreated: (id: string) => void }) {
-  const [contractor, setContractor] = useState(project.contractor_name ?? '')
+export function ContractSetup({ project, onCreated, another, onCancel }: {
+  project: Project
+  onCreated: (id: string, name: string | null) => void
+  /** A further contract on a project that has one: it needs a name to be told from the first. */
+  another?: boolean
+  onCancel?: () => void
+}) {
+  const [contractor, setContractor] = useState(another ? '' : project.contractor_name ?? '')
+  const [name, setName] = useState('')
   const [sum, setSum] = useState('')
   const [work, setWork] = useState('5')
   const [stored, setStored] = useState('')
@@ -43,24 +50,32 @@ export function ContractSetup({ project, onCreated }: { project: Project; onCrea
     setError(null)
     try {
       const retainage = pct(work, 5)
+      const named = name.trim() || null
       onCreated(await createContract(project.id, {
         contractor: contractor.trim() || null,
-        name: null,
+        name: named,
         original_sum: contractSum,
         retainage_work: retainage,
         // Stored material is held at the same rate as work unless the agreement says otherwise.
         retainage_stored: pct(stored, retainage),
-      }, lines))
+      }, lines), named)
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
   }
 
   return (
     <div className="card contract-setup">
-      <h3>Set up the contract</h3>
+      <h3>{another ? 'Add another contract' : 'Set up the contract'}</h3>
       <p className="muted small">
-        Once, from the agreement. Every application for payment after this carries it forward.
+        {another
+          ? 'A separate agreement on the same project — a second prime contractor, an owner-direct package. It has its own schedule of values, applications and retainage.'
+          : 'Once, from the agreement. Every application for payment after this carries it forward.'}
       </p>
       <div className="form four">
+        {another && (
+          <label className="wide-2">What to call it
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sitework package" autoFocus />
+          </label>
+        )}
         <label className="wide-2">Contractor
           <input value={contractor} onChange={(e) => setContractor(e.target.value)} />
         </label>
@@ -111,9 +126,10 @@ export function ContractSetup({ project, onCreated }: { project: Project; onCrea
       )}
 
       <div className="actions">
-        <button className="primary" disabled={!ready} onClick={() => void keep()}>
-          {busy ? 'Setting up…' : 'Set up the contract'}
+        <button className="primary" disabled={!ready || (another && !name.trim())} onClick={() => void keep()}>
+          {busy ? 'Setting up…' : another ? 'Add the contract' : 'Set up the contract'}
         </button>
+        {onCancel && <button className="link" onClick={onCancel}>Cancel</button>}
         {!lines.length && <span className="muted small">The schedule can also be added a line at a time afterwards.</span>}
       </div>
       {error && <div className="notice error">{error}</div>}

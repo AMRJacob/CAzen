@@ -4,6 +4,7 @@ import { backupProject } from './projectData'
 import type { CurrentSheet, IssuanceKind, SheetRevision } from './types'
 import type { BundleSheet } from './pdf/bundle'
 import { all as localAll } from './offline/store'
+import { searchText } from './sheetSearch.ts'
 
 export interface IssuanceInput {
   kind: IssuanceKind
@@ -271,9 +272,37 @@ export interface SearchHit {
 
 /** Words on the sheets themselves. Current set only unless allRevisions. */
 export async function searchSheets(projectId: string, query: string, allRevisions = false): Promise<SearchHit[]> {
-  const { data, error } = await db().rpc('search_sheets', { p_project: projectId, p_query: query, p_all_revisions: allRevisions })
-  if (error) throw error
-  return (data ?? []) as SearchHit[]
+  // With no signal the device's own copy of the words answers, if the project is on it.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return localSearch(projectId, query, allRevisions)
+  try {
+    const { data, error } = await db().rpc('search_sheets', { p_project: projectId, p_query: query, p_all_revisions: allRevisions })
+    if (error) throw error
+    return (data ?? []) as SearchHit[]
+  } catch (e) {
+    const local = await localSearch(projectId, query, allRevisions).catch(() => [])
+    if (local.length) return local
+    throw e
+  }
+}
+
+/** The same search over the words kept on this device (`src/lib/sheetSearch.ts`). */
+export async function localSearch(projectId: string, query: string, allRevisions = false): Promise<SearchHit[]> {
+  const texts = await localAll<{ id: string; body: string }>('sheetText', projectId)
+  if (!texts.length) return []
+  const current = await localCurrentSheets(projectId)
+  const sheets = new Map(current.map((c) => [c.sheet_id, c]))
+  const revs = await localAll<Row>('revisions', projectId)
+  const byRev = new Map(revs.map((r) => [r.id as string, r]))
+  const out: SearchHit[] = []
+  for (const f of searchText(texts, query)) {
+    const r = byRev.get(f.revision_id); if (!r) continue
+    const s = sheets.get(r.sheet_id as string); if (!s) continue
+    const is_current = s.revision_id === f.revision_id
+    if (!is_current && !allRevisions) continue
+    out.push({ sheet_id: s.sheet_id, revision_id: f.revision_id, number: s.number, title: (r.title_at_rev as string | null) ?? s.title,
+      revision_index: r.revision_index as number, file_path: r.file_path as string, is_current, snippet: f.snippet })
+  }
+  return out.slice(0, 60)
 }
 
 export interface IssuanceRow {
