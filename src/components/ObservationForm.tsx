@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { SheetSpot } from './SheetSpot'
-import { byTrade, listCustomTags, markOf, markOfTag, type Tag } from '../lib/tags'
+import { byTrade, listCustomTags, markOf, markOfTag, type Mark, type Tag } from '../lib/tags'
 import { TagMark } from './TagMark'
 import { useFirm } from '../lib/firm'
 import { listPeople } from '../lib/people'
@@ -39,7 +39,10 @@ const distinct = (list: (string | null | undefined)[]) =>
  * fills in are what it is and what kind of thing it is. Everything else is there when it
  * matters and out of the way when it doesn't.
  */
-export function ObservationForm({ project, types, existing, pin, known, day, onSaved, onCancel, onTrouble }: {
+export function ObservationForm({ project, types, existing, pin, known, day, onSaved, onCancel, onTrouble, onMark }: {
+  /** Told the mark the observation would wear, as the kind of tag is chosen — so a tag being
+   *  placed on a sheet behind the form can wear it too. */
+  onMark?: (m: Mark | null) => void
   /** The day it was seen, when it is being added to a visit that has one. */
   day?: string
   project: ProjectStore
@@ -97,6 +100,8 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
   useEffect(() => { if (firm) listCustomTags(firm.id).then(setCustom).catch(() => setCustom([])) }, [firm])
   const groups = useMemo(() => byTrade(custom), [custom])
   const mark = markOf(trade, title, custom)
+  const markKey = mark ? `${mark.shape}|${mark.colour}|${mark.text}|${mark.glyph ? 'g' : ''}` : ''
+  useEffect(() => { onMark?.(mark) }, [markKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false)
   const [kept, setKept] = useState(0)
   const titleBox = useRef<HTMLInputElement | null>(null)

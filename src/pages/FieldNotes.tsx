@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
+import { TagMark } from '../components/TagMark'
+import { markOf } from '../lib/tags'
 import { NotePad, PadPages, PadStill } from '../components/NotePad'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate as usDateOf } from '../lib/templates/fields'
@@ -513,6 +515,8 @@ function ObservationRow({ o, types, project, onOpen, onStatus }: {
   return (
     <div className={`obs-row obs-${o.status}`}>
       <div className="obs-row-main">
+        {/* The tag as it is on the drawing — in the list, and so in the punch list. */}
+        {markOf(o.trade, o.title) && <span className="obs-row-mark" title={o.trade ?? undefined}><TagMark mark={markOf(o.trade, o.title)!} size={22} /></span>}
         <span className="mono obs-no">{nameOf(o, types)}</span>
         <button className="link obs-title" onClick={onOpen}>{o.title}</button>
         {type && <span className="tag">{type.name}</span>}

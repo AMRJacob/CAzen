@@ -14,6 +14,7 @@ import { byNumberLabel, effectiveOrder, groupByDiscipline, type Discipline } fro
 import { PREFS, usePref } from '../lib/prefs'
 import { useFirm } from '../lib/firm'
 import { MarkupPalette, TOOL_KEYS, type Tool } from './MarkupPalette'
+import { remember, remembered } from '../lib/remembered'
 import { bringForward, editMarkup, listMarkups, MARKUP_COLOURS, removeMarkup, saveMarkup, watchSheet, type Markup, type Point } from '../lib/markups'
 import { listRevisions, renameSheet } from '../lib/sheets'
 import type { SheetRevision } from '../lib/types'
@@ -114,6 +115,9 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const [markupsOff, setMarkupsOff] = useState<string | null>(null)
   /** True while the next tap on the sheet places an observation where it was seen. */
   const [pinning, setPinning] = useState(false)
+  // Layers: what is drawn over the sheet can be turned off to see the drawing bare. Per device.
+  const [layers, setLayers] = useState<{ obs: boolean; marks: boolean }>(() => remembered<{ obs: boolean; marks: boolean }>('cazen.pref.sheetLayers') ?? { obs: true, marks: true })
+  const setLayer = (k: 'obs' | 'marks', on: boolean) => setLayers((l) => { const n = { ...l, [k]: on }; remember('cazen.pref.sheetLayers', n); return n })
   const canvas = useRef<HTMLCanvasElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
@@ -653,6 +657,11 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 <button onClick={fit}>Fit</button>
                 <button onClick={() => zoomAbout(1.5)} aria-label="Zoom in">+</button>
               </div>
+              <div className="sv-more-row sv-layers" role="group" aria-label="Layers">
+                <span className="muted small">Show</span>
+                <label className="check small"><input type="checkbox" checked={layers.obs} onChange={(e) => setLayer('obs', e.target.checked)} /> Observations</label>
+                <label className="check small"><input type="checkbox" checked={layers.marks} onChange={(e) => setLayer('marks', e.target.checked)} /> Markups</label>
+              </div>
               <button className={`sv-narrow-only ${tool !== null ? 'on' : ''}`} onClick={() => { setTool(tool === null ? 'ink' : null); setMore(false) }}
                 disabled={!sheet.sheetId} title={sheet.sheetId ? undefined : 'Open this sheet from the register to mark it up'}>
                 {tool !== null ? 'Done marking up' : 'Mark up'}
@@ -858,12 +867,12 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
                 <span className="sv-tag">{l.target_number}</span>
               </span>
             ))}
-            {sheet.sheetId && (
+            {sheet.sheetId && (layers.obs || pinning) && (
               <ObservationPins
                 project={project} sheetId={sheet.sheetId} revisionId={sheet.revisionId}
                 pinning={pinning} onDonePinning={() => setPinning(false)} onTrouble={setError} />
             )}
-            {sheet.sheetId && (
+            {sheet.sheetId && (layers.marks || tool !== null || settingScale) && (
               <MarkupLayer
                 markups={markups} tool={settingScale ? 'dimension' : tool} colour={colour}
                 projectId={project.id} sheetId={sheet.sheetId} revisionId={sheet.revisionId}

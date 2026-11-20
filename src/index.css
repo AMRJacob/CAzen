@@ -3265,3 +3265,9 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .spot-trade-tags button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: none; background: none; border-radius: 8px; text-align: left; font-size: 13.5px; }
 .spot-trade-tags button:hover { background: var(--wash); }
 .spot-trade-tags button.just { color: var(--muted); }
+
+/* ---------- Tags as their marks: while being placed, in lists; and layers on a sheet ---------- */
+.obs-placing { position: absolute; z-index: 9; transform: translate(-50%, -50%); line-height: 0; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45)); }
+.obs-row-mark { display: inline-flex; line-height: 0; vertical-align: middle; margin-right: 2px; }
+.sv-layers { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sv-layers label { display: inline-flex; align-items: center; gap: 6px; }

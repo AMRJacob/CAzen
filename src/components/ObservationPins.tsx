@@ -38,6 +38,8 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
     colour: o.status === 'closed' ? '#5f7a61' : o.status === 'in_progress' ? '#b06a00' : '#c0392b',
   })
 
+  const [placingMark, setPlacingMark] = useState<Mark | null>(null)
+
   const load = useCallback(() => {
     listObservations(project.id)
       .then((list) => setAll(list.filter((o) => spotsOn(o, sheetId).length > 0)))
@@ -83,8 +85,10 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
       )))}
 
       {placing && (
-        <span className="obs-pin obs-pin-new" style={{ left: `${placing.x * 100}%`, top: `${placing.y * 100}%` }}>
-          <span>+</span>
+        // The tag being placed is the tag it will be: the mark of the kind chosen on the form,
+        // and a plain dot until a kind is chosen.
+        <span className="obs-placing" style={{ left: `${placing.x * 100}%`, top: `${placing.y * 100}%` }}>
+          {placingMark ? <TagMark mark={placingMark} size={30} /> : <span className="spot-pin-dot" />}
         </span>
       )}
 
@@ -95,6 +99,7 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
             types={types}
             existing={open ?? undefined}
             pin={placing ? { sheetId, revisionId, region: placing } : null}
+            onMark={placing ? setPlacingMark : undefined}
             onSaved={() => { setPlacing(null); setOpen(null); onDonePinning(); load() }}
             onCancel={() => { setPlacing(null); setOpen(null); onDonePinning() }}
             onTrouble={(m) => onTrouble(message(m))} />

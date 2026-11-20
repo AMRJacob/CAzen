@@ -11,6 +11,36 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 16:25 CST
+
+**"Still only an orange dot instead of the tag type"** (Jacob, 16:22: the dot is fine for a
+generic tag; a chosen tag type is what should be placed, show on the sheets in the drawing
+view — perhaps switchable like a layer, markups too — and in a punch list).
+
+**Not reproduced on the tagging screen.** His exact sequence was run on a phone and at a desk
+— notebook page → Observation → Drawing → corner menu → Tag type → Masonry → Mortar joints →
+touch the sheet: the pin is the Masonry mark, the form's tile is, the saved observation has
+its trade, and the sheet shows "Ma". The database has no observation made today and no firm
+tags, so there is nothing saved to look at. What follows closes the one place a chosen kind
+really was ignored, and adds what he asked for; **if the dot is still there, which screen it
+is on is the missing fact** (or a copy of the app from before 15:58).
+
+- **Placing from an open sheet** (Drawings → a sheet → *Observe* → touch). The tag being
+  placed was a fixed "+" marker whatever was chosen on the form beside it. It is now the mark
+  of the kind chosen on the form, changing as the kind is chosen, and a plain dot until one
+  is (`onMark` from `ObservationForm` to `ObservationPins`).
+- **Layers on a sheet.** The viewer's ⋯ menu has *Show: Observations, Markups*. Either can be
+  switched off to see the drawing bare; remembered per device. Starting *Observe* or *Mark
+  up* shows that layer again while it is in use.
+- **In lists.** A row in the Observations list — and so in its Punch list view — carries the
+  observation's mark before its number.
+- **Not done:** the mark in the *issued* punch list PDF and in a field report's observation
+  list; those print the trade as words.
+
+`checks/t_placemark.py`.
+
+---
+
 # Checkpoint — 2026-11-20, 16:08 CST
 
 **The kinds of tag are a list down the left of the tagging screen, in CSI order** (Jacob,
