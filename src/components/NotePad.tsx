@@ -99,6 +99,8 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   const [width, setWidth] = useState<Width>('medium')
   const [fingerDraws, setFingerDraws] = useState(() => !penSeen())
   const [editing, setEditing] = useState<string | null>(null)
+  /** The box that actually has the cursor. `editing` asks for it; a phone may not grant it. */
+  const [typingId, setTypingId] = useState<string | null>(null)
   /** A text box being dragged out, in page units, before it is one. */
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const boxFrom = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -196,7 +198,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While words are being typed, Escape finishes the typing and nothing else is a shortcut.
-      if (editing) { if (e.key === 'Escape') { e.stopImmediatePropagation(); (document.activeElement as HTMLElement | null)?.blur() } return }
+      if (typingId) { if (e.key === 'Escape') { e.stopImmediatePropagation(); (document.activeElement as HTMLElement | null)?.blur() } return }
       // Heard before the notebook behind the pad, which would otherwise turn its own page back.
       if (e.key === 'Escape') { e.stopImmediatePropagation(); if (picked.length) setPicked([]); else onClose() }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && picked.length) { e.preventDefault(); void removePicked() }
@@ -211,7 +213,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, editing, picked, marks, page, tool])
+  }, [onClose, editing, typingId, picked, marks, page, tool])
 
   const here = marks.filter((m) => m.page === page)
 
@@ -436,7 +438,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     if (tool === 'text') {
       // A touch on the paper while a box is being typed in finishes the typing, and that is
       // all: it does not also start another box where it landed.
-      if (editing !== null) { (document.activeElement as HTMLElement | null)?.blur(); return }
+      if (typingId !== null) { (document.activeElement as HTMLElement | null)?.blur(); return }
+      // A box that was made but never took the cursor (a phone may refuse to give it one) is
+      // not being typed in: it must not hold the pad in typing.
+      if (editing !== null) setEditing(null)
       // Dragged out to the size wanted; a tap without a drag is a box of the usual width.
       const p = at(e)
       capture(e)
@@ -760,7 +765,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
   /** The box being typed in, and the mark it is. */
   const typingIn = (): { el: HTMLElement; mark: PadMark } | null => {
     const el = document.activeElement as HTMLElement | null
-    const mark = marks.find((m) => m.id === editing)
+    const mark = marks.find((m) => m.id === typingId)
     return el?.classList.contains('pad-text') && mark ? { el, mark } : null
   }
   /** Bold, italic, underline, and which edge the lines start from: the whole box's. */
@@ -1080,10 +1085,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
                   }}
                   ref={(el) => { if (el && editing === m.id && document.activeElement !== el) el.focus() }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  onFocus={() => setEditing(m.id)}
+                  onFocus={() => { setEditing(m.id); setTypingId(m.id) }}
                   onInput={(e) => { (e.currentTarget as HTMLElement).dataset.empty = e.currentTarget.textContent ? '' : 'Type here' }}
                   onBlur={(e) => {
-                    setEditing(null)
+                    setEditing(null); setTypingId(null)
                     const body = e.currentTarget.innerText.replace(/\n+$/, '')
                     // A box left with nothing in it was a click that came to nothing: it goes.
                     if (!body.trim()) {
@@ -1160,23 +1165,23 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
       {/* Everything lives in the mark, as it does everywhere else in the app: closed it is
           the ensō, open it is the border around the tools. */}
-      <div className={`padmenu${open || editing !== null ? ' open' : ''}${editing !== null ? ' typing' : ''}`} onPointerDown={(e) => { e.stopPropagation(); stay() }}>
+      <div className={`padmenu${open || typingId !== null ? ' open' : ''}${typingId !== null ? ' typing' : ''}`} onPointerDown={(e) => { e.stopPropagation(); stay() }}>
         <button className="padmenu-mark" aria-expanded={open}
           aria-label={open ? 'Hide the tools' : 'Show the tools'}
           onClick={() => { if (open) { setOpen(false); setMenu(null) } else { setOpen(true); stay() } }}>
           <Mark size={30} />
         </button>
 
-        <div className="padbar" {...(open || editing !== null ? {} : { inert: '' as unknown as boolean })}>
+        <div className="padbar" {...(open || typingId !== null ? {} : { inert: '' as unknown as boolean })}>
           <button className="padbar-out" onClick={onClose} aria-label="Close the pad" title="Close the pad">
             {icon.close}<span>Close</span>
           </button>
           <span className="padbar-split" />
-          {editing !== null && (() => {
+          {typingId !== null && (() => {
             // While words are being typed the bar is theirs: the box's weight and slant, which
             // edge its lines start from, and bullets with their levels. A key acts as it is
             // pressed and never takes the cursor out of the box.
-            const st = marks.find((m) => m.id === editing)?.style ?? {}
+            const st = marks.find((m) => m.id === typingId)?.style ?? {}
             const key = (label: string, on: boolean, act: () => void, face: React.ReactNode) => (
               <button key={label} className={`padbar-key pad-fmt${on ? ' on' : ''}`} aria-pressed={on} aria-label={label} title={label}
                 onMouseDown={(e) => e.preventDefault()} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); act() }}>{face}</button>
@@ -1196,14 +1201,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
               {key('Level in', false, () => retype(indent), lines('M11 6h9M11 12h9M11 18h9M4 9l3 3-3 3'))}
             </>
           })()}
-          {editing === null && (['pen', 'pencil', 'highlight', 'text', 'erase', 'select'] as Tool[]).map((t) => (
+          {typingId === null && (['pen', 'pencil', 'highlight', 'text', 'erase', 'select'] as Tool[]).map((t) => (
             <button key={t} className={`padbar-key${tool === t ? ' on' : ''}`}
               aria-pressed={tool === t} aria-label={LABEL[t]} title={LABEL[t]}
               onClick={() => { setTool(t); setMenu(null); goingAway() }}>
               {icon[t]}
             </button>
           ))}
-          {editing === null && <>
+          {typingId === null && <>
           <button className={`padbar-ink${menu === 'tools' ? ' on' : ''}`}
             aria-label="Colour and width" title="Colour and width"
             onClick={() => { setMenu(menu === 'tools' ? null : 'tools'); stay() }}>

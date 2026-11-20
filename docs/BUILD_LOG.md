@@ -68,6 +68,15 @@ link and archive/delete, which on a phone are not reachable at all. Owner and co
 columns are no longer shown on this page. Inside a project the sidebar is as it was.
 `checks/t_home.py`.
 
+**"The menu circle seems to be gone in the pad view now on the iPad"** (15:21), then "now it
+appears to be working" (15:22). **Not reproduced** — at 820 × 1180, 1180 × 820 and 402 px the
+mark is there and on top. The likeliest reading is a copy of the app caught between two of
+today's releases. One way it *could* have happened was found and closed anyway: the pad went
+into its typing bar (mark faded, format keys in the bar) as soon as a text box was asked to
+take the cursor, and a phone or tablet may refuse to give it one outside a tap — leaving the
+pad in typing with nothing being typed and no way out. Typing now follows where the cursor
+actually is (`typingId`), and a box that never got it no longer holds the pad.
+
 ---
 
 # Checkpoint — 2026-11-20, 15:08 CST
