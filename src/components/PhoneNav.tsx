@@ -31,13 +31,13 @@ const SPOTS: Spot[] = [
   { to: '/documents', label: 'Drawings', icon: I(<><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M8 8h8M8 12h8M8 16h5" /></>) },
   { to: '/manual', label: 'Project manual', icon: I(<><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V4Z" /><path d="M9 8h6M9 12h6" /></>) },
   { to: '/field-notes/reports', label: 'Field notes', icon: I(<><path d="M8 4h9a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" /><path d="M10 9h5M10 13h5" /><path d="M6 4v16" /></>) },
+  { to: '/field-notes/observations', label: 'Observations', icon: I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>) },
 ]
 
 const MORE: Spot[] = [
   { to: '/project', label: 'Overview', icon: I(<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></>) },
   { to: '/', end: true, label: 'Projects', icon: I(<><path d="M3 7h7l2 2h9v11H3V7Z" /></>) },
   { to: '/field-notes/meetings', label: 'Meeting notes', icon: I(<><path d="M8 4h9a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V4Z" /><path d="M10 9h5M10 13h5" /><path d="M6 4v16" /></>) },
-  { to: '/field-notes/observations', label: 'Observations', icon: I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>) },
   { to: '/ca-logs', label: 'Changes', icon: I(<><path d="M4 5h16M4 12h16M4 19h10" /><path d="M17 16l3 3-3 3" /></>) },
   { to: '/submittals', label: 'Submittals', icon: I(<><path d="M12 3v12M8 11l4 4 4-4" /><path d="M4 19h16" /></>) },
   { to: '/pay', label: 'Pay apps', icon: I(<><rect x="3" y="6" width="18" height="13" rx="1.5" /><path d="M3 10h18M7 15h4" /></>) },

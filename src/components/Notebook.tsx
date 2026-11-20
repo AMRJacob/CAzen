@@ -7,7 +7,7 @@ import { NoteBoard } from './NoteBoard'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
-import { getPad, listMarks, newPad, type NotePad as Pad, type PadMark } from '../lib/pads'
+import { getPad, isPicture, listMarks, listPads, newPad, setPad, type NotePad as Pad, type PadMark } from '../lib/pads'
 import {
   listObservations, listTypes, nameOf, onDay, photosOf, STATUS_LABELS,
   type Observation, type ObservationType,
@@ -47,6 +47,19 @@ const paperKey = (kind: VisitKind) => `cazen.pref.notebookPaper.${kind}`
 const BOOK: Record<VisitKind, { title: string; page: string; exportAs: string }> = {
   visit: { title: 'Field notes', page: 'visit', exportAs: 'Make the field report' },
   meeting: { title: 'Meeting notes', page: 'meeting', exportAs: 'Make the meeting notes' },
+}
+
+/** What a photograph's overlay pad is called, so it can be found again from the photograph. */
+const PHOTO_PAD = 'photo:'
+
+/** What has been drawn over a photograph, laid back over it. */
+function PhotoInk({ pad }: { pad: Pad }) {
+  const [marks, setMarks] = useState<PadMark[] | null>(null)
+  useEffect(() => { let gone = false; listMarks(pad.id).then((m) => { if (!gone) setMarks(m) }).catch(() => {}); return () => { gone = true } }, [pad.id])
+  const pic = marks?.find(isPicture)
+  if (!marks || !pic) return null
+  const g = pic.geometry as { x: number; y: number; w: number; h?: number }
+  return <span className="nb-light-ink"><PadStill marks={marks.filter((m) => !isPicture(m))} rule="blank" frame={{ x: g.x, y: g.y, w: g.w, h: g.h ?? g.w }} /></span>
 }
 
 function Thumb({ project, path }: { project: Project; path: string | null }) {
@@ -390,8 +403,33 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
   const [drawing, setDrawing] = useState(false)
-  /** A photograph of this page sent to the pad to be drawn over. */
-  const [drawOver, setDrawOver] = useState<string | null>(null)
+  // Each photograph can have a sketch laid over it: a pad of its own, found by its title
+  // ("photo:" and the photograph's path), drawn on with the very same pad the page's sketch is.
+  const [photoPads, setPhotoPads] = useState<Record<string, Pad>>({})
+  const [photoPad, setPhotoPad] = useState<{ pad: Pad; path: string } | null>(null)
+  const [inkSeen, setInkSeen] = useState(0)
+  useEffect(() => {
+    let gone = false
+    listPads(project.id, 'field_report').then((all) => {
+      if (gone) return
+      const map: Record<string, Pad> = {}
+      for (const p of all) if (p.title?.startsWith(PHOTO_PAD)) map[p.title.slice(PHOTO_PAD.length)] = p
+      setPhotoPads(map)
+    }).catch(() => {})
+    return () => { gone = true }
+  }, [project.id])
+  async function drawOnPhoto(path: string) {
+    try {
+      let p = photoPads[path]
+      if (!p) {
+        p = await newPad(project.id, 'field_report', { noted_on: page.visited_on, title: PHOTO_PAD + path })
+        await setPad(p.id, { rule: 'blank' }).catch(() => {})
+        p = { ...p, rule: 'blank' }
+        setPhotoPads((m) => ({ ...m, [path]: p }))
+      }
+      setPhotoPad({ pad: p, path })
+    } catch (e) { onTrouble(message(e)) }
+  }
   const [exporting, setExporting] = useState(false)
   const [working, setWorking] = useState(false)
   /** The photograph open in the gallery, and whether its label is waiting to be typed. */
@@ -544,8 +582,14 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   const before = visit ? observations.filter((o) => madeAt(o) < began && o.status !== 'closed').sort((a, b) => madeAt(b) - madeAt(a)) : []
   const cover = visit ? coverOf(page, photosOf(seen)) : null
 
+  if (photoPad) {
+    // The same pad as the page's sketch — one component, so a tool added to one is in both.
+    return <NotePad key={photoPad.pad.id} pad={photoPad.pad} drawOver={photoPad.path} backdrop
+      onChanged={(p) => { setPhotoPad({ pad: p, path: photoPad.path }); setPhotoPads((m) => ({ ...m, [photoPad.path]: p })) }}
+      onClose={() => { const path = photoPad.path; setPhotoPad(null); setInkSeen((n) => n + 1); setViewing({ path, fresh: false }) }} onTrouble={onTrouble} />
+  }
   if (drawing && pad) {
-    return <NotePad pad={pad} drawOver={drawOver} onChanged={setPadRow} onClose={() => { setDrawing(false); setDrawOver(null) }} onTrouble={onTrouble} />
+    return <NotePad pad={pad} onChanged={setPadRow} onClose={() => setDrawing(false)} onTrouble={onTrouble} />
   }
 
   if (exporting) {
@@ -710,7 +754,12 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
       {viewing && at >= 0 && (
         <div className="nb-light" role="dialog" aria-label="Photograph" onClick={() => setViewing(null)}>
           <div className="nb-light-in" onClick={(e) => e.stopPropagation()}>
-            <div className="nb-light-img"><Thumb project={project} path={viewing.path} /></div>
+            <div className="nb-light-img">
+              <span className="nb-light-pic">
+                <Thumb project={project} path={viewing.path} />
+                {photoPads[viewing.path] && <PhotoInk key={`${viewing.path}-${inkSeen}`} pad={photoPads[viewing.path]} />}
+              </span>
+            </div>
             <div className="nb-light-row">
               <button disabled={at <= 0} onClick={() => setViewing({ path: page.photos[at - 1], fresh: false })} aria-label="Previous photograph">‹</button>
               <input key={viewing.path} autoFocus={viewing.fresh} defaultValue={label(viewing.path)} placeholder="What does it show?"
@@ -723,7 +772,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
               <span>{at + 1} of {page.photos.length}</span>
               <button className={cover === viewing.path ? 'on' : ''} onClick={() => change({ cover_photo: viewing.path })}>{cover === viewing.path ? 'Cover' : 'Make cover'}</button>
               {/* The same tools as the sketch: the photograph is laid on the page's pad and drawn over there. */}
-              <button onClick={() => { const p = viewing.path; setViewing(null); setDrawOver(p); void draw() }}>Draw on it</button>
+              <button onClick={() => { const p = viewing.path; setViewing(null); void drawOnPhoto(p) }}>{photoPads[viewing.path] ? 'Draw on it again' : 'Draw on it'}</button>
               <button onClick={() => {
                 const next = { ...(page.photo_labels ?? {}) }; delete next[viewing.path]
                 change({ photos: page.photos.filter((x) => x !== viewing.path), photo_labels: next }); setViewing(null)

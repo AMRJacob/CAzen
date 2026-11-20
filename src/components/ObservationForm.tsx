@@ -222,7 +222,9 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
             {spots.map((p, n) => (
               <span key={n} className="obs-spot-wrap">
                 <button type="button" className="photo obs-spot" onClick={() => setSpotting(n)} title="Move it">
-                  {p.thumb ? <img src={p.thumb} alt="" /> : <span className="obs-spot-pin" aria-hidden="true" />}
+                  {p.thumb && <img src={p.thumb} alt="" />}
+                  {/* The tag as it will be on the drawing: its mark if a kind has been chosen, a plain pin if not. */}
+                  <span className="obs-spot-mark" aria-hidden="true">{mark ? <TagMark mark={mark} size={26} /> : <span className="obs-spot-pin" />}</span>
                   <span className="obs-spot-no">{p.number ?? 'On a sheet'}</span>
                 </button>
                 {!(pin && n === 0) && <button type="button" className="obs-spot-off" aria-label={`Take the tag off ${p.number ?? 'the sheet'}`} title="Take off"

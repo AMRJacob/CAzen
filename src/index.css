@@ -3206,3 +3206,25 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .obs-spot-wrap { position: relative; display: inline-block; }
 .obs-spot-off { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 14px; line-height: 1; display: grid; place-items: center; }
 .obs-spot-off:hover { color: #a2452f; border-color: #e6c7bd; }
+
+/* ---------- A photograph with what was drawn over it ---------- */
+.nb-light-pic { position: relative; display: inline-block; line-height: 0; }
+.nb-light-ink { position: absolute; inset: 0; pointer-events: none; }
+.nb-light-ink .pad-still { width: 100%; height: 100%; display: block; background: none; }
+
+/* Five in the phone menu's first row: on the narrower phones the labels are set a little smaller so none is cut short. */
+@media (max-width: 389px) { .phone-nav .pn-spot span { font-size: 9px; letter-spacing: -0.01em; } .phone-nav .pn-spot { padding-left: 2px; padding-right: 2px; } }
+
+/* ---------- The tag on a form's drawing tile ---------- */
+.obs-spot { position: relative; }
+.obs-spot .obs-spot-mark { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+.obs-spot .obs-spot-mark .obs-spot-pin { position: static; }
+
+/* ---------- On a sheet, an observation is its tag, not a blank dot ----------
+   (Jacob, 11/20: the chosen tag type "just adds a coloured dot".) The mark was drawn at two
+   fifths size with its letters hidden until the pointer was over it — and a touch screen has
+   no pointer. It is now drawn at about two thirds size with its letters showing, always, and
+   still grows to full size with the number under the pointer. */
+.obs-dot-mark { transform: scale(0.68); }
+.obs-dot-mark text, .obs-dot-mark polyline { opacity: 1; }
+@media (hover: none) { .obs-dot-mark { transform: scale(0.72); } }

@@ -11,6 +11,47 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:58 CST
+
+**Each photograph has its own sketch overlay** (Jacob, 15:52: *Draw on it* should not go to
+the page's sketch pad; each photo gets an overlay layer, with the exact same tools — tied
+together, so a change to one is a change to both). This replaces 15:30's route through the
+page's pad.
+
+- *Draw on it* in a page's photo viewer opens a pad that belongs to that photograph alone:
+  the photograph fills the window and cannot be moved, and everything else is the pad — it
+  **is** the pad (`NotePad` with `backdrop`), one component, so any tool added to the sketch
+  pad is in the photo overlay with no further work. Closing it returns to the viewer.
+- In the viewer the ink is laid back over the photograph, and the button reads *Draw on it
+  again*.
+- **How it is kept:** a `note_pads` row per photograph, found by its title — `photo:` and the
+  photograph's path — with the photograph as a picture one unit wide at the pad's corner, so
+  the ink can be laid over the photograph at any size. No database change.
+- **Not done:** the ink does not show on the gallery thumbnails, in the field report's photo
+  table, or on the cover; the photograph's file is never changed. Tearing out a page or
+  removing a photograph leaves its overlay pad behind, unreachable. Observation photos still
+  have no *Draw on it*. `checks/t_drawon.py` (phone, by touch).
+
+**Observations is in the phone menu's first row** (15:55): Drawings, Project manual, Field
+notes, Observations, More. Five fit a 402 px and a 375 px phone with no label cut short (the
+labels are a touch smaller below 390 px); at 320 px two labels are cut with an ellipsis.
+
+**The tag on the drawing is the tag** (15:56: after choosing a tag type "the actual tag seems
+to ignore it and just add a coloured dot"). Two places showed a dot:
+
+- On a sheet, an observation was its mark at two-fifths size with the letters hidden until
+  the pointer was over it — the "dots" asked for on 11/19 — and a touch screen has no pointer.
+  It is now about two-thirds size **with its letters showing, always**; under the pointer it
+  still grows to full size with its number. This gives back some of what the dots were for
+  (thirty of them not burying a drawing).
+- On the observation form, the small picture of the drawing had a red dot painted into it
+  whatever the tag. The form now lays the observation's own mark over that picture, and it
+  follows the tag if the kind is changed afterwards.
+- Which of the two he meant is not known; the pin on the tagging screen itself did take the
+  mark (checked at 15:33).
+
+---
+
 # Checkpoint — 2026-11-20, 15:53 CST
 
 **An observation can be tagged in several places** (Jacob, 15:49: "multiple places or multiple

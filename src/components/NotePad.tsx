@@ -89,7 +89,10 @@ interface View { scale: number; x: number; y: number }
 /** What the canvas looks like when nothing has been written yet: a page's worth, centred. */
 const HOME = 1.2
 
-export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver }: {
+export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop }: {
+  /** The pad is a photograph's own overlay: the photograph fills the page, cannot be moved, and
+   *  the pad opens fitted to it. */
+  backdrop?: boolean
   /** A photograph already on the page, to be laid on the paper and drawn over: its file's path. */
   drawOver?: string | null
   pad: Pad
@@ -700,6 +703,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver }: {
     const reach = Math.max(0.008, 12 / viewRef.current.scale)
     for (let i = here.length - 1; i >= 0; i--) {
       const m = here[i]
+      if (backdrop && isPicture(m)) continue
       if (m.kind === 'text') { const b = boxOf(m); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return m }
       else if (touches(m, p, reach + (m.style?.width ?? 0) / 2)) return m
     }
@@ -783,6 +787,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver }: {
   /** A picture whose file is already kept, laid on the paper. */
   async function layPicture(path: string, shape: { w: number; h: number }) {
     try {
+      if (backdrop) {
+        // A photograph's overlay: the photograph is the page itself, one unit wide from the
+        // corner, so what is drawn on it can be laid back over the photograph anywhere else.
+        const saved = await addMark({ pad_id: pad.id, project_id: pad.project_id, page, kind: 'text',
+          geometry: { x: 0, y: 0, w: 1, h: shape.h / shape.w }, style: { image: path }, body: '' })
+        setMarks((all) => [...all, saved])
+        return
+      }
       const v = viewRef.current, box = frame.current?.getBoundingClientRect()
       const across = (box?.width ?? 800) / v.scale, down = (box?.height ?? 600) / v.scale
       let w = across * 0.55, h = w * shape.h / shape.w
@@ -814,6 +826,18 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver }: {
     return () => { gone = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawOver, project, loaded])
+
+  // A photograph's overlay opens with the photograph filling the window.
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (!backdrop || fitted.current) return
+    const pic = marks.find(isPicture), box = frame.current?.getBoundingClientRect()
+    if (!pic || !box) return
+    fitted.current = true
+    const b = boxOf(pic)
+    const scale = Math.min(box.width / b.w, (box.height - 80) / b.h) * 0.96
+    setView({ scale, x: (box.width - b.w * scale) / 2 - b.x * scale, y: Math.max(8, (box.height - 80 - b.h * scale) / 2) - b.y * scale })
+  }, [backdrop, marks])
 
   async function photoChosen(file: File | undefined) {
     if (!file) return
@@ -1568,7 +1592,9 @@ const STILL_PX = 900
  * to its own extent. Used for the thumbnails in the list and for reading a pad while typing
  * it up, where a live pad would only be something a stray touch could change.
  */
-export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
+export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5, frame }: {
+  /** Show exactly this part of the paper, with no ground: ink to be laid over a picture. */
+  frame?: { x: number; y: number; w: number; h: number }
   marks: PadMark[]
   rule: PadRule
   /** How strongly the ruling is drawn, nought to a hundred. */
@@ -1587,13 +1613,14 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5 }: {
   let h = box.h + air * 2
   if (w / h > 1 / ratio) h = w * ratio
   else w = h / ratio
-  const x = box.x + box.w / 2 - w / 2
-  const y = box.y + box.h / 2 - h / 2
+  let x = box.x + box.w / 2 - w / 2
+  let y = box.y + box.h / 2 - h / 2
+  if (frame) { x = frame.x; y = frame.y; w = frame.w; h = frame.h }
 
   return (
     <svg className="pad-still" viewBox={`${x} ${y} ${w} ${h}`} preserveAspectRatio="xMidYMid meet"
       aria-hidden="true">
-      <StillGround rule={rule} ink={ink} x={x} y={y} w={w} h={h} />
+      {!frame && <StillGround rule={rule} ink={ink} x={x} y={y} w={w} h={h} />}
       {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} across={w} />)}
       {marks.filter((m) => m.kind === 'text').map((m) => {
         const g = m.geometry as { x: number; y: number; w: number }

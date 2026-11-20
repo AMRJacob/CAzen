@@ -36,9 +36,8 @@ function cropAround(img: HTMLImageElement, at: { x: number; y: number }): string
     ctx.fillStyle = '#fff'
     ctx.fillRect(0, 0, 220, 220)
     ctx.drawImage(img, at.x * img.naturalWidth - side / 2, at.y * img.naturalHeight - side / 2, side, side, 0, 0, 220, 220)
-    ctx.fillStyle = '#c0392b'
-    ctx.beginPath(); ctx.arc(110, 110, 9, 0, Math.PI * 2); ctx.fill()
-    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke()
+    // No dot is drawn into the picture: the form lays the observation's own mark over its
+    // middle, so the tile shows the kind of tag chosen and follows it if that changes.
     return c.toDataURL('image/jpeg', 0.8)
   } catch { return undefined }
 }
