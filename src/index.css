@@ -2905,7 +2905,7 @@ a.ov-card:hover { border-color: var(--moss); }
 /* Bottom left on every screen, like every other corner menu (Jacob, 11/20). It opens only as
    wide as what it offers. */
 .nb-menu-contents { display: flex; }
-.nb-menu-contents.open { width: min(300px, calc(100vw - 24px)); }
+.nb-menu-contents.open { width: min(390px, calc(100vw - 24px)); }
 .nb-menu-contents .nb-menu-bar { overflow: hidden; }
 .nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
 .nb-menu-contents.open .nb-menu-bar { padding-left: 8px; padding-right: 8px; }
@@ -3051,3 +3051,8 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 /* ---------- A document read by scrolling: each page its own sheet, one under another ---------- */
 .ps-scroll { flex: 1; min-width: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; align-items: safe center; gap: 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
 .ps-page { flex: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+
+/* ---------- Notebook: choosing a page to duplicate ---------- */
+.nb-removing.nb-copying { background: var(--moss-soft); color: #2f4a38; }
+.nb-toc button.nb-toc-copy { border-color: #c5d3c8; color: #2f4a38; }
+@media (max-width: 420px) { .nb-menu:not(.nb-menu-contents) .nb-menu-spot { min-width: 40px; padding: 4px 3px; font-size: 10px; } .nb-menu-contents .nb-menu-spot { min-width: 58px; padding: 5px 4px; font-size: 11px; } }

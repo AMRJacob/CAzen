@@ -91,7 +91,8 @@ export function Notebook({ project, kind, pages, onPages }: {
   /** The page a right-click on the contents is asking about, and where the menu goes. */
   const [tearing, setTearing] = useState<{ id: string; x: number; y: number } | null>(null)
   // Chosen from the corner menu: the contents list shows a Delete beside each page until done.
-  const [removing, setRemoving] = useState(false)
+  const [choosing, setChoosing] = useState<'delete' | 'duplicate' | null>(null)
+  const removing = choosing !== null
   const askTear = (p: SiteVisit) => {
     const from = startOf(p), to = nextStart(pages, p)
     const made = (o: Observation) => Date.parse(o.created_at) || Date.parse(`${o.observed_on}T12:00:00`)
@@ -130,6 +131,24 @@ export function Notebook({ project, kind, pages, onPages }: {
     } catch (e) { setError(message(e)) }
   }
 
+  /**
+   * A copy of a page, dated today and opened: its title, who was there, where, and its typed
+   * notes. Not its sketch, photographs or observations — those are what happened on the day
+   * the original was written, and a photograph shared by two pages would go when either was
+   * torn out.
+   */
+  async function duplicate(p: SiteVisit) {
+    try {
+      const v = await startVisit(project.id, kind, p.names ?? null, p.location ?? null)
+      const carried = { title: p.title ?? null, notes: p.notes ?? '' }
+      await setVisit(v.id, carried)
+      const copy = { ...v, ...carried } as SiteVisit
+      setChoosing(null)
+      onPages([copy, ...pages])
+      go(copy.id, 'fwd')
+    } catch (e) { setError(message(e)) }
+  }
+
   // Arrow keys turn the page, as long as nobody is typing on it.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -149,6 +168,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   const turnBar = (
     <BookMenu
       visit={kind === 'visit'} adds={adds}
+      onDuplicate={page ? () => void duplicate(page) : undefined}
       onNew={() => void newPage()}
       // Out of a page is back to the book's contents; the contents page has its own way out.
       onClose={() => go(null, 'back')} />
@@ -210,12 +230,13 @@ export function Notebook({ project, kind, pages, onPages }: {
           </button>
           {/* The corner mark is the way to a new page, to deleting one, and the way out. */}
           <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')}
-            onDelete={pages.length ? () => setRemoving(true) : undefined} />
+            onDelete={pages.length ? () => setChoosing('delete') : undefined}
+            onDuplicate={pages.length ? () => setChoosing('duplicate') : undefined} />
           {pages.length > 0 && <h2>Pages</h2>}
           {removing && pages.length > 0 && (
-            <div className="nb-removing">
-              <span>Choose a page to delete.</span>
-              <button className="primary-lite" onClick={() => setRemoving(false)}>Done</button>
+            <div className={`nb-removing${choosing === 'duplicate' ? ' nb-copying' : ''}`}>
+              <span>{choosing === 'duplicate' ? 'Choose a page to duplicate.' : 'Choose a page to delete.'}</span>
+              <button className="primary-lite" onClick={() => setChoosing(null)}>Done</button>
             </div>
           )}
           <ol className="nb-toc">
@@ -224,8 +245,9 @@ export function Notebook({ project, kind, pages, onPages }: {
               const photos = p.photos.length + photosOf(seen).length
               return (
                 <li key={p.id} className={removing ? 'nb-toc-removing' : ''}>
-                  {removing && <button className="nb-toc-delete" onClick={() => askTear(p)} aria-label={`Delete the page for ${shortDay(p.visited_on)}`}>Delete</button>}
-                  <button onClick={() => (removing ? askTear(p) : go(p.id, 'fwd'))}
+                  {choosing === 'delete' && <button className="nb-toc-delete" onClick={() => askTear(p)} aria-label={`Delete the page for ${shortDay(p.visited_on)}`}>Delete</button>}
+                  {choosing === 'duplicate' && <button className="nb-toc-delete nb-toc-copy" onClick={() => void duplicate(p)} aria-label={`Duplicate the page for ${shortDay(p.visited_on)}`}>Duplicate</button>}
+                  <button onClick={() => (choosing === 'delete' ? askTear(p) : choosing === 'duplicate' ? void duplicate(p) : go(p.id, 'fwd'))}
                     // A right-click on a page in the contents offers to take it out of the book.
                     onContextMenu={(e) => { e.preventDefault(); setTearing({ id: p.id, x: e.clientX, y: e.clientY }) }}>
                     {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
@@ -250,6 +272,7 @@ export function Notebook({ project, kind, pages, onPages }: {
               <div className="padctx nb-tear" role="menu" style={{ left: Math.min(tearing.x, window.innerWidth - 250), top: Math.min(tearing.y, window.innerHeight - 110) }}>
                 <span className="nb-tear-say">{shortDay(p.visited_on)} · {p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
                 <button role="menuitem" onClick={() => { setTearing(null); go(p.id, 'fwd') }}>Open</button>
+                <button role="menuitem" onClick={() => { setTearing(null); void duplicate(p) }}>Duplicate this page</button>
                 <button role="menuitem" className="danger" onClick={() => {
                   setTearing(null); askTear(p)
                 }}>Delete this page</button>
@@ -273,7 +296,9 @@ export function Notebook({ project, kind, pages, onPages }: {
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
 interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void }
 
-function BookMenu({ onNew, onClose, onDelete, adds, visit, contents }: {
+function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents }: {
+  /** On a page: a copy of it. On the contents page: puts the list into choosing one to copy. */
+  onDuplicate?: () => void
   /** On the contents page, when there is a page to delete: puts the list into choosing. */
   onDelete?: () => void
   /** On the book's contents page: nothing to add to, only a new page or the way out. */
@@ -315,6 +340,9 @@ function BookMenu({ onNew, onClose, onDelete, adds, visit, contents }: {
         <Mark size={30} />
       </button>
       <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
+        {/* The same on every corner menu: a circle with a cross in it and the word Close, first
+            in the bar — beside the mark, at the left. */}
+        {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), onClose)}
         {/* What can be added to this page, where the thumb already is. The parts a page does
             not have — a meeting has no photographs or observations — are not offered. */}
         {!contents && <>
@@ -324,9 +352,8 @@ function BookMenu({ onNew, onClose, onDelete, adds, visit, contents }: {
         {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds?.current?.observation?.())}
         </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
+        {onDuplicate && spot(contents ? 'Duplicate a page' : 'Duplicate', I(<><rect x="8" y="8" width="11" height="12" rx="1.5" /><path d="M5 16V5.5A1.5 1.5 0 0 1 6.5 4H15" /></>), onDuplicate)}
         {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
-        {/* The same on every corner menu: a circle with a cross in it, and the word Close. */}
-        {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), onClose)}
       </div>
     </nav>
   )

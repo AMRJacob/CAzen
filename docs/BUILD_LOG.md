@@ -11,6 +11,26 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:08 CST
+
+**Duplicate a notebook page** (Jacob, 15:05: "add duplicate page to the options on the
+notes"). On an open page the corner menu has **Duplicate**; on the contents page it has
+**Duplicate a page**, which puts the list into choosing (as Delete a page does); a right-click
+on a page at a desk offers *Duplicate this page*. For field notes and meeting notes.
+
+- The copy is a new page **dated today**, opened at once, carrying the original's **title,
+  attendees, location and typed notes**.
+- **Not carried: the sketch, the photographs, the weather, and observations.** That is my
+  choice — he said only "duplicate". They are what happened on the original's day, and a
+  photograph file shared by two pages would be deleted when either page was torn out.
+- `checks/t_duplicate.py`, phone from the page menu and desk from the contents menu.
+
+**Close is at the left of every corner menu** (15:06). On the notebook menus it was last; it
+is now first, beside the mark, as it already was on the pad. Page menu on a 402 px phone:
+Close, Note, Sketch, Photo, Observation, New page, Duplicate — seven, and they fit.
+
+---
+
 # Checkpoint — 2026-11-20, 15:02 CST
 
 **Two deploys failed, at GitHub's publish step** (Jacob, 14:54). The 14:31 and 14:36 pushes
