@@ -3271,3 +3271,15 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .obs-row-mark { display: inline-flex; line-height: 0; vertical-align: middle; margin-right: 2px; }
 .sv-layers { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .sv-layers label { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The tagging screen, close in. The page is laid out at its zoomed size rather than scaled
+   as a picture — a scaled layer is kept at its small size and stretched, which is what made
+   the sheet and the tag on it soft — and the part in view is redrawn from the file on top. */
+.spot-page { will-change: auto; transform: none; max-width: none; }
+.spot-detail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.spot-pin { z-index: 2; }
+.spot-pin-dot { width: 26px; height: 26px; }
+.spot-hint { z-index: 3; }
+/* On the sheets a tag is its mark, large enough to be told apart from a dot. */
+.obs-dot-mark { transform: scale(0.9); }
+@media (hover: none) { .obs-dot-mark { transform: scale(0.95); } }

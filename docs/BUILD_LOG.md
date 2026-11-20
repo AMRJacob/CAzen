@@ -11,6 +11,20 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 16:37 CST
+
+**The tagging screen close in: a tag that reads as its mark, and a sheet that stays sharp.**
+
+From Jacob's iPad screenshot of the tagging screen on A102, zoomed far in: the drawing was badly blurred and the placed Masonry tag was a small brown blot, which is what had been reading as "an orange dot".
+
+- **Cause, as far as it can be told from here.** The page was zoomed by CSS-scaling a layer marked `will-change: transform`. A layer like that is kept at its unscaled size and stretched, so both the sheet picture and the tag sitting inside it (counter-scaled by `1/k`) were being magnified from a small bitmap. This is reasoning from how such layers behave, not something measured on the iPad.
+- **The page is now laid out at its zoomed size** (`left`/`top`/`width` rather than `transform: scale`), with no `will-change`. The tag sits on it unscaled.
+- **A detail layer.** The whole-sheet picture tops out at 5,200 px across; at full zoom on an iPad the page is many times that. About a fifth of a second after the sheet stops moving, the part in view is drawn again straight from the PDF at the size it is being looked at (`.spot-detail` canvas, clipped to the page), and hidden again the moment the sheet moves. The PDF is opened once per sheet and released on leaving it.
+- **The tag is 48 px on the tagging screen** (was 30) and marks on the sheets in the drawings viewer are about 27 px (were about 20), letters always shown. A tag with no type chosen is still the plain dot.
+- Check added: `checks/t_spotsharp.py` (edge contrast in view at 14x: 493 with the picture alone, 1,279 once redrawn; tag 48 px with its letters; detail layer hides while dragging and returns). `t_spotmenu`, `t_multitag`, `t_placemark` rerun clean.
+
+Verified in the test browser only (Chrome, 1180 x 820 at 2x). Not verified on the iPad or phone: whether iOS keeps the laid-out page sharp while pinching, how quickly the redraw lands on a real 30 x 42 sheet, and memory with a heavy sheet.
+
 # Checkpoint — 2026-11-20, 16:25 CST
 
 **"Still only an orange dot instead of the tag type"** (Jacob, 16:22: the dot is fine for a

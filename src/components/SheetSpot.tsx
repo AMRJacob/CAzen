@@ -4,7 +4,8 @@ import { Mark as Enso } from './Logo'
 import { divisionOf, markOfTag, type Mark, type Tag } from '../lib/tags'
 import { listCurrentSheets, localCurrentSheets } from '../lib/sheets'
 import { readFile, type ProjectStore } from '../lib/files'
-import { pdfPageThumb } from '../lib/pdf/pdfjs'
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
+import { getDocument, pdfPageThumb } from '../lib/pdf/pdfjs'
 import { message } from '../lib/errors'
 import type { CurrentSheet } from '../lib/types'
 
@@ -65,6 +66,11 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
   const pageEl = useRef<HTMLDivElement>(null)
   const bytesRef = useRef<Uint8Array | null>(null)
   const sharp = useRef(false)
+  // Close in, no picture of the whole sheet is fine enough: the part in view is drawn again
+  // from the file itself, at the size it is being looked at, and laid over the picture.
+  const detail = useRef<HTMLCanvasElement>(null)
+  const opened = useRef<Promise<{ pdf: PDFDocumentProxy; page: PDFPageProxy }> | null>(null)
+  const [crisp, setCrisp] = useState<{ k: number; x: number; y: number } | null>(null)
   const [v, setV] = useState({ k: 1, x: 0, y: 0 })
   const ptrs = useRef(new Map<number, { x: number; y: number }>())
   const hand = useRef<{ moved: boolean; sx: number; sy: number; pinch?: { d: number; mx: number; my: number; v: { k: number; x: number; y: number } } } | null>(null)
@@ -73,8 +79,10 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
   const fit = useCallback(() => {
     const w = wrap.current, p = pageEl.current
     if (!w || !p || !p.offsetHeight) return
-    const k = Math.min(1, w.clientHeight / p.offsetHeight)
-    setV({ k, x: (w.clientWidth - p.offsetWidth * k) / 2, y: Math.max(0, (w.clientHeight - p.offsetHeight * k) / 2) })
+    // The page is laid out at its zoomed size, so its shape is what is measured, not its size.
+    const tall = w.clientWidth * p.offsetHeight / p.offsetWidth
+    const k = Math.min(1, w.clientHeight / tall)
+    setV({ k, x: (w.clientWidth - w.clientWidth * k) / 2, y: Math.max(0, (w.clientHeight - tall * k) / 2) })
   }, [])
 
   /** Zoom about a point of the viewport, so what is under the finger stays under it. */
@@ -91,6 +99,43 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
     sharp.current = true
     pdfPageThumb(bytesRef.current, 5200).then((url) => setImage((was) => (was ? url : was))).catch(() => { /* the first picture stays */ })
   }, [v.k])
+  useEffect(() => {
+    const w = wrap.current, p = pageEl.current, img = p?.querySelector('img'), bytes = bytesRef.current
+    if (!w || !p || !img || !bytes || !image) return
+    const dpr = window.devicePixelRatio || 1
+    const across = w.clientWidth * v.k * dpr
+    if (across <= img.naturalWidth * 1.1) return
+    let gone = false
+    let task: { cancel: () => void; promise: Promise<unknown> } | null = null
+    // Only once the sheet has stopped moving: drawing it mid-pinch would be thrown away.
+    const wait = setTimeout(async () => {
+      try {
+        opened.current ??= (async () => {
+          const pdf = await getDocument({ data: bytes.slice() }).promise
+          return { pdf, page: await pdf.getPage(1) }
+        })()
+        const { page } = await opened.current
+        if (gone) return
+        const off = document.createElement('canvas')
+        off.width = Math.round(w.clientWidth * dpr)
+        off.height = Math.round(w.clientHeight * dpr)
+        const viewport = page.getViewport({ scale: across / page.getViewport({ scale: 1 }).width })
+        task = page.render({ canvas: off, canvasContext: off.getContext('2d')!, viewport, transform: [1, 0, 0, 1, v.x * dpr, v.y * dpr] })
+        await task.promise
+        const c = detail.current
+        if (gone || !c) return
+        c.width = off.width; c.height = off.height
+        const ctx = c.getContext('2d')!
+        // Only over the page: what lies beyond its edge stays the table it sits on.
+        ctx.beginPath()
+        ctx.rect(v.x * dpr, v.y * dpr, p.offsetWidth * dpr, p.offsetHeight * dpr)
+        ctx.clip()
+        ctx.drawImage(off, 0, 0)
+        setCrisp(v)
+      } catch { /* the picture underneath stays */ }
+    }, 220)
+    return () => { gone = true; clearTimeout(wait); task?.cancel() }
+  }, [v, image])
   const [error, setError] = useState<string | null>(null)
   // The corner mark: the way out, the way back to the sheets, the kind of tag, and the zoom.
   const [menu, setMenu] = useState(false)
@@ -127,6 +172,10 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
     setImage(null)
     sharp.current = false
     bytesRef.current = null
+    setCrisp(null)
+    const was = opened.current
+    opened.current = null
+    was?.then(({ pdf }) => pdf.loadingTask.destroy()).catch(() => { /* never opened */ })
     setMenu(false); setChoosing(null)
     setV({ k: 1, x: 0, y: 0 })
     readFile(project, sheet.file_path)
@@ -223,15 +272,16 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
           }}
           onPointerCancel={(e) => { ptrs.current.delete(e.pointerId); if (!ptrs.current.size) hand.current = null }}>
           {!image ? <p className="muted">Opening {sheet.number}…</p> : (
-            <div className="spot-page" ref={pageEl} style={{ transform: `translate(${v.x}px, ${v.y}px) scale(${v.k})` }}>
+            <div className="spot-page" ref={pageEl} style={{ left: v.x, top: v.y, width: `${v.k * 100}%` }}>
               <img src={image} alt={`Sheet ${sheet.number}`} draggable={false} onLoad={() => { if (!sharp.current) fit() }} />
               {at && (
-                <span className="spot-pin" style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%`, transform: `translate(-50%, -50%) scale(${1 / v.k})` }}>
-                  {mark ? <TagMark mark={mark} size={30} /> : <span className="spot-pin-dot" />}
+                <span className="spot-pin" style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%`, transform: 'translate(-50%, -50%)' }}>
+                  {mark ? <TagMark mark={mark} size={48} /> : <span className="spot-pin-dot" />}
                 </span>
               )}
             </div>
           )}
+          {image && <canvas ref={detail} className="spot-detail" style={{ visibility: crisp && crisp.k === v.k && crisp.x === v.x && crisp.y === v.y ? 'visible' : 'hidden' }} />}
           {image && <p className="spot-hint">{at ? 'Drag the tag to adjust it. Close, in the corner menu, keeps it.' : 'Drag and pinch to get there, then touch the drawing where it was seen.'}</p>}
         </div>
       )}
