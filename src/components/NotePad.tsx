@@ -4,7 +4,7 @@ import {
   HIGHLIGHTS, PAD_COLOURS,
   type MarkKind, type NotePad as Pad, type PadMark, type PadRule,
 } from '../lib/pads'
-import { isHandContact, samplesFrom, type InkPoint } from '../lib/ink'
+import { PALM_ACROSS, PALM_SURE, PEN_TAIL, PINCH_TOGETHER, isHandContact, samplesFrom, type InkPoint } from '../lib/ink'
 import { PadSurface, type InkStyle, type PadInk } from './PadSurface'
 import { message } from '../lib/errors'
 import { handOf, outlineOf, pathOf, seedOf, type Nib } from '../lib/nib'
@@ -264,6 +264,23 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
   const handAt = useRef(0)
   const meantAt = useRef(0)
+  /** Finger-sized contacts taken for a hand a moment ago, which a second finger may yet redeem. */
+  const waiting = useRef(new Map<number, { x: number; y: number; t: number }>())
+  /** Give back any contact that landed just now and was taken for a hand: it is half of a pinch. */
+  function promote(): boolean {
+    const now = Date.now()
+    let any = false
+    for (const [id, w] of waiting.current) {
+      waiting.current.delete(id)
+      if (now - w.t > PINCH_TOGETHER || !handIds.current.has(id)) continue
+      handIds.current.delete(id); palms.current.delete(id)
+      fingers.current.set(id, { x: w.x, y: w.y })
+      gesture.current = null
+      try { frame.current?.setPointerCapture(id) } catch { /* not fatal */ }
+      any = true
+    }
+    return any
+  }
 
   /**
    * Taken at the capture phase, before the drawing or any button hears about it. Telling the
@@ -272,12 +289,22 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
    * come back later as a click.
    */
   function shield(e: React.PointerEvent) {
-    if (e.type === 'pointerup') handIds.current.delete(e.pointerId)
+    if (e.type === 'pointerup' || e.type === 'pointercancel') { handIds.current.delete(e.pointerId); waiting.current.delete(e.pointerId) }
     if (!isHand(e)) {
-      if (e.type === 'pointerdown') meantAt.current = Date.now()
+      if (e.type === 'pointerdown') { meantAt.current = Date.now(); if (e.pointerType === 'touch') promote() }
       return
     }
     if (e.type === 'pointerdown') {
+      // A pinch, for someone who writes with a pen. Fingers pressed to the glass report wider
+      // than the palm rule allows, so both were being taken for a resting hand and the paper
+      // would not zoom. Two finger-sized contacts landing together, with the pen away, are a
+      // pinch: the one already down is given back, and this one is let through to join it.
+      const across = Math.max(e.width || 0, e.height || 0)
+      const now = Date.now()
+      if (!fingerDraws && across > PALM_ACROSS && across <= PALM_SURE && now - penAt.current >= PEN_TAIL) {
+        if (promote()) { meantAt.current = now; return }
+        waiting.current.set(e.pointerId, { x: e.clientX, y: e.clientY, t: now })
+      }
       handAt.current = Date.now()
       handIds.current.add(e.pointerId)
       setTouch({ read: 'palm', across: Math.round(Math.max(e.width || 0, e.height || 0)) })
@@ -842,10 +869,22 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
       if (sel && !sel.isCollapsed && !typing(sel.anchorNode)) sel.removeAllRanges()
     }
     const down = (e: PointerEvent) => { lastPointer.current = e.pointerType || 'mouse' }
+    // The long press itself. On an iPhone it is the touch, not the pointer, that the system
+    // watches to decide a finger or a hand is asking for a selection and its menu (Copy, Look
+    // Up, Copy Link to Highlight); claiming the touch as it lands is what stops it. Buttons
+    // and the box being typed in are left alone — they need the touch to become a tap.
+    const root = frame.current?.closest('.padview') as HTMLElement | null
+    const touch = (e: TouchEvent) => {
+      const on = e.target as Element | null
+      if (on?.closest('button, input, textarea, select, label, a, .pad-text')) return
+      if (e.cancelable) e.preventDefault()
+    }
+    root?.addEventListener('touchstart', touch, { passive: false })
     document.addEventListener('selectstart', start)
     document.addEventListener('selectionchange', changed)
     document.addEventListener('pointerdown', down, true)
     return () => {
+      root?.removeEventListener('touchstart', touch)
       document.removeEventListener('selectstart', start)
       document.removeEventListener('selectionchange', changed)
       document.removeEventListener('pointerdown', down, true)

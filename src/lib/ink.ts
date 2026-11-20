@@ -29,6 +29,10 @@ export function forceOf(e: PointerEvent): number | null {
 
 /** Across the glass, in CSS pixels, past which a contact is a hand and not a fingertip. */
 export const PALM_ACROSS = 45
+/** Past this it is a hand whatever else is going on: no fingertip, however flat, is this wide. */
+export const PALM_SURE = 80
+/** Two contacts landing within this of each other are two fingers arriving to pinch. */
+export const PINCH_TOGETHER = 400
 /** How long after the pen was last busy a new contact is still taken for the hand holding it. */
 export const PEN_TAIL = 300
 
@@ -69,7 +73,10 @@ export function isHandContact(e: {
   if (e.pointerType !== 'touch') return false
   if (world.hands.has(e.pointerId)) return true
   if (e.type !== 'pointerdown') return false
-  if (world.sized !== false && Math.max(e.width || 0, e.height || 0) > PALM_ACROSS) return true
+  const across = Math.max(e.width || 0, e.height || 0)
+  // A wide contact is a hand — unless fingers are already working the page and it is no wider
+  // than a finger pressed flat, in which case it is the other finger of a pinch.
+  if (world.sized !== false && across > PALM_ACROSS && !(world.fingers > 0 && across <= PALM_SURE)) return true
   if (world.fingers > 0) return false
   return world.now - world.penAt < PEN_TAIL
 }
