@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 16:08 CST
+
+**The kinds of tag are a list down the left of the tagging screen, in CSI order** (Jacob,
+16:07). *Tag type* in the corner menu now opens a panel at the left edge, from under the top
+bar to just above the menu, 280 px wide, scrolling inside itself: one trade to a line — its
+mark, its name, its division number — and the trade chosen opens to its tags and *Just
+<trade>* beneath it.
+
+- **The order** is CSI MasterFormat by division, then by section within a division: 01
+  General, 03 Concrete, 04 Masonry, 05 Steel, 06 Carpentry, 07 Roofing, 08 Doors / Hardware,
+  08 Glazing, 09 Drywall, 09 Ceilings, 09 Flooring, 09 Paint, 21 Fire protection, 22
+  Plumbing, 23 Mechanical, 26 Electrical, 31 Sitework. A firm's own trades have no division
+  and follow in name order. **The numbers are from memory of MasterFormat, not looked up**
+  (`CSI` in `src/lib/tags.ts`).
+- The same order now applies wherever trades are listed — the observation form's tag chips
+  and Settings → Observation tags — because it is applied where the list is made (`byTrade`).
+
+Jacob, 16:07, "just to be clear — I want the tag to take the shape of the tag type menu": it
+does, as of 15:58 — the pin on the tagging screen, the tag on the sheet (letters showing) and
+the tile on the form are all the mark shown beside the tag in that menu (`markOf` /
+`markOfTag`, the same function for all four). Checked again here: a Glazing tag reads "Gl" in
+the list, on the form's tile and on the sheet.
+
+---
+
 # Checkpoint — 2026-11-20, 16:02 CST
 
 **A placed tag stays on the screen to be adjusted** (Jacob, 15:58: do not exit at once; he may

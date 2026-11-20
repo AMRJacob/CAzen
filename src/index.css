@@ -3253,3 +3253,15 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .spot-pin::after { content: ''; position: absolute; inset: -12px; }
 /* The pad's mark is held by its top where the browser knows the real height of the window. */
 @supports (height: 100dvh) { .padmenu { bottom: auto; top: calc(100dvh - 52px - var(--corner) - env(safe-area-inset-bottom)); } }
+
+/* ---------- Tagging: the kinds of tag as a list down the left edge ---------- */
+.spot-tags { left: var(--corner-x); right: auto; top: calc(64px + env(safe-area-inset-top)); bottom: calc(var(--corner) + 64px + env(safe-area-inset-bottom)); width: min(280px, calc(100vw - var(--corner-room))); max-width: none; max-height: none; padding: 6px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.spot-trade-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; border-radius: 9px; text-align: left; font-size: 14.5px; }
+.spot-trade-head:hover { background: var(--wash); }
+.spot-trade.on .spot-trade-head { background: var(--moss-soft); font-weight: 600; }
+.spot-trade-name { flex: 1; min-width: 0; }
+.spot-trade-div { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.spot-trade-tags { display: flex; flex-direction: column; padding: 2px 0 8px 22px; }
+.spot-trade-tags button { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: none; background: none; border-radius: 8px; text-align: left; font-size: 13.5px; }
+.spot-trade-tags button:hover { background: var(--wash); }
+.spot-trade-tags button.just { color: var(--muted); }

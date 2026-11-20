@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TagMark } from './TagMark'
 import { Mark as Enso } from './Logo'
-import { markOfTag, type Mark, type Tag } from '../lib/tags'
+import { divisionOf, markOfTag, type Mark, type Tag } from '../lib/tags'
 import { listCurrentSheets, localCurrentSheets } from '../lib/sheets'
 import { readFile, type ProjectStore } from '../lib/files'
 import { pdfPageThumb } from '../lib/pdf/pdfjs'
@@ -242,24 +242,31 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
           <button className={`nb-menu-spot${on ? ' on' : ''}`} onClick={act}>{icon}<span>{label}</span></button>
         )
         const open = menu || choosing !== null
-        const group = groups?.find((g) => g.trade === choosing)
         return (
           <>
             {choosing !== null && groups && (
               <div className="spot-tags" role="dialog" aria-label="What kind of tag">
-                <div className="spot-tags-row">
-                  {groups.map((g) => (
-                    <button key={g.trade} className={`chip${choosing === g.trade ? ' on' : ''}`} onClick={() => setChoosing(g.trade)}><TagMark mark={g.mark} size={18} />{g.trade}</button>
-                  ))}
-                </div>
-                {group && (
-                  <div className="spot-tags-row spot-tags-issues">
-                    {group.tags.map((t) => (
-                      <button key={t.label} className="chip" style={{ borderColor: group.colour }} onClick={() => { onTag?.(group.trade, t); setChoosing(null); setMenu(false) }}><TagMark mark={markOfTag(group, t)} size={16} />{t.label}</button>
-                    ))}
-                    <button className="chip" onClick={() => { onTag?.(group.trade, null); setChoosing(null); setMenu(false) }}>Just {group.trade}</button>
-                  </div>
-                )}
+                {/* A list down the left edge, in CSI order; the trade chosen opens to its tags. */}
+                {groups.map((g) => {
+                  const on = choosing === g.trade
+                  return (
+                    <div key={g.trade} className={`spot-trade${on ? ' on' : ''}`}>
+                      <button className="spot-trade-head" aria-expanded={on} onClick={() => setChoosing(g.trade)}>
+                        <TagMark mark={g.mark} size={22} />
+                        <span className="spot-trade-name">{g.trade}</span>
+                        {divisionOf(g.trade) && <span className="spot-trade-div">{divisionOf(g.trade)}</span>}
+                      </button>
+                      {on && (
+                        <div className="spot-trade-tags">
+                          {g.tags.map((t) => (
+                            <button key={t.label} onClick={() => { onTag?.(g.trade, t); setChoosing(null); setMenu(false) }}><TagMark mark={markOfTag(g, t)} size={18} />{t.label}</button>
+                          ))}
+                          <button className="just" onClick={() => { onTag?.(g.trade, null); setChoosing(null); setMenu(false) }}>Just {g.trade}</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
             <nav className={`nb-menu spot-menu${open ? ' open' : ''}`} aria-label="The drawing">

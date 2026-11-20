@@ -47,6 +47,29 @@ const BUILT_IN: { trade: string; shape: Shape; text: string; colour: string; tag
   { trade: 'General', shape: 'triangle', text: 'Ge', colour: '#555b57', tags: ['Cleaning', 'Protection of work', 'Safety'] },
 ]
 
+/**
+ * Where each built-in trade falls in CSI MasterFormat, by division and, within a division, by
+ * section: 01 general, 03 concrete, 04 masonry, 05 metals, 06 wood, 07 roofing, 08 openings
+ * (doors and hardware before glazing), 09 finishes (gypsum board, ceilings, flooring, paint),
+ * 21 fire suppression, 22 plumbing, 23 mechanical, 26 electrical, 31–32 sitework.
+ */
+const CSI: Record<string, string> = {
+  General: '01 00', Concrete: '03 00', Masonry: '04 00', Steel: '05 00', Carpentry: '06 00', Roofing: '07 50',
+  'Doors / Hardware': '08 10', Glazing: '08 80', Drywall: '09 20', Ceilings: '09 50', Flooring: '09 60', Paint: '09 90',
+  'Fire protection': '21 00', Plumbing: '22 00', Mechanical: '23 00', Electrical: '26 00', Sitework: '31 00',
+}
+/** A trade's CSI division, as two digits, where it is one of the built-in trades. */
+export const divisionOf = (trade: string): string | null => CSI[trade]?.slice(0, 2) ?? null
+/** Trades in CSI order; a firm's own trades, which have no division, follow in name order. */
+export function inCsiOrder<T extends { trade: string }>(groups: T[]): T[] {
+  return [...groups].sort((a, b) => {
+    const x = CSI[a.trade], y = CSI[b.trade]
+    if (x && y) return x.localeCompare(y)
+    if (x || y) return x ? -1 : 1
+    return a.trade.localeCompare(b.trade)
+  })
+}
+
 export const BUILT_IN_TAGS: Tag[] = BUILT_IN.flatMap((t) => t.tags.map((label) => ({ trade: t.trade, label, colour: t.colour })))
 const TRADE_COLOUR = new Map(BUILT_IN.map((t) => [t.trade.toLowerCase(), t.colour]))
 const SPARE = ['#6a4c93', '#2a7f62', '#b5651d', '#3a6ea5', '#8f3f71', '#4f6d7a']
@@ -90,7 +113,7 @@ export function byTrade(custom: Tag[]): { trade: string; colour: string; mark: M
     if (at >= 0) g.tags[at] = { ...g.tags[at], ...c, colour: c.colour || g.tags[at].colour }
     else g.tags.push({ ...c, colour: c.colour || g.colour })
   }
-  return groups
+  return inCsiOrder(groups)
 }
 
 /** A tag's own mark where it has one, laid over its trade's. */
