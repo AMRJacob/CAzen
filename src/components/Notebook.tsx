@@ -90,6 +90,13 @@ export function Notebook({ project, kind, pages, onPages }: {
   }
   /** The page a right-click on the contents is asking about, and where the menu goes. */
   const [tearing, setTearing] = useState<{ id: string; x: number; y: number } | null>(null)
+  // Chosen from the corner menu: the contents list shows a Delete beside each page until done.
+  const [removing, setRemoving] = useState(false)
+  const askTear = (p: SiteVisit) => {
+    const from = startOf(p), to = nextStart(pages, p)
+    const made = (o: Observation) => Date.parse(o.created_at) || Date.parse(`${o.observed_on}T12:00:00`)
+    setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => made(o) >= from && (to === null || made(o) < to)) : [] })
+  }
   useEffect(() => {
     if (!tearing) return
     const away = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.('.nb-tear')) setTearing(null) }
@@ -201,17 +208,24 @@ export function Notebook({ project, kind, pages, onPages }: {
               <span className="nb-today-day">{longDay(new Date().toISOString().slice(0, 10))}</span>
             </span>
           </button>
-          {/* On a phone the corner mark is the way to a new page and the way out; the button and
-              the × above are for a desk. */}
-          <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')} />
+          {/* The corner mark is the way to a new page, to deleting one, and the way out. */}
+          <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')}
+            onDelete={pages.length ? () => setRemoving(true) : undefined} />
           {pages.length > 0 && <h2>Pages</h2>}
+          {removing && pages.length > 0 && (
+            <div className="nb-removing">
+              <span>Choose a page to delete.</span>
+              <button className="primary-lite" onClick={() => setRemoving(false)}>Done</button>
+            </div>
+          )}
           <ol className="nb-toc">
             {pages.map((p, n) => {
               const seen = kind === 'visit' ? onDay(observations, p.visited_on) : []
               const photos = p.photos.length + photosOf(seen).length
               return (
-                <li key={p.id}>
-                  <button onClick={() => go(p.id, 'fwd')}
+                <li key={p.id} className={removing ? 'nb-toc-removing' : ''}>
+                  {removing && <button className="nb-toc-delete" onClick={() => askTear(p)} aria-label={`Delete the page for ${shortDay(p.visited_on)}`}>Delete</button>}
+                  <button onClick={() => (removing ? askTear(p) : go(p.id, 'fwd'))}
                     // A right-click on a page in the contents offers to take it out of the book.
                     onContextMenu={(e) => { e.preventDefault(); setTearing({ id: p.id, x: e.clientX, y: e.clientY }) }}>
                     {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
@@ -237,10 +251,7 @@ export function Notebook({ project, kind, pages, onPages }: {
                 <span className="nb-tear-say">{shortDay(p.visited_on)} · {p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
                 <button role="menuitem" onClick={() => { setTearing(null); go(p.id, 'fwd') }}>Open</button>
                 <button role="menuitem" className="danger" onClick={() => {
-                  setTearing(null)
-                  const from = startOf(p), to = nextStart(pages, p)
-                  const made = (o: Observation) => Date.parse(o.created_at) || Date.parse(`${o.observed_on}T12:00:00`)
-                  setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => made(o) >= from && (to === null || made(o) < to)) : [] })
+                  setTearing(null); askTear(p)
                 }}>Delete this page</button>
               </div>
             )
@@ -262,7 +273,9 @@ export function Notebook({ project, kind, pages, onPages }: {
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
 interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void }
 
-function BookMenu({ onNew, onClose, adds, visit, contents }: {
+function BookMenu({ onNew, onClose, onDelete, adds, visit, contents }: {
+  /** On the contents page, when there is a page to delete: puts the list into choosing. */
+  onDelete?: () => void
   /** On the book's contents page: nothing to add to, only a new page or the way out. */
   contents?: boolean
   /** A site visit has photographs and observations; a meeting does not. */
@@ -311,6 +324,7 @@ function BookMenu({ onNew, onClose, adds, visit, contents }: {
         {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds?.current?.observation?.())}
         </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
+        {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
         {spot(contents ? 'Exit' : 'Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
       </div>
     </nav>

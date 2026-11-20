@@ -1,43 +1,25 @@
-"""Phone contents page: the corner mark offers New page and Exit; buttons sit at the left of
-their sections; at a desk the app fills the window; the re-read list scrolls under its buttons."""
+"""Field notes contents: the corner mark (every screen size) offers New page, Delete a page and Exit."""
 from common import *
-from playwright.sync_api import sync_playwright
-import time
-today=time.strftime('%Y-%m-%d')
+import json, re
+V=lambda i,d: {'id':'cccccccc-cccc-4ccc-8ccc-ccccccccc00%d'%i,'project_id':PROJ,'kind':'visit','visited_on':d,'visited_at':d+'T15:00:00Z','title':'Walk %d'%i,'weather':None,'names':'','notes':'','photos':[],'photo_labels':{},'pad_id':None,'issued_id':None,'location':None,'created_by':UID,'created_at':d+'T15:00:00Z'}
 with sync_playwright() as p:
-    b = p.chromium.launch()
-    made=[]
-    def post(r):
-        import json
-        row=json.loads(r.post_data); row = row[0] if isinstance(row,list) else row
-        made.append(row); return row
-    ctx = b.new_context(**PHONE); install(ctx, {'site_visits': [], 'note_pads': [], 'observations': [], 'POST:site_visits': post}); signed_in(ctx)
-    pg = ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.tap('td.p-name'); pg.wait_for_selector('.overview')
-    pg.goto(BASE + '#/field-notes/reports'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(500)
-    m = pg.locator('.nb-menu-contents'); box = m.bounding_box(); vw = pg.viewport_size
-    print('mark shown', m.is_visible(), 'right edge gap', round(vw['width']-box['x']-box['width']), 'bottom gap', round(vw['height']-box['y']-box['height']))
-    print('top button hidden', not pg.locator('.nb-contents .nb-today').is_visible(), '| x hidden', not pg.locator('.nb-contents .nb-exit').is_visible())
-    pg.tap('.nb-menu-contents .nb-menu-mark'); pg.wait_for_timeout(450)
-    print('offers', pg.locator('.nb-menu-contents .nb-menu-spot').all_inner_texts())
-    pg.screenshot(path='contents_menu.png')
-    pg.tap('.nb-menu-contents .nb-menu-spot:has-text("New page")'); pg.wait_for_selector('.nb-page', timeout=5000); pg.wait_for_timeout(700)
-    print('new page opened', pg.locator('.nb-page').count() == 1)
-    for z in ('.nb-z-photos', '.nb-z-seen', '.nb-z-sketch'):
-        if pg.locator(z).count() == 0: print(z, 'absent'); continue
-        zb = pg.locator(z).first.bounding_box(); btn = pg.locator(z + ' .nb-z-top button').first
-        bb = btn.bounding_box(); print(z, repr(btn.inner_text()), 'button left offset', round(bb['x']-zb['x']), 'of zone width', round(zb['width']))
-    pg.screenshot(path='page_left.png', full_page=True)
-    pg.tap('.nb-menu .nb-menu-mark'); pg.wait_for_timeout(450); print('page menu', pg.locator('.nb-menu .nb-menu-spot').all_inner_texts()); pg.tap('.nb-menu .nb-menu-spot:has-text("Close")'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(500)
-    pg.tap('.nb-menu-contents .nb-menu-mark'); pg.wait_for_timeout(450); pg.tap('.nb-menu-contents .nb-menu-spot:has-text("Exit")'); pg.wait_for_timeout(600)
-    print('exit lands', pg.url.split('#')[1])
-    ctx.close()
-    ctx = b.new_context(viewport={'width':1920,'height':1000}); install(ctx, {'site_visits': [], 'note_pads': [], 'observations': []}); signed_in(ctx)
-    pg = ctx.new_page(); pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview')
-    c = pg.locator('.content').bounding_box(); print('desk overview: content', round(c['x']), round(c['width']), 'of 1920; overview', round(pg.locator('.overview').bounding_box()['width']))
-    pg.screenshot(path='desk_overview.png')
-    pg.goto(BASE+'#/documents'); pg.wait_for_timeout(1500)
-    c = pg.locator('.content').bounding_box(); print('desk drawings: content', round(c['x']), round(c['width']))
-    pg.screenshot(path='desk_docs.png')
-    pg.goto(BASE + '#/field-notes/reports'); pg.wait_for_selector('.nb-contents'); pg.wait_for_timeout(400)
-    print('desk contents: mark hidden', not pg.locator('.nb-menu-contents').is_visible(), '| New page button shown', pg.locator('.nb-contents .nb-today').is_visible())
+    b=p.chromium.launch()
+    for name,vp in (('phone',PHONE),('fold 820',dict(viewport={'width':820,'height':900},has_touch=True)),('desk',dict(viewport={'width':1600,'height':950}))):
+        store=[V(1,'2026-11-18'),V(2,'2026-11-19')]; gone=[]
+        ctx=b.new_context(**vp); install(ctx,{'site_visits':lambda r: store,'note_pads':[],'observations':[],'POST:site_visits':lambda r: (json.loads(r.post_data))}); signed_in(ctx)
+        def rm(route):
+            if route.request.method=='DELETE': gone.append(route.request.url.split('?')[1][:60]); store[:]=[s for s in store if s['id'] not in route.request.url]; return route.fulfill(status=200,content_type='application/json',body='[]')
+            route.fallback()
+        ctx.route(re.compile(r'.*/rest/v1/site_visits\?.*'),rm)
+        pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
+        pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.locator('td.p-name').first.click(); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc li >> nth=1'); pg.wait_for_timeout(400)
+        m=pg.locator('.nb-menu-contents'); bx=m.bounding_box(); w=pg.viewport_size
+        print(name,'| mark shown:',m.is_visible(),'right gap',round(w['width']-bx['x']-bx['width']),'bottom gap',round(w['height']-bx['y']-bx['height']),'| top button:',pg.locator('.nb-contents .nb-today').is_visible(),'x:',pg.locator('.nb-contents .nb-exit').is_visible())
+        pg.click('.nb-menu-contents .nb-menu-mark'); pg.wait_for_timeout(450); print('  offers:',pg.locator('.nb-menu-contents .nb-menu-spot').all_inner_texts(),'| fits:',pg.locator('.nb-menu-contents').bounding_box()['x']>=0)
+        pg.screenshot(path='contents_%s.png'%name.split()[0])
+        pg.click('.nb-menu-contents .nb-menu-spot:has-text("Delete a page")'); pg.wait_for_selector('.nb-toc-delete'); print('  delete buttons:',pg.locator('.nb-toc-delete').count())
+        pg.locator('.nb-toc-delete').first.click(); pg.wait_for_selector('.nb-tearout'); pg.locator('.nb-tearout button').filter(has_text=re.compile('Tear|Delete')).first.click(); pg.wait_for_timeout(900)
+        print('  server told to delete:',gone,'| pages left:',pg.locator('.nb-toc li').count())
+        pg.click('.nb-removing button'); pg.click('.nb-menu-contents .nb-menu-mark'); pg.wait_for_timeout(450); pg.click('.nb-menu-contents .nb-menu-spot:has-text("Exit")'); pg.wait_for_timeout(500)
+        print('  exit ->',pg.url.split('#')[1],'| errors:',errs); ctx.close()
     b.close()

@@ -2897,18 +2897,20 @@ a.ov-card:hover { border-color: var(--moss); }
 .tb-word { position: absolute; pointer-events: none; outline: 1px solid rgba(31, 78, 121, 0.55); background: rgba(31, 78, 121, 0.07); }
 .tb-show { display: flex; gap: 7px; align-items: center; margin-top: 8px; color: var(--muted); }
 
-/* ---------- A book's contents page on a phone: the corner mark, not buttons at the top ---------- */
-.nb-menu-contents { display: none; }
+/* ---------- A book's contents page: the corner mark, not buttons at the top ---------- */
+/* Bottom right, at a desk and on a phone alike. It opens only as wide as what it offers. */
+.nb-menu-contents { display: flex; left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
+.nb-menu-contents.open { width: min(300px, calc(100vw - 24px)); }
+.nb-menu-contents .nb-menu-bar { overflow: hidden; }
+.nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
+.nb-menu-contents.open .nb-menu-bar { padding-left: 8px; padding-right: 8px; }
+.nb-menu-contents .nb-menu-spot { font-size: 12px; min-width: 70px; padding: 5px 8px; }
+.nb-contents .nb-today, .nb-contents .nb-exit { display: none; }
+.nb-removing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; margin: 4px 0 8px; border-radius: 8px; background: #f8ebe7; color: #8a3a26; font-size: 14px; }
+.nb-toc li.nb-toc-removing { display: flex; align-items: center; gap: 8px; }
+.nb-toc li.nb-toc-removing > button:not(.nb-toc-delete) { flex: 1 1 auto; min-width: 0; width: auto; }
+.nb-toc button.nb-toc-delete { flex: none; width: auto; height: 34px; padding: 0 12px; border: 1px solid #e6c7bd; border-radius: 999px; background: #fff; color: #a2452f; font-size: 13px; }
 @media (max-width: 759px) {
-  /* Bottom right, where the mark sits everywhere else on a phone; two things to offer, so it
-     opens only as wide as they need. */
-  .nb-menu-contents { display: flex; left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
-  .nb-menu-contents.open { width: 190px; }
-  .nb-menu-contents .nb-menu-bar { overflow: hidden; }
-  .nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
-  .nb-menu-contents.open .nb-menu-bar { padding-left: 8px; padding-right: 8px; }
-  .nb-menu-contents .nb-menu-spot { font-size: 12px; min-width: 70px; padding: 5px 8px; }
-  .nb-contents .nb-today, .nb-contents .nb-exit { display: none; }
   /* Take a photo, New observation, and the sketch's Open: under the heading at the left, where
      the thumb of the hand holding the phone is, not out at the far edge. */
   .nb-page .nb-z-photos .nb-z-top, .nb-page .nb-z-seen .nb-z-top, .nb-page .nb-z-sketch .nb-z-top { flex-direction: column; align-items: flex-start; gap: 8px; }

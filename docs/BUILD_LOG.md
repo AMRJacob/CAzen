@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 14:17 CST
+
+**The corner mark on a notebook's contents page, on every screen** (Jacob, 14:14: "we still
+haven't implemented bringing the circle menu back to the field note main page where you can
+add sheets or exit from. We may also want to be able to delete sheets eventually?").
+
+It was there since 18:46 yesterday, but **only below 760 px wide** — a desk, and a wider or
+unfolded phone, got the New page button and the × at the top instead and no mark. Which
+screen he was looking at is not known. Now, at every width, for field notes and meeting notes:
+
+- The CA mark is at the bottom right of the contents page. It opens **New page**, **Delete a
+  page** (when the book has one) and **Exit**.
+- The New page button and the × at the top of the contents page are gone everywhere.
+- **Delete a page** puts the list into choosing: each page gets a *Delete* beside it, and
+  tapping a page asks instead of opening it. The question is the existing tear-out sheet
+  (the page's sketch and photographs go with it; its observations are kept unless the box is
+  ticked). *Done* ends choosing. A right-click on a page still offers Open / Delete at a desk.
+- Escape on the contents page still leaves the book.
+
+`checks/t_contents.py` at 402, 820 and 1600 px: mark shown bottom right, the three choices,
+a page deleted through the menu, Exit → the project's Overview. `t_tear`, `t_board` rerun.
+Test browser only.
+
+---
+
 # Checkpoint — 2026-11-20, 14:10 CST
 
 **Sign-in no longer offers "Email me a link"** (Jacob, 14:07). That option had Supabase email
