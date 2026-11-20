@@ -41,6 +41,9 @@ Four from Jacob on the pad and the corner menus (14:25–14:30).
   screenshot was of the page before 14:17's change reached it. From 760 px up the mark is now
   bottom left, as drawn and as on an open page; on a phone it stays bottom right, as he asked
   on 11/19. `checks/t_contents.py` at 402, 820, 1600 px.
+  **Corrected at 14:35** (Jacob: "it needs to be consistently on the bottom left"): the phone
+  exception is gone. Every corner menu — the app's own, a notebook's contents, a notebook
+  page, the pad — is at the bottom left on every screen.
 
 ---
 

@@ -2902,12 +2902,9 @@ a.ov-card:hover { border-color: var(--moss); }
 .tb-show { display: flex; gap: 7px; align-items: center; margin-top: 8px; color: var(--muted); }
 
 /* ---------- A book's contents page: the corner mark, not buttons at the top ---------- */
-/* Bottom left at a desk, where Jacob drew it (11/20) and where an open page has it; bottom
-   right on a phone, as he asked for there (11/19). It opens only as wide as what it offers. */
+/* Bottom left on every screen, like every other corner menu (Jacob, 11/20). It opens only as
+   wide as what it offers. */
 .nb-menu-contents { display: flex; }
-@media (max-width: 759px) {
-  .nb-menu-contents { left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
-}
 .nb-menu-contents.open { width: min(300px, calc(100vw - 24px)); }
 .nb-menu-contents .nb-menu-bar { overflow: hidden; }
 .nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
