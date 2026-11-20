@@ -11,6 +11,45 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 17:45 CST (pad tools, observation pills)
+
+**The pad and the photograph sketch** (Jacob, 17:14: leaders off the sides of text boxes, an
+arrow tool, light blue and orange; 17:15: a contrast option for photo overlays). Commit `707148a`.
+
+- **Arrow** (tool bar, after the highlighter): a straight ink mark from where the pen lands to
+  where it lifts, head at the lift (`style.arrow`, two points). Shorter than 6 px on the glass is
+  a tap and is not kept. Width from the usual three. `src/lib/arrows.ts` draws shaft and head, on
+  the canvas and in stills.
+- **Leaders on text boxes**: a box's leaders are the points they run to (`style.leaders`), in
+  page units, so moving the box keeps them pointing at the same thing. Drawn as a drafter does:
+  out of the side facing the point, level with the first line of text, a short shoulder, an
+  arrowhead (`leaderFrom`). Added from the typing bar (**Leader**, last key) or, with one text
+  box selected, the selection bar; the app says "Touch where the leader points". With the box
+  selected each leader has a dot: drag to move it, double-click to remove it; **No leaders**
+  removes them all. Leaders are drawn on the ink canvas, under the words.
+- **Contrast** (More, per pad): every stroke, arrow, leader and word drawn with a white edge.
+  Migration **`0043_pad_contrast`** (`note_pads.contrast boolean default false`, additive)
+  **applied** before the code shipped. The photograph overlay in a notebook's gallery and the
+  pad stills draw it too.
+- **Colours**: six — ink, navy, light blue `#4aa3df`, red, orange `#e67e22`, green. Highlighter
+  colours unchanged.
+- Phone tool bar: eleven keys now, 27 px each below 480 px wide; measured inside the bar at
+  402 px.
+- `checks/t_padtools.py` (desk; `PHONE=1` for the bar): arrow saved with two points and
+  `arrow: true`; six colours; Leader key while typing, the prompt, the leader saved and its dot;
+  contrast sent to the pad. **Not checked over a real photograph, or with a pencil on the
+  iPhone.** `t_select.py` and `t_padmenu.py` remain stale (old grips).
+
+**Observations as pills** (Jacob, 16:45: pill-shaped, a little shadow in the colour of the
+observation type or trade). Commit `29c968c`. On a notebook page — this page's observations and
+the previous ones — each is a white pill, its photograph a round thumbnail (or a dot of the colour
+when it has none), with a shadow and a faint border in its trade's colour, as its tag wears it on
+a drawing. With no trade: amber for a punch item, moss otherwise — **the types have no colour of
+their own**, so that choice is mine (`glowOf`). The Observations list's rows are the same idea as
+rounded cards. Screenshots at 402 and 1300 px.
+
+---
+
 # Checkpoint — 2026-11-20, 17:30 CST (field report)
 
 **"SEE ATTACHMENT FOR PHOTOGRAPHS" at the foot of a field report** (Jacob, 17:17) whenever the

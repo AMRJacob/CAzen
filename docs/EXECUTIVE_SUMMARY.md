@@ -43,6 +43,8 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Change documents register; rows editable (number, subject, date); change to contract cost and time per document, totalled at the top | Live (cost, time and editing 2026-11-19) |
 | Observations with photographs and pins on the sheet; punch list; field report written from a visit's observations | Live |
 | Note pads (handwritten, live across devices) | Live |
+| Pad: arrow tool, leaders from text boxes, six colours, contrast (a white edge for drawing over photographs) | Live (2026-11-20); test browser only |
+| AMR field report template redrawn from the firm's own report (red title, grey bar, firm corner); SEE ATTACHMENT FOR PHOTOGRAPHS when photos are attached | Live (2026-11-20) |
 | Pay applications (G702/G703 layout, retainage steps, stored material) | Live |
 | Setting a contract up in the app, with a pasted schedule of values | Live (2026-11-19) |
 | Construction schedule against pay applications | Live |
