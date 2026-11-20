@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TagMark } from './TagMark'
-import type { Mark } from '../lib/tags'
+import { Mark as Enso } from './Logo'
+import { markOfTag, type Mark, type Tag } from '../lib/tags'
 import { listCurrentSheets, localCurrentSheets } from '../lib/sheets'
 import { readFile, type ProjectStore } from '../lib/files'
 import { pdfPageThumb } from '../lib/pdf/pdfjs'
@@ -42,7 +43,11 @@ function cropAround(img: HTMLImageElement, at: { x: number; y: number }): string
   } catch { return undefined }
 }
 
-export function SheetSpot({ project, start, mark, onPick, onClose }: {
+export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade, onTag }: {
+  /** The trades and their tags, to choose what kind of thing is being tagged without going back to the form. */
+  groups?: { trade: string; colour: string; mark: Mark; tags: Tag[] }[]
+  trade?: string
+  onTag?: (trade: string, tag: Tag | null) => void
   project: ProjectStore
   /** What the tag will look like, if the observation has a trade yet. */
   mark?: Mark | null
@@ -81,11 +86,14 @@ export function SheetSpot({ project, start, mark, onPick, onClose }: {
 
   // Close in, the first picture runs out of detail; a finer one is drawn once and swapped in.
   useEffect(() => {
-    if (v.k < 2.2 || sharp.current || !bytesRef.current) return
+    if (v.k < 1.5 || sharp.current || !bytesRef.current) return
     sharp.current = true
     pdfPageThumb(bytesRef.current, 5200).then((url) => setImage((was) => (was ? url : was))).catch(() => { /* the first picture stays */ })
   }, [v.k])
   const [error, setError] = useState<string | null>(null)
+  // The corner mark: the way out, the way back to the sheets, the kind of tag, and the zoom.
+  const [menu, setMenu] = useState(false)
+  const [choosing, setChoosing] = useState<string | null>(null)
 
   useEffect(() => {
     let gone = false
@@ -111,9 +119,16 @@ export function SheetSpot({ project, start, mark, onPick, onClose }: {
     setImage(null)
     sharp.current = false
     bytesRef.current = null
+    setMenu(false); setChoosing(null)
     setV({ k: 1, x: 0, y: 0 })
     readFile(project, sheet.file_path)
-      .then((bytes) => { bytesRef.current = bytes; return pdfPageThumb(bytes, 2200) })
+      .then((bytes) => {
+        bytesRef.current = bytes
+        // Drawn for the screen it is on: a wide monitor showed a 2,200 px picture stretched soft.
+        const want = Math.min(5200, Math.max(2200, Math.round(Math.max(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) * 1.25)))
+        if (want >= 5000) sharp.current = true
+        return pdfPageThumb(bytes, want)
+      })
       .then((url) => { if (!gone) setImage(url) })
       .catch((e) => { if (!gone) setError(message(e)) })
     return () => { gone = true }
@@ -129,16 +144,9 @@ export function SheetSpot({ project, start, mark, onPick, onClose }: {
     <div className="spot" role="dialog" aria-label="Tag to a drawing">
       <header className="spot-bar">
         {sheet
-          ? <button onClick={() => { setSheet(null); setAt(null) }}>‹ Sheets</button>
+          ? null
           : <input autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find a sheet by number or title" aria-label="Find a sheet" />}
         {sheet && <span className="spot-name"><span className="mono">{sheet.number}</span> {sheet.title}</span>}
-        {sheet && image && (
-          <span className="spot-zoom">
-            <button aria-label="Zoom out" onClick={() => { const w = wrap.current; if (w) zoomAt(w.clientWidth / 2, w.clientHeight / 2, 1 / 1.5) }}>−</button>
-            <button aria-label="Zoom in" onClick={() => { const w = wrap.current; if (w) zoomAt(w.clientWidth / 2, w.clientHeight / 2, 1.5) }}>+</button>
-            <button onClick={fit}>Fit</button>
-          </span>
-        )}
         {/* Always there once a sheet is open: appearing only after the touch made the bar taller,
             which slid the drawing down under the tag just placed. */}
         {sheet && <button className="primary" disabled={!at} onClick={() => {
@@ -146,7 +154,7 @@ export function SheetSpot({ project, start, mark, onPick, onClose }: {
           const img = document.querySelector<HTMLImageElement>('.spot-page img')
           onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
         }}>Tag it here</button>}
-        <button onClick={onClose} aria-label="Close">×</button>
+        {!sheet && <button onClick={onClose} aria-label="Close">×</button>}
       </header>
       {error && <div className="notice error">{error}</div>}
       {!sheet ? (
@@ -216,6 +224,48 @@ export function SheetSpot({ project, start, mark, onPick, onClose }: {
           {image && !at && <p className="spot-hint">Drag and pinch to get there, then touch the drawing where it was seen.</p>}
         </div>
       )}
+      {sheet && (() => {
+        const zoom = (f: number) => { const w = wrap.current; if (w) zoomAt(w.clientWidth / 2, w.clientHeight / 2, f) }
+        const I = (d: React.ReactNode) => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+        const spot = (label: string, icon: React.ReactNode, act: () => void, on = false) => (
+          <button className={`nb-menu-spot${on ? ' on' : ''}`} onClick={act}>{icon}<span>{label}</span></button>
+        )
+        const open = menu || choosing !== null
+        const group = groups?.find((g) => g.trade === choosing)
+        return (
+          <>
+            {choosing !== null && groups && (
+              <div className="spot-tags" role="dialog" aria-label="What kind of tag">
+                <div className="spot-tags-row">
+                  {groups.map((g) => (
+                    <button key={g.trade} className={`chip${choosing === g.trade ? ' on' : ''}`} onClick={() => setChoosing(g.trade)}><TagMark mark={g.mark} size={18} />{g.trade}</button>
+                  ))}
+                </div>
+                {group && (
+                  <div className="spot-tags-row spot-tags-issues">
+                    {group.tags.map((t) => (
+                      <button key={t.label} className="chip" style={{ borderColor: group.colour }} onClick={() => { onTag?.(group.trade, t); setChoosing(null); setMenu(false) }}><TagMark mark={markOfTag(group, t)} size={16} />{t.label}</button>
+                    ))}
+                    <button className="chip" onClick={() => { onTag?.(group.trade, null); setChoosing(null); setMenu(false) }}>Just {group.trade}</button>
+                  </div>
+                )}
+              </div>
+            )}
+            <nav className={`nb-menu spot-menu${open ? ' open' : ''}`} aria-label="The drawing">
+              <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => { setMenu(!open); setChoosing(null) }}><Enso size={30} /></button>
+              <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
+                {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), onClose)}
+                {spot('Sheets', I(<><rect x="5" y="4" width="14" height="16" rx="1.5" /><path d="M8.5 9h7M8.5 13h7" /></>), () => { setSheet(null); setAt(null) })}
+                {groups && onTag && spot('Tag type', mark ? <TagMark mark={mark} size={20} /> : I(<><path d="M4 12V5h7l9 9-7 7-9-9Z" /><circle cx="8.5" cy="8.5" r="1.2" /></>),
+                  () => setChoosing(choosing !== null ? null : (trade && groups.some((g) => g.trade === trade) ? trade : groups[0]?.trade ?? '')), choosing !== null)}
+                {spot('Out', I(<><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4M8.5 11h5" /></>), () => zoom(1 / 1.5))}
+                {spot('In', I(<><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4M8.5 11h5M11 8.5v5" /></>), () => zoom(1.5))}
+                {spot('Fit', I(<><path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4" /></>), fit)}
+              </div>
+            </nav>
+          </>
+        )
+      })()}
     </div>
   )
 }

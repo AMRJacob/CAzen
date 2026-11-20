@@ -1,0 +1,34 @@
+"""Tagging a drawing: a sharp sheet, the corner menu, and choosing the kind of tag without leaving the screen."""
+from common import *
+from t_fix import extra as sheets, S1
+T1='77777777-7777-4777-8777-777777777771'
+state={'obs':[]}
+def post_obs(req):
+    r=json.loads(req.post_data); r=r if isinstance(r,list) else [r]; state['obs']+=r; return []
+extra=dict(sheets); extra.update({'observations':lambda r: state['obs'],'POST:observations':post_obs,'observation_types':[{'id':T1,'firm_id':FIRM,'code':'N','name':'Non-conforming','position':0,'is_punch':False}]})
+pdf=open('sheet.pdf','rb').read()
+with sync_playwright() as p:
+    b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,extra); signed_in(ctx)
+    ctx.route(re.compile(r'.*/rest/v1/observation_tags.*'), lambda r: r.fulfill(status=404,content_type='application/json',body=json.dumps({'code':'PGRST205','message':"Could not find the table 'public.observation_tags' in the schema cache"})))
+    ctx.route(re.compile(r'.*/functions/v1/files.*'), lambda r: r.fulfill(status=200,content_type='application/json',body=json.dumps({'url':'https://stand-in.supabase.co/blob/sheet.pdf','configured':True,'bytes':0,'objects':0,'by_project':{}})))
+    ctx.route(re.compile(r'.*/blob/sheet\.pdf'), lambda r: r.fulfill(status=200,content_type='application/pdf',body=pdf))
+    pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_timeout(300); pg.goto(BASE+'#/documents'); pg.wait_for_timeout(500)
+    print('sidebar books:',pg.evaluate("[...document.querySelectorAll('.sidebar .nb-tome')].map(a=>a.getAttribute('href')+' '+a.querySelector('.nb-tome-mono').textContent)"))
+    pg.locator('.sidebar').screenshot(path='sidebar.png')
+    pg.click('.sidebar .nb-tome-ob'); pg.wait_for_selector('text=New observation'); pg.click('button:has-text("New observation")')
+    pg.click('.obs-tag-open'); pg.click('.obs-tag-trades .chip:has-text("Glazing")'); pg.click('.obs-tag-issues .chip:has-text("Sealant missing")')
+    print('after the tag: title=%r chip=%r'%(pg.input_value('input[placeholder^="Sealant"]'),pg.inner_text('.obs-tag-open')))
+    pg.click('.obs-attach .photo-add:has-text("Drawing")'); pg.fill('.spot-bar input','101'); pg.click('.spot-list button'); pg.wait_for_selector('.spot-page img',timeout=15000)
+    info=pg.evaluate("(()=>{const i=document.querySelector('.spot-page img');return {natural:i.naturalWidth,shown:Math.round(i.getBoundingClientRect().width),dpr:devicePixelRatio}})()"); print('sheet picture:',info,'| pixels per screen pixel: %.2f'%(info['natural']/(info['shown']*info['dpr'])))
+    print('top bar:',pg.locator('.spot-bar > *').all_inner_texts())
+    bx=pg.locator('.spot-page').bounding_box(); pg.mouse.click(bx['x']+bx['width']*0.30,bx['y']+bx['height']*0.60); pg.wait_for_timeout(200)
+    pin0=pg.evaluate("(()=>{const p=document.querySelector('.spot-pin');return p.querySelector('.spot-pin-dot')?'plain dot':'mark '+(p.textContent||'')})()")
+    pg.click('.spot-menu .nb-menu-mark'); pg.wait_for_timeout(450); print('corner menu:',pg.locator('.spot-menu .nb-menu-spot').all_inner_texts())
+    pg.click('.spot-menu .nb-menu-spot:has-text("Tag type")'); pg.wait_for_selector('.spot-tags'); trades=pg.locator('.spot-tags-row').first.locator('.chip').all_inner_texts(); print('trades offered:',len(trades),trades[:4])
+    pg.locator('.spot-tags-row').first.locator('.chip:has-text("Glazing")').click(); pg.wait_for_timeout(200); issues=pg.locator('.spot-tags-issues .chip').all_inner_texts(); print('glazing tags:',issues[:4])
+    pg.screenshot(path='spot_tags.png'); pg.locator('.spot-tags-issues .chip').first.click(); pg.wait_for_timeout(300)
+    pin1=pg.evaluate("(()=>{const p=document.querySelector('.spot-pin');return p.querySelector('.spot-pin-dot')?'plain dot':'mark '+(p.textContent||'')})()"); print('pin before:',pin0,'| after choosing:',pin1,'| chooser closed:',pg.locator('.spot-tags').count()==0)
+    pg.screenshot(path='spot.png'); pg.click('button:has-text("Tag it here")'); pg.wait_for_timeout(300)
+    print('back on the form: heading',repr(pg.input_value('.obs-name')),'| tag chip:',pg.inner_text('.obs-tag-open'),'| tagged:',pg.inner_text('.obs-spot-no'),'| errors:',errs if 'errs' in dir() else '')
+    b.close()

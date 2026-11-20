@@ -252,6 +252,15 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
       {pin && <p className="muted small">Pinned to the sheet it was raised from.</p>}
       {spotting && (
         <SheetSpot project={project} mark={mark} start={spot ? { sheetId: spot.sheetId, region: spot.region } : null}
+          groups={groups} trade={trade}
+          onTag={(tr, t) => {
+            setTrade(tr)
+            // As when a tag is chosen on the form: it is what was seen until more is said, and it
+            // never overwrites what was typed.
+            if (!t) return
+            if (!title.trim()) setTitle(t.label)
+            else if (!title.toLowerCase().includes(t.label.toLowerCase())) setTitle(`${t.label} — ${title.trim()}`)
+          }}
           onPick={(s) => { setSpot(s); setSpotting(false) }} onClose={() => setSpotting(false)} />
       )}
 

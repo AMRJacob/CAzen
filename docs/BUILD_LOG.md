@@ -11,6 +11,29 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:33 CST
+
+**Tagging an observation to a drawing** (Jacob, 15:31, with a screenshot of A102: the tag
+type cannot be chosen while placing it; the drawing looks pixelated; use the circle menu here).
+
+- **The kind of tag is chosen on the drawing.** The corner mark (bottom left) opens Close,
+  Sheets, **Tag type**, Out, In, Fit. *Tag type* shows the mark in force and opens the trades;
+  choosing a trade shows its tags and *Just <trade>*. The pin on the drawing changes to that
+  mark at once, and the form behind takes the trade and — as when a tag is chosen on the form
+  — the tag's words as what was seen, unless something is already typed.
+- The top bar is now the sheet's name and **Tag it here**; ‹ Sheets, − + Fit and × moved into
+  the corner menu. The sheet list (before a sheet is open) keeps its × at the top.
+- **Sharper.** The sheet's first picture was always 2,200 px on its long side, whatever the
+  screen; it is now sized for the window and the display's pixel density (up to 5,200 px), and
+  the finer picture is swapped in from 1.5× zoom rather than 2.2×. On his screenshot's window
+  (about 2,550 px wide) that is 3,200 px at ordinary density and 4,800–5,200 px on a
+  high-density display. **Whether that was the cause of what he saw is inferred from the
+  numbers, not seen.**
+- `checks/t_spotmenu.py`. `t_tag.py` still clicks the old ‹ Sheets / zoom buttons where it
+  uses them.
+
+---
+
 # Checkpoint — 2026-11-20, 15:30 CST
 
 **Pictures on the pad, to draw over** (Jacob, 15:26: a tool to add a photo to draw over, or

@@ -3191,3 +3191,13 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .clip-page { position: relative; touch-action: none; cursor: crosshair; max-width: 100%; }
 .clip-page img { display: block; max-width: 100%; max-height: calc(100dvh - 90px); user-select: none; -webkit-user-select: none; box-shadow: 0 1px 6px rgba(0,0,0,0.12); background: #fff; }
 .clip-box { position: absolute; border: 2px solid var(--moss); background: rgba(95, 122, 97, 0.14); pointer-events: none; }
+
+/* ---------- Tag to a drawing: the corner mark, and choosing the kind of tag there ---------- */
+.spot .spot-menu { display: flex; z-index: 96; }
+.spot .spot-menu.open { width: min(430px, calc(100vw - 24px)); }
+.spot .spot-menu .nb-menu-spot.on { background: var(--moss-soft); }
+.spot-tags { position: fixed; z-index: 95; left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom)); max-width: 760px; max-height: 46dvh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); }
+.spot-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.spot-tags-issues { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.spot-tags .chip { display: inline-flex; align-items: center; gap: 6px; }
+.spot-page img { image-rendering: auto; }
