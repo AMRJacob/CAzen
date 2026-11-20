@@ -3014,3 +3014,12 @@ a.ov-card:hover { border-color: var(--moss); }
 .pay-read-warn { color: #a2452f; }
 .pay-read-missing td { color: var(--muted); }
 .pay-read-from { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
+
+/* ---------- Gantt: a colour per activity ---------- */
+.gx-bar.gx-coloured { background: color-mix(in srgb, var(--gx-ink) 28%, #fff); }
+.gx-bar.gx-coloured .gx-done { background: var(--gx-ink); }
+.gx-bar.gx-coloured.behind { box-shadow: 0 0 0 1.5px var(--danger); }
+.gx-swatches { display: inline-flex; gap: 4px; align-items: center; }
+button.gx-swatch { width: 16px; height: 16px; min-height: 0; padding: 0; border-radius: 50%; border: 1.5px solid transparent; }
+button.gx-swatch.on { border-color: #2b2d2c; }
+button.gx-swatch.none { background: #cfdad0; position: relative; }

@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
-import { along, monthsIn, span, type Activity } from '../lib/schedule'
+import { along, canColour, monthsIn, span, type Activity } from '../lib/schedule'
+
+/** Bar colours offered for a contractor's coding; null is the ordinary green. */
+const GANTT_COLOURS: (string | null)[] = [null, '#3b6ea5', '#b5651d', '#8a4f9e', '#b23a48', '#2f8f83', '#6b6f76']
 import { usDate } from '../lib/dates'
 
 /**
@@ -130,7 +133,7 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
             // No length to it: a milestone, drawn as a point in time rather than a sliver of bar.
             if (from === to) bar = <span className={`gx-mile${a.percent >= 100 ? ' done' : to < today ? ' behind' : ''}`} style={{ left: `${left * 100}%` }} title={`${a.name}: ${usDate(from)}`} />
             else bar = (
-              <span className={`gx-bar${a.percent + 0.5 < due ? ' behind' : ''}`} style={{ left: `${left * 100}%`, width: `${width * 100}%` }}
+              <span className={`gx-bar${a.percent + 0.5 < due ? ' behind' : ''}${a.color ? ' gx-coloured' : ''}`} style={{ left: `${left * 100}%`, width: `${width * 100}%`, ...(a.color ? { ['--gx-ink' as string]: a.color } : {}) }}
                 title={`${a.name}: ${usDate(from)} to ${usDate(to)}, ${Math.round(a.percent)}%`}>
                 <span className="gx-done" style={{ width: `${a.percent}%` }} />
               </span>
@@ -157,6 +160,14 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
                   )}
                   <span className="gx-chart gx-tools">
                     {!a.is_heading && <button className="link" onClick={() => onCovers(a.id)} title="Which lines of the pay application's schedule of values this activity is paid under">Pay lines: {linesOf(a)}</button>}
+                    {!a.is_heading && canColour() && (
+                      <span className="gx-swatches" role="group" aria-label="Bar colour">
+                        {GANTT_COLOURS.map((c) => (
+                          <button key={c ?? 'none'} type="button" className={`gx-swatch${(a.color ?? null) === c ? ' on' : ''}${c ? '' : ' none'}`}
+                            style={c ? { background: c } : undefined} aria-label={c ? `Colour ${c}` : 'No colour'} onClick={() => onChange(a.id, { color: c })} />
+                        ))}
+                      </span>
+                    )}
                     <button className="link danger-link" onClick={() => { setEditing(null); onRemove(a.id) }}>Remove</button>
                     <button className="primary-lite" onClick={() => close(a)}>Done</button>
                   </span>

@@ -23,6 +23,8 @@ export interface Activity {
   /** What the contractor says is done on this activity. */
   percent: number
   sort: number
+  /** A colour for its bar — a contractor's coding by trade or crew. Null is the ordinary green. */
+  color?: string | null
   /** The schedule-of-values lines this activity covers. */
   lines: string[]
 }
@@ -39,11 +41,23 @@ const notThere = (e: unknown): boolean => {
   return m?.code === '42P01' || /schedule_activit|does not exist|schema cache/i.test(m?.message ?? '')
 }
 
+// The colour column arrives with migration 0041; until the database has it, colours are not offered.
+let colourKnown: boolean | null = null
+export const canColour = () => colourKnown === true
+async function lookForColour(): Promise<void> {
+  if (colourKnown !== null) return
+  const { error } = await db().from('schedule_activities').select('color').limit(1)
+  // No answer is not an answer: only a reply from the database settles it.
+  if (error && !(error as { code?: string }).code) return
+  colourKnown = !error
+}
+
 export async function listActivities(projectId: string): Promise<Activity[]> {
   try {
     const client = db()
+    await lookForColour()
     const [acts, links] = await Promise.all([
-      client.from('schedule_activities').select(COLUMNS).eq('project_id', projectId).order('sort'),
+      client.from('schedule_activities').select(colourKnown ? `${COLUMNS}, color` : COLUMNS).eq('project_id', projectId).order('sort'),
       client.from('schedule_activity_lines').select('activity_id, sov_line_id').eq('project_id', projectId),
     ])
     if (acts.error) throw acts.error
@@ -114,7 +128,7 @@ export async function addActivities(rows: {
 
 export async function setActivity(
   id: string,
-  patch: Partial<Pick<Activity, 'name' | 'starts_on' | 'ends_on' | 'percent' | 'sort' | 'is_heading'>>,
+  patch: Partial<Pick<Activity, 'name' | 'starts_on' | 'ends_on' | 'percent' | 'sort' | 'is_heading' | 'color'>>,
 ): Promise<void> {
   const { error } = await db().from('schedule_activities').update(patch).eq('id', id)
   if (error) throw error
