@@ -11,6 +11,51 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 14:23 CST
+
+**A section of the project manual reads straight through** (Jacob, 14:18: keep the view exactly
+as it is, but scroll through the current chapter without clicking the arrows). In the manual's
+section preview (`flow` on `PdfPreview`; also the section preview while an upload is being
+split):
+
+- The wheel moves down the page instead of zooming it. At the foot of the page a little more
+  of the same turns to the next page, which arrives at its top with the zoom and the sideways
+  place kept; at the head, wheeling up goes back into the foot of the page before.
+- With the whole page fitted on screen (how it opens) there is nowhere to move, so one notch
+  is one page.
+- On a phone, a page dragged well past its end and let go turns the same way.
+- **Ctrl + wheel and a pinch still zoom; the wheel alone no longer does, in this preview
+  only.** The arrows, the arrow keys and "Page N of M" are unchanged. It is still one page on
+  screen at a time, not a continuous strip — the look was to stay as it is.
+- Other previews (a form before issuing, a submittal package) are unchanged: wheel zooms.
+- `checks/t_flow.py`, a four-page section at 1440 px: opens as before; one notch at fit →
+  page 2; zoomed to 150%, three notches move down the page, more carry on to page 4; wheeling
+  up moves back; Ctrl + wheel zooms. The drag-to-turn on a phone was **not driven**.
+
+His note that a change to the manual is probably a whole-section replacement, unless an
+addendum only describes it, is how the manual already works (a re-uploaded section becomes
+that section's next revision). Nothing was changed for it; a described-only addendum has no
+place in the manual yet.
+
+**The pad: Apple's Copy / Look Up menu** (Jacob, 14:20, then 14:21: it comes up when the
+pencil is used, not from the palm). **Not reproduced — no iPhone or Pencil here, and no primary
+source was read for when iOS raises that menu.** That menu belongs to a text selection, so the
+working guess is that a pencil held still selects the nearest selectable words. Three changes:
+
+- Typed text on the pad is selectable only in the box being typed in (it was selectable
+  always, the one thing on the pad that was).
+- While the pad is open, a selection that starts anywhere but the box being typed in is
+  refused, and one that appears anyway is dropped at once.
+- With a pen, pencil, highlighter or eraser in hand, typed text takes no touch at all — it is
+  reached with the text tool or Select. **This changes one thing:** tapping existing text with
+  a drawing tool in hand no longer starts editing it.
+- A held pencil or finger no longer opens the pad's own Cut / Copy / Paste menu either; that
+  menu is for a mouse's right button.
+
+`t_text`, `t_padmenu`, `t_select`, `t_twofinger` rerun clean.
+
+---
+
 # Checkpoint — 2026-11-20, 14:17 CST
 
 **The corner mark on a notebook's contents page, on every screen** (Jacob, 14:14: "we still

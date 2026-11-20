@@ -177,7 +177,7 @@ export default function Manual() {
         )
       )}
 
-      {open && <PdfPreview bytes={open.bytes} title={open.title} onClose={() => setOpen(null)} />}
+      {open && <PdfPreview flow bytes={open.bytes} title={open.title} onClose={() => setOpen(null)} />}
     </section>
   )
 }
@@ -625,6 +625,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
           because deciding where a section ends is done by looking at the pages. */}
       {peek !== null && drafts[peek] && (peekBytes ?? firsts[`${drafts[peek].pages[0]}`]) && (
         <PdfPreview
+          flow
           bytes={(peekBytes ?? firsts[`${drafts[peek].pages[0]}`])!}
           title={`${drafts[peek].number || 'Section'}${peekBytes ? '' : ' · first page'} · pages ${drafts[peek].pages[0] + 1}–${drafts[peek].pages[drafts[peek].pages.length - 1] + 1}`}
           onClose={() => { setPeek(null); setPeekBytes(null) }}

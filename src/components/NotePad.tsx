@@ -825,6 +825,33 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
     return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
   }) : null
   const inky = tool === 'pen' || tool === 'pencil'
+  // Nothing on the pad is selectable but the text box being typed in. A pencil held still asks
+  // the phone to select whatever words are nearest, and the phone then raises its own Copy /
+  // Look Up menu over the page; any selection that starts anywhere else is refused, and one
+  // that gets through is dropped.
+  const lastPointer = useRef<string>('mouse')
+  useEffect(() => {
+    const typing = (n: Node | null) => {
+      const el = n instanceof Element ? n : n?.parentElement
+      const box = el?.closest('.pad-text, textarea, input')
+      return !!box && (box === document.activeElement || box.contains(document.activeElement))
+    }
+    const start = (e: Event) => { if (!typing(e.target as Node)) e.preventDefault() }
+    const changed = () => {
+      const sel = document.getSelection()
+      if (sel && !sel.isCollapsed && !typing(sel.anchorNode)) sel.removeAllRanges()
+    }
+    const down = (e: PointerEvent) => { lastPointer.current = e.pointerType || 'mouse' }
+    document.addEventListener('selectstart', start)
+    document.addEventListener('selectionchange', changed)
+    document.addEventListener('pointerdown', down, true)
+    return () => {
+      document.removeEventListener('selectstart', start)
+      document.removeEventListener('selectionchange', changed)
+      document.removeEventListener('pointerdown', down, true)
+    }
+  }, [])
+
   return (
     <div className="padview"
       onPointerDownCapture={shield} onPointerMoveCapture={shield} onPointerUpCapture={shield}
@@ -839,6 +866,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
         onContextMenu={(e) => {
           // A right-click picks what is under it, whatever tool is in hand, and its settings open.
           e.preventDefault()
+          // A pencil or a finger held still also arrives here on some phones. That is writing
+          // paused, not a request for a menu.
+          if (lastPointer.current !== 'mouse') return
           const where = at(e)
           const hit = markAt(where)
           setPicked(hit ? (picked.includes(hit.id) ? picked : [hit.id]) : [])
@@ -852,7 +882,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
           marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
           onReady={took} />
 
-        <div className={`pad-texts${tool === 'select' ? ' selecting' : ''}`} style={{
+        {/* With a pen in hand the typed text is part of the paper: it takes no touch. A palm
+            resting on a text box otherwise put the cursor in it, and iOS raised its Copy / Look Up
+            menu over the page. The text tool, or Select, is how text is reached. */}
+        <div className={`pad-texts${tool === 'select' ? ' selecting' : ''}${tool !== 'text' && tool !== 'select' && editing === null ? ' resting' : ''}`} style={{
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale / TEXT_UNIT})`,
         }}>
           {texts.map((m) => {
