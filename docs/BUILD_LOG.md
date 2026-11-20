@@ -14,7 +14,7 @@ from it.
 # Checkpoint — 2026-11-19, 22:20 CST
 
 **Working down the not-built list** (Jacob, 21:58–22:00: is every feature discussed in; then
-"work through these overnight"). Seven commits, `2b…` → `HEAD`. Everything below was checked in
+"work through these overnight"). Seven commits, `fbc0d33` → `34596ae`. Everything below was checked in
 the test browser against fixtures; **none of it on the iPhone, the PC, or real project data.**
 
 **Two migrations are written and not applied.** `0039_schedule_versions` was sent to the
