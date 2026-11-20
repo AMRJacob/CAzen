@@ -11,6 +11,47 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 17:20 CST (trade board)
+
+**Pay lines and schedule activities filed under CSI divisions, on a board** (Jacob, 16:36: how
+to check pay applications against a schedule whose categories are not the same; 16:42: make the
+setup almost fun — CSI trade boxes, line items as objects dropped into them, the app's own first
+placement, unplaced items "out in space", zoom and pan like the pad, finger, mouse and keyboard,
+3-D and shadows; 17:04: implement it). Commit `b7e987f`. `src/components/TradeBoard.tsx`,
+`src/lib/tradeBoard.ts`, `src/lib/divisions.ts`, `src/pages/Trades.tsx` at `/trades`;
+*Sort into trades* on Pay applications (Against the schedule) and on the Schedule page.
+
+- **Migration `0042_trade_divisions` applied** (additive): `sov_lines.divisions` and
+  `schedule_activities.divisions`, `text[]` of two-digit divisions. Null = never filed (the board
+  shows the guess); `{}` = put outside every division on purpose. A list because a schedule
+  activity such as "Rough-In Plbg, Elec, HVAC" is three trades' work. (First applied as a single
+  text column and replaced within minutes, before anything was written to it.)
+- **The first guess** (`guessDivisions`): ordered word rules, specific phrases before loose words
+  ("Traffic Control" before "Controls", "Metal Framing & Drywall" before "Metal"). An activity's
+  name is guessed a part at a time, split at commas, slashes and "and"; Plbg/Elec/Mech spelled out;
+  an activity with no trade word takes its heading's. Tried on Westrock's 80 pay lines and 57
+  activities and UCA's 83 lines: the misses seen were fixed; "Waterproofing (sealant at Concrete
+  Paving)" goes to 32 and "Equipment & Haisting" (the scan's spelling) to 11 — left as guesses to
+  correct. `checks/divisions.test.ts` (33 cases, made-up wording).
+- **The board**: the usual building divisions (01–14, 21–28, 31–33) always shown, others when
+  used; trays in four columns, lifted cards with layered shadows; pay lines are warm cards with
+  item number and value, activities cool cards with dates. Guessed placements are dashed until
+  *Keep* in the corner menu (bottom left, Close first, as elsewhere) or until moved. Loose tiles
+  drift slightly (off under reduced motion). Drag a tile to a tray to file it, to the loose area to
+  unfile it; Ctrl, Alt or *Copy* in the menu files it in a second tray as well. Wheel zooms about
+  the pointer, drag the table to move it, two fingers pinch; a finger lifts a tile by resting on it
+  a quarter second (moving straight away moves the table); + − 0 and arrows. *Both / Pay lines /
+  Schedule* filters what is shown. On a phone it opens readable at the loose tiles; Fit shows all.
+- **Each tray reads**: *Dates* — what the activities' dates say should be done today, weighted by
+  length; *Reported* — the contractor's percent, weighted the same way; *Billed* — completed and
+  stored to date on the latest application against the lines' value (a line in two trays split
+  evenly). **These weightings are mine**: length-weighting counts a long cheap activity heavily.
+- `checks/t_trades.py` (desk, and `phone`): guesses placed, a loose line dragged into 32 and saved,
+  Keep saves the rest, wheel and pinch zoom. Test browser only; **not seen on the iPhone or with a
+  real finger**. Nothing has been filed on the real projects.
+
+---
+
 # Checkpoint — 2026-11-20, 17:10 CST (pay applications)
 
 **This period read from the contractor's PDF, printed or scanned, with no template** (Jacob,

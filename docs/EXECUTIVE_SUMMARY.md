@@ -48,7 +48,8 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Construction schedule against pay applications | Live |
 | Schedule read from the contractor's PDF (printed or scanned), rows found by their line numbers, unsure cells in red; activities tied to pay lines by name | Live (2026-11-19); on the one real scan tried, all 57 lines read |
 | Re-read titles and dates on sheets already uploaded (select several, right-click) | Live (2026-11-19); not yet tried on real sheets |
-| Pay applications read from the contractor's PDF: each row matched to its schedule-of-values line and checked by its own arithmetic, unsure figures in red, reviewed before kept | Live (2026-11-19); tried on a printed sample made here, not on a contractor's PDF or a scan |
+| Pay applications read from the contractor's PDF, printed or scanned, with no template: columns found by where the figures line up and by the sheet's own arithmetic, every line accounted for by its line number, each column checked against the printed grand total, misread figures mended from the row and said to be | Live (2026-11-20); read in full on two real applications (Westrock App 8, 80/80; UCA CW Loop App 8 from a scan, 83/83) |
+| Trade board: pay lines and schedule activities filed under CSI divisions on a pan-and-zoom board, first placed from their words; each division's billing read against the schedule's dates and reported percent | Live (2026-11-20); test browser only; nothing filed on a real project yet |
 | Change orders in the register offered as schedule-of-values lines with their figure (their own, or the sum of the proposal requests they cover), and tied to them | Live (2026-11-19); checked in a test browser only |
 | A second contract on a project, added from Pay applications | Live (2026-11-19) |
 | Forms shown as the printed page and edited by clicking a part of it; the list of fields one tab away | Live (2026-11-19); checked in a test browser only |
