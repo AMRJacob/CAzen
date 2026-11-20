@@ -1,9 +1,21 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+import { getDocument as open, GlobalWorkerOptions } from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = workerSrc
 
-export { getDocument }
+/**
+ * Where pdf.js finds its image decoders. Scanners compress the black-and-white layer of a page
+ * as CCITT or JBIG2, and pdf.js 6 decodes both with a small WebAssembly module it fetches from
+ * here; without it those images are silently left off the page — a scanned pay application
+ * rendered as ruled lines with almost no figures. The build copies them to `pdfjs/`.
+ */
+const wasmUrl = import.meta.env.PROD ? new URL('./pdfjs/', document.baseURI).href : '/node_modules/pdfjs-dist/wasm/'
+
+type Source = Parameters<typeof open>[0]
+export function getDocument(src: Source): ReturnType<typeof open> {
+  const plain = typeof src === 'object' && src !== null && !(src instanceof URL) && !ArrayBuffer.isView(src) && !(src instanceof ArrayBuffer)
+  return open(plain ? { wasmUrl, ...(src as object) } : { url: src as string | URL, wasmUrl } as never)
+}
 
 async function pageToPng(bytes: Uint8Array, scaleFor: (width: number) => number): Promise<string> {
   const pdf = await getDocument({ data: bytes.slice() }).promise

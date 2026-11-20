@@ -568,6 +568,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble 
             known={data.lines.map((l) => ({ id: l.id, item_no: l.item_no, description: l.description, scheduled: l.scheduled_value,
               previous: figures.lines.find((x) => x.line.id === l.id)?.previous ?? 0, heading: l.is_heading }))}
             current={valueOf}
+            number={app.number}
             onKeep={async (rows) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
               setEdits({}); onChanged()

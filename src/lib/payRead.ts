@@ -11,6 +11,8 @@
  *
  * Dependency-free (`checks/payread.test.ts`).
  */
+import { settle, COLUMN_NAME, type TableRead, type TableRow, type Fig } from './payTable.ts'
+
 export interface Known { id: string; item_no: string | null; description: string; scheduled: number; previous: number }
 export interface ReadRow {
   id: string
@@ -19,6 +21,8 @@ export interface ReadRow {
   stored: number
   /** Why a figure should be looked at; absent when the row's own arithmetic bears it out. */
   unsure?: string
+  /** Said for the record, not to be looked at: a figure mended and borne out by the column's total. */
+  note?: string
   /** The line of the PDF it was read from. */
   from?: string
 }
@@ -122,4 +126,132 @@ export function readPayLines(lines: string[], known: Known[]): { rows: ReadRow[]
     return { id: k.id, found: true, this_period: s.e, stored: s.f, ...(s.unsure ? { unsure: s.unsure } : {}), from: p.text }
   })
   return { rows, found: rows.filter((r) => r.found).length, unsure: rows.filter((r) => r.unsure).length }
+}
+
+// ── from a table read off the page ──────────────────────────────────────────────────────────────
+
+
+export interface Extra { item: string | null; name: string; scheduled: number; this_period: number; stored: number }
+export interface MatchRead {
+  rows: ReadRow[]
+  found: number
+  unsure: number
+  /** Rows of figures on the PDF that are not on the schedule of values — a new change order, say. */
+  extra: Extra[]
+  /** Item numbers the run of numbers says should be on the PDF and that were not read. */
+  missing: string[]
+  totals: TableRead['totals']
+  /** Where a column's total and its lines disagree, and which row accounts for it. */
+  totalNotes: string[]
+  application?: string
+}
+
+const sameItem = (a: string | null, b: string | null) =>
+  !!a && !!b && a.toLowerCase().replace(/\s+/g, '').replace(/^0+(?=\d)/, '') === b.toLowerCase().replace(/\s+/g, '').replace(/^0+(?=\d)/, '')
+const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/**
+ * The schedule of values' lines found among the rows of a table read off the PDF — by item
+ * number first, as the sheet numbers them, and by name and scheduled value where a line has no
+ * number (change orders often have none). Each row's figures are settled again knowing what the
+ * app already holds for the line, and what could not be borne out is said.
+ */
+export function matchTable(table: TableRead, known: Known[]): MatchRead {
+  const lines = table.rows.filter((r) => r.kind === 'line')
+  const names = new Map<TableRow, string>(lines.map((r) => [r, r.name]))
+
+  // Names that run onto a second line: the sheet wraps one way or the other; the way under which
+  // the numbered rows' names come closer to the schedule of values is taken.
+  if (table.wraps.length) {
+    const tryWay = (way: 'up' | 'down') => {
+      const m = new Map(names)
+      for (const w of table.wraps) {
+        const k = way === 'up' ? w.below : w.above
+        if (k == null || /copyright|aia document|contract documents/i.test(w.text)) continue
+        const r = table.rows[k]
+        if (r.kind !== 'line') continue
+        m.set(r, way === 'up' ? `${w.text} ${m.get(r)}` : `${m.get(r)} ${w.text}`)
+      }
+      let score = 0
+      for (const k of known) { const r = lines.find((x) => sameItem(x.item, k.item_no)); if (r) score += alike(m.get(r) ?? '', k.description) }
+      return { m, score }
+    }
+    const up = tryWay('up'), down = tryWay('down')
+    for (const [r, n] of (up.score >= down.score ? up : down).m) names.set(r, n)
+  }
+
+  const taken = new Set<TableRow>()
+  const pick = new Map<string, TableRow>()
+  // By number.
+  for (const k of known) {
+    if (!k.item_no) continue
+    const r = lines.find((x) => !taken.has(x) && sameItem(x.item, k.item_no))
+    if (r) { taken.add(r); pick.set(k.id, r) }
+  }
+  // By name and value, for lines with no number or whose number was not found.
+  for (const k of known) {
+    if (pick.has(k.id)) continue
+    let best: TableRow | null = null, top = 0
+    for (const r of lines) {
+      if (taken.has(r)) continue
+      const name = alike(names.get(r) ?? '', k.description)
+      const hasC = near(r.value.C, k.scheduled) && k.scheduled !== 0
+      const score = name + (hasC ? 0.5 : 0) + (!r.item && !k.item_no ? 0.1 : 0)
+      if (score > top && (name >= 0.5 || (hasC && name >= 0.2) || (hasC && !r.item && !k.item_no))) { top = score; best = r }
+    }
+    if (best) { taken.add(best); pick.set(k.id, best) }
+  }
+
+  const doubtful = (col: Fig) => {
+    const t = table.totals.find((x) => x.col === col)
+    return !t || !t.agree
+  }
+  const rows: ReadRow[] = known.map((k) => {
+    const r = pick.get(k.id)
+    if (!r) return { id: k.id, found: false, this_period: 0, stored: 0 }
+    const dotless = new Set<Fig>()
+    const s = settle(r.read, { C: k.scheduled, D: k.previous }, dotless)
+    const red: string[] = [], grey: string[] = []
+    if (s.doubt) red.push(s.doubt)
+    for (const col of s.mended) {
+      const was = r.read[col]
+      const said = was == null ? 'was not read' : `was read as ${fmt(was)}`
+      const msg = `${COLUMN_NAME[col]} ${said}; the row’s other figures make it ${fmt(s.value[col])}`
+      if ((col === 'E' || col === 'F') && doubtful(col)) red.push(msg)
+      else grey.push(msg)
+    }
+    if (!near(s.value.C, k.scheduled)) red.push(`the scheduled value on the PDF is ${fmt(s.value.C)}; on record it is ${fmt(k.scheduled)}`)
+    if (!near(s.value.D, k.previous)) red.push(`“from previous” on the PDF is ${fmt(s.value.D)}; earlier applications add up to ${fmt(k.previous)}`)
+    if (k.item_no && r.item && sameItem(r.item, k.item_no) && alike(names.get(r) ?? '', k.description) < 0.2 && !near(s.value.C, k.scheduled))
+      red.unshift(`line ${r.item} on the PDF is “${names.get(r)}” — is the numbering the same as the schedule of values?`)
+    if (r.itemFixed) grey.push(`its item number was read wrong and was taken from the numbers either side`)
+    return {
+      id: k.id, found: true, this_period: s.value.E, stored: s.value.F,
+      ...(red.length ? { unsure: red.join('; ') } : {}),
+      ...(grey.length ? { note: grey.join('; ') } : {}),
+      from: `${r.item ?? ''} ${names.get(r) ?? ''} · ${['C', 'D', 'E', 'F', 'G', 'H'].map((c) => r.read[c as Fig] == null ? '—' : fmt(r.read[c as Fig]!)).join(' · ')}`.trim(),
+    }
+  })
+
+  const extra: Extra[] = lines
+    .filter((r) => !taken.has(r) && (r.value.C || r.value.D || r.value.E || r.value.F))
+    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, this_period: r.value.E, stored: r.value.F }))
+
+  // A column total that disagrees with its lines, where one row accounts for the difference.
+  const totalNotes: string[] = []
+  const bad = table.totals.filter((t) => !t.agree)
+  for (const t of bad) {
+    const diff = Math.round((t.printed - t.added) * 100) / 100
+    const twin = bad.find((u) => u !== t && near(u.printed - u.added, -diff))
+    const who = lines.filter((r) => near(Math.abs(r.value[twin ? twin.col : t.col]), Math.abs(diff)))
+    let say = `The PDF’s total for ${COLUMN_NAME[t.col]} is ${fmt(t.printed)}; its lines add up to ${fmt(t.added)}.`
+    if (twin && who.length === 1) say += ` Line ${who[0].item ?? `“${who[0].name}”`} accounts for it: the row puts ${fmt(Math.abs(diff))} under ${COLUMN_NAME[twin.col]}, the total counts it under ${COLUMN_NAME[t.col]}.`
+    if (!twin || t.col < twin.col) totalNotes.push(say)
+  }
+
+  return {
+    rows, found: rows.filter((r) => r.found).length, unsure: rows.filter((r) => r.unsure).length,
+    extra, missing: table.missing.filter((n) => !known.some((k) => sameItem(k.item_no, n) && pick.has(k.id))),
+    totals: table.totals, totalNotes, ...(table.application ? { application: table.application } : {}),
+  }
 }

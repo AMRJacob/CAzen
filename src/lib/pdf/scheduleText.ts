@@ -27,12 +27,12 @@ const base = () => new URL('./ocr/', document.baseURI).href
 
 interface OcrWord { text: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }
 interface OcrData { text: string; blocks?: { paragraphs: { lines: { words: OcrWord[] }[] }[] }[] | null }
-type Reader = {
+export type Reader = {
   recognize: (image: HTMLCanvasElement, options?: object, output?: object) => Promise<{ data: OcrData }>
   terminate: () => Promise<unknown>
 }
 
-async function reader(): Promise<Reader> {
+export async function reader(): Promise<Reader> {
   const { createWorker } = await import('tesseract.js')
   // The built app serves the reader's own files; a development server falls back to the
   // library's defaults.

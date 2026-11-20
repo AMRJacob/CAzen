@@ -43,6 +43,11 @@ function scanReader(): Plugin {
         this.emitFile({ type: 'asset', fileName: `ocr/core/${core}.wasm.js`, source: from(`tesseract.js-core/${core}.wasm.js`) })
       }
       this.emitFile({ type: 'asset', fileName: 'ocr/lang/eng.traineddata.gz', source: from('@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz') })
+      // pdf.js's decoders for scanners' image compression (CCITT and JBIG2, JPEG 2000) and colour
+      // profiles — see src/lib/pdf/pdfjs.ts. Small, and put on the device with the rest.
+      for (const f of ['jbig2.wasm', 'openjpeg.wasm', 'qcms_bg.wasm']) {
+        this.emitFile({ type: 'asset', fileName: `pdfjs/${f}`, source: from(`pdfjs-dist/wasm/${f}`) })
+      }
     },
   }
 }
