@@ -11,6 +11,51 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:02 CST
+
+**Two deploys failed, at GitHub's publish step** (Jacob, 14:54). The 14:31 and 14:36 pushes
+built and uploaded the site (the log gives the upload's size and id), and half a second later
+`actions/deploy-pages` was told there were no uploads for the run. The 14:29 deploy, on the
+same workflow file, had gone through. GitHub's status page showed no incident. Cause not
+known. A re-run from this session was refused; the pushes below each start a fresh deploy.
+
+**Pay applications** (14:56, 14:58).
+
+- **The last application can be deleted** — *Delete* at the right of an application's
+  heading, with a confirmation; what was entered on it for the period goes with it (the
+  database cascades), nothing else. Only the last one: each application's "from previous" is
+  what the earlier ones add up to, so an earlier one's button is greyed until the later ones
+  are gone. A certified application can be deleted too; the confirmation says it is certified.
+  **The test application on the CAW project was not touched from here** — it is his to delete.
+  `checks/t_pay_delete.py`.
+- **The summary is the comparison with the schedule** ("far too complicated and
+  overwhelming… just show the against-the-schedule stats, and keep it to items the app links
+  to schedule items — at least for now"). The Summary tab is now: four counts (activities
+  tied to pay lines, agree within five points, billed ahead, billed behind) and one table of
+  every tied activity — schedule says, billed, difference — furthest apart first. It used to
+  list only the ones five points apart. The contract figures, the by-trade table and the
+  retainage settings are folded under one line, *Contract figures, by trade, and retainage*,
+  closed by default: retainage can only be changed there, so it was kept rather than removed.
+  `checks/t_pay_summary.py`.
+
+**A manual section is every page, one under another** (14:59: "show up continuously in a
+vertical scroll — as individual sheets still… keeping the same look"). This replaces 14:23's
+one-page-at-a-time turning. `src/components/PdfStrip.tsx`, used by `PdfPreview` when `flow`.
+
+- Same bar, same background, same white sheets with their shadow; each page is the size it
+  was when shown alone (the whole page fitted to the window) with 12 px between pages.
+- The wheel, a trackpad or a finger scrolls. "Page N of M" follows what is on screen; ‹ › and
+  the arrow keys go to the next or previous page's top.
+- − / + / the percent button, Ctrl + wheel and a pinch change every page's size together and
+  keep the place being read. **The plain wheel no longer zooms here** (it scrolls); sideways
+  scrolling appears once pages are wider than the window.
+- Only pages on or near the screen are drawn, each at the sharpness of its shown size.
+- `checks/t_flow.py`: desk — four sheets 640 × 828 in an 852 px window, 12 px apart; wheel
+  scrolls into page 2; arrows step a page; zoom to 150% keeps page 2. Phone — the same strip,
+  378 px sheets. **A pinch on a real phone was not driven.** Other previews are unchanged.
+
+---
+
 # Checkpoint — 2026-11-20, 14:31 CST
 
 Four from Jacob on the pad and the corner menus (14:25–14:30).

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { PdfStrip } from './PdfStrip'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
@@ -16,8 +17,8 @@ import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 const EDGE = 10
 
 export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow }: {
-  /** Read straight through: the wheel moves down the page and on into the next one, and a page
-   *  dragged past its end turns. The arrows stay. For a section of the project manual. */
+  /** Read straight through: every page of the document one under another, scrolled. The
+   *  arrows stay and move a page at a time. For a section of the project manual. */
   flow?: boolean
   bytes: Uint8Array
   title: string
@@ -37,6 +38,8 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
   const [aspect, setAspect] = useState(8.5 / 11)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [stripZoom, setStripZoom] = useState(1)
+  const [goTo, setGoTo] = useState({ page: 1, ask: 0 })
   // How the page now arriving was come to: read on into from the one before, or back into.
   const arrive = useRef<'top' | 'bottom' | null>(null)
 
@@ -95,25 +98,30 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
       const on = e.target as HTMLElement | null
       if (on && on.closest('input, textarea, select')) return
       const pages = pdf?.numPages ?? 1
+      const to = (n: number) => { if (flow) setGoTo((g) => ({ page: n, ask: g.ask + 1 })); else setNumber(n) }
       if (e.key === 'ArrowRight') {
-        if (number < pages) setNumber(number + 1)
+        if (number < pages) to(number + 1)
         else step?.onNext?.()
-      } else if (number > 1) setNumber(number - 1)
+      } else if (number > 1) to(number - 1)
       else step?.onPrev?.()
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [pdf, number, onClose, step])
+  }, [pdf, number, onClose, step, flow])
 
   const pages = pdf?.numPages ?? 1
+  const seen = useCallback((n: number) => setNumber(n), [])
+  const toPage = (n: number) => { if (flow) setGoTo((g) => ({ page: n, ask: g.ask + 1 })); else setNumber(n) }
 
   // Reading through. The wheel moves the page instead of zooming it (Ctrl + wheel and a pinch
   // still zoom); at the foot it carries on into the next page, at the head back into the last.
   const body = useRef<HTMLDivElement>(null)
+  const turnByWheel = false
   const turn = useRef({ push: 0, at: 0, last: 0 })
   useEffect(() => {
     const el = body.current
-    if (!flow || !el) return
+    // Superseded by the strip of pages (PdfStrip); kept for a preview that turns a page at a time.
+    if (!turnByWheel || !el) return
     const go = (dir: 1 | -1) => {
       const t = turn.current
       const now = performance.now()
@@ -161,7 +169,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
     el.addEventListener('pointerup', up)
     el.addEventListener('touchend', up)
     return () => { el.removeEventListener('wheel', wheel, { capture: true }); el.removeEventListener('pointerup', up); el.removeEventListener('touchend', up) }
-  }, [flow, number, pages, view])
+  }, [turnByWheel, number, pages, view])
 
   return (
     <div className="sheet-viewer" role="dialog" aria-label={`Preview of ${title}`}>
@@ -178,16 +186,16 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
         <div className="sv-title"><span className="sv-name">{title}</span></div>
         {pages > 1 && (
           <div className="sv-bar-group">
-            <button className="icon" disabled={number <= 1} onClick={() => setNumber(number - 1)} aria-label="Previous page">‹</button>
+            <button className="icon" disabled={number <= 1} onClick={() => toPage(number - 1)} aria-label="Previous page">‹</button>
             <span className="muted small nowrap">Page {number} of {pages}</span>
-            <button className="icon" disabled={number >= pages} onClick={() => setNumber(number + 1)} aria-label="Next page">›</button>
+            <button className="icon" disabled={number >= pages} onClick={() => toPage(number + 1)} aria-label="Next page">›</button>
           </div>
         )}
         <div className="sv-bar-group sv-inline-tools">
           <span className="sv-sep" />
-          <button className="icon" onClick={() => zoomAbout(1 / 1.5)} aria-label="Zoom out">−</button>
-          <button onClick={fit} title="Fit the page to the screen">{Math.round(zoom * 100)}%</button>
-          <button className="icon" onClick={() => zoomAbout(1.5)} aria-label="Zoom in">+</button>
+          <button className="icon" onClick={() => (flow ? setStripZoom((z) => Math.max(0.4, z / 1.5)) : zoomAbout(1 / 1.5))} aria-label="Zoom out">−</button>
+          <button onClick={() => (flow ? setStripZoom(1) : fit())} title="Fit the page to the screen">{Math.round((flow ? stripZoom : zoom) * 100)}%</button>
+          <button className="icon" onClick={() => (flow ? setStripZoom((z) => Math.min(6, z * 1.5)) : zoomAbout(1.5))} aria-label="Zoom in">+</button>
         </div>
         <div className="sv-bar-group">
           {onDownload && <button onClick={onDownload}>Download</button>}
@@ -196,7 +204,8 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
       </div>
       {extra && <div className="pv-strip">{extra}</div>}
       <div className="sv-body" ref={body}>
-        <div className="sv-scroll" ref={scroller}>
+        {flow && pdf && <PdfStrip pdf={pdf} zoom={stripZoom} onZoom={setStripZoom} onPage={seen} goTo={goTo} />}
+        <div className="sv-scroll" ref={scroller} style={flow ? { display: 'none' } : undefined}>
           {busy && <p className="muted sv-msg">Drawing the page…</p>}
           {error && <div className="notice error sv-msg">{error}</div>}
           <div ref={pageEl} className="sv-page" style={{ width, height, visibility: busy && !page ? 'hidden' : 'visible' }}>
