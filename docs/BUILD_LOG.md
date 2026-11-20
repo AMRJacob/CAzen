@@ -11,6 +11,12 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 16:48 CST
+
+Jacob, 16:47: on the phone the resolution "is great now" and the tag type is working — the 16:37 change, seen on his device.
+
+**A trade's own line is its plain tag** (same message: no more "Just Masonry"; select the category label at the top instead). On the tagging screen's *Tag type* list, touching a trade opens it to its tags; touching that open trade's line again chooses the trade with no particular issue and closes the list. The *Just <trade>* line is gone. The list opens on the trade already in force, so its plain tag is one touch. The observation form's own tag chooser works the same way: a trade chip opens its issues, and touched again it is the choice. `checks/t_generic.py` (phone size); `t_spotmenu`, `t_multitag` rerun. Test browser only.
+
 # Checkpoint — 2026-11-20, 16:37 CST
 
 **The tagging screen close in: a tag that reads as its mark, and a sheet that stays sharp.**

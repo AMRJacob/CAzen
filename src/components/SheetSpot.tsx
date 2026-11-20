@@ -301,7 +301,10 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
                   const on = choosing === g.trade
                   return (
                     <div key={g.trade} className={`spot-trade${on ? ' on' : ''}`}>
-                      <button className="spot-trade-head" aria-expanded={on} onClick={() => setChoosing(g.trade)}>
+                      {/* A trade's own line opens it; touched again once open, it is the choice — the trade's
+                          plain tag, with no particular issue. */}
+                      <button className="spot-trade-head" aria-expanded={on} title={on ? `Tag as ${g.trade}` : undefined}
+                        onClick={() => { if (on) { onTag?.(g.trade, null); setChoosing(null); setMenu(false) } else setChoosing(g.trade) }}>
                         <TagMark mark={g.mark} size={22} />
                         <span className="spot-trade-name">{g.trade}</span>
                         {divisionOf(g.trade) && <span className="spot-trade-div">{divisionOf(g.trade)}</span>}
@@ -311,7 +314,6 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
                           {g.tags.map((t) => (
                             <button key={t.label} onClick={() => { onTag?.(g.trade, t); setChoosing(null); setMenu(false) }}><TagMark mark={markOfTag(g, t)} size={18} />{t.label}</button>
                           ))}
-                          <button className="just" onClick={() => { onTag?.(g.trade, null); setChoosing(null); setMenu(false) }}>Just {g.trade}</button>
                         </div>
                       )}
                     </div>

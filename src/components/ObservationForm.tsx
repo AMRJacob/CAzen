@@ -180,7 +180,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
         <div className="obs-tags">
           <div className="obs-tag-trades">
             {groups.map((g) => (
-              <button key={g.trade} type="button" className={`chip${(tagTrade ?? trade) === g.trade ? ' on' : ''}`} onClick={() => setTagTrade(g.trade)}>
+              <button key={g.trade} type="button" className={`chip${(tagTrade ?? trade) === g.trade ? ' on' : ''}`} onClick={() => { if ((tagTrade ?? trade) === g.trade) { setTrade(g.trade); setTagging(false) } else setTagTrade(g.trade) }}>
                 <TagMark mark={g.mark} size={18} />{g.trade}
               </button>
             ))}
@@ -198,7 +198,6 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
                     titleBox.current?.focus()
                   }}><TagMark mark={markOfTag(g, t)} size={16} />{t.label}</button>
               ))}
-              <button type="button" className="chip" onClick={() => { setTrade(g.trade); setTagging(false) }}>Just {g.trade}</button>
             </div>
           ))}
         </div>
