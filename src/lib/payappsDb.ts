@@ -100,6 +100,8 @@ export async function addSovLine(contractId: string, line: {
   is_heading?: boolean
   is_change_order?: boolean
   approved_on?: string | null
+  /** The register's change order this line is, when it was added from the register. */
+  change_order_id?: string | null
 }): Promise<void> {
   const { error } = await db().from('sov_lines').insert({ contract_id: contractId, ...line })
   if (error) throw error

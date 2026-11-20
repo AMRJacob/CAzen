@@ -8,6 +8,7 @@ import { today, usDate } from '../lib/dates'
 import { figure, standings, type Billed, type Figures, type RetainageStep, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
+import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
   addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setContract,
@@ -605,7 +606,7 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
             </tbody>
           </table>
         </div>
-        {editable && <AddLine contractId={data.contract.id} nextSort={nextSort} onAdded={onChanged} onTrouble={onTrouble} />}
+        {editable && <AddLine contractId={data.contract.id} projectId={(data.contract as unknown as { project_id: string }).project_id} lines={data.lines} nextSort={nextSort} onAdded={onChanged} onTrouble={onTrouble} />}
       </div>
     </>
   )
@@ -654,8 +655,10 @@ function ApprovedOn({ line, onChanged, onTrouble }: {
  * summary on the G702 turns on whether the owner approved it this period or an earlier one. A
  * title line costs nothing and is how a change order's own breakdown gets a heading over it.
  */
-function AddLine({ contractId, nextSort, onAdded, onTrouble }: {
+function AddLine({ contractId, projectId, lines, nextSort, onAdded, onTrouble }: {
   contractId: string
+  projectId: string
+  lines: SovLine[]
   nextSort: number
   onAdded: () => void
   onTrouble: (m: string) => void
@@ -667,6 +670,22 @@ function AddLine({ contractId, nextSort, onAdded, onTrouble }: {
   const [value, setValue] = useState('')
   const [approvedOn, setApprovedOn] = useState(today())
   const [busy, setBusy] = useState(false)
+  // The change register's change orders that are not on this schedule yet. A change order
+  // issued in the register and its line here are the same thing, so one is offered as the other.
+  const [register, setRegister] = useState<RegisterRow[]>([])
+  const [from, setFrom] = useState<RegisterRow | null>(null)
+  useEffect(() => {
+    let live = true
+    listRegister(projectId, ['change_order', 'pr']).then((r) => { if (live) setRegister(r.filter((x) => x.kind === 'change_order')) }).catch(() => {})
+    return () => { live = false }
+  }, [projectId, lines.length])
+  const waiting = register.filter((r) => !lines.some((l) => l.change_order_id === r.id))
+  const take = (r: RegisterRow) => {
+    const cost = changeCost(r)
+    setKind('change_order'); setFrom(r); setOpen(true)
+    setItemNo(r.number ?? ''); setDescription([r.number, r.title].filter(Boolean).join(' — '))
+    setValue(cost == null ? '' : String(cost)); setApprovedOn((r.issued_at ?? today()).slice(0, 10))
+  }
 
   async function add() {
     if (!description.trim() || busy) return
@@ -680,22 +699,37 @@ function AddLine({ contractId, nextSort, onAdded, onTrouble }: {
         is_heading: kind === 'heading',
         is_change_order: kind === 'change_order',
         approved_on: kind === 'change_order' ? approvedOn : null,
+        ...(kind === 'change_order' && from ? { change_order_id: from.id } : {}),
       })
-      setItemNo(''); setDescription(''); setValue('')
+      setItemNo(''); setDescription(''); setValue(''); setFrom(null)
       setOpen(false)
       onAdded()
     } catch (e) { onTrouble(message(e)) } finally { setBusy(false) }
   }
 
+  const offer = waiting.length > 0 && (
+    <div className="pay-from-register">
+      <span className="muted small">{waiting.length === 1 ? 'A change order in the register is' : `${waiting.length} change orders in the register are`} not on this schedule:</span>
+      {waiting.map((r) => {
+        const cost = changeCost(r)
+        return (
+          <button key={r.id} className={`pay-from-chip${from?.id === r.id ? ' on' : ''}`} onClick={() => take(r)}>
+            <strong>{r.number ?? 'Change order'}</strong>{r.title ? ` — ${r.title}` : ''} · {cost == null ? 'no figure yet' : money(cost)}
+          </button>
+        )
+      })}
+    </div>
+  )
   if (!open) {
-    return <button className="link pay-add-line" onClick={() => setOpen(true)}>Add a line</button>
+    return <>{offer}<button className="link pay-add-line" onClick={() => setOpen(true)}>Add a line</button></>
   }
 
   return (
     <div className="pay-add">
+      {offer}
       <div className="tabs">
         {([['line', 'Line'], ['heading', 'Title line'], ['change_order', 'Change order']] as const).map(([k, label]) => (
-          <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{label}</button>
+          <button key={k} className={kind === k ? 'on' : ''} onClick={() => { setKind(k); if (k !== 'change_order') setFrom(null) }}>{label}</button>
         ))}
       </div>
       <div className="pay-add-fields">
@@ -727,6 +761,11 @@ function AddLine({ contractId, nextSort, onAdded, onTrouble }: {
         </button>
         <button className="link" onClick={() => setOpen(false)}>Cancel</button>
       </div>
+      {kind === 'change_order' && from && (
+        <p className="muted small">
+          Taken from {from.number ?? 'the change order'} in the register{changeCost(from) == null ? ', which has no figure yet — enter one here' : (from.values?.['chg.cost'] ?? '') === '' ? ': the sum of the proposal requests it covers' : ''}. The line is tied to it.
+        </p>
+      )}
       {kind === 'change_order' && (
         <p className="muted small">
           A deduction is entered as a negative scheduled value. The approval date decides whether it

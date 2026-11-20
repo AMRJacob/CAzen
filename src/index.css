@@ -2931,3 +2931,8 @@ a.ov-card:hover { border-color: var(--moss); }
   .ov-grid { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
   .ov-wide { grid-column: auto / span 2; }
 }
+
+/* ---------- Pay applications: change orders waiting in the register ---------- */
+.pay-from-register { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 6px; }
+.pay-from-chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.pay-from-chip.on { border-color: var(--moss); background: var(--moss-soft); }
