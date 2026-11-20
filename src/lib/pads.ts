@@ -29,6 +29,8 @@ export interface NotePad {
   rule: PadRule
   /** How strongly the ruling is drawn, nought to a hundred. */
   rule_ink: number
+  /** Every mark drawn with a thin white edge, to read over a photograph. */
+  contrast?: boolean
   issued_id: string | null
   created_by: string | null
   created_at: string
@@ -53,17 +55,21 @@ export interface PadMark {
     /** A picture laid on the paper to draw over — a photograph, or a piece cut from a drawing: the
      *  path of its file. It is kept as a `text` mark with no words (the database knows three
      *  kinds of mark and this needed no fourth); `isPicture` tells the two apart. */
-    image?: string }
+    image?: string
+    /** An ink mark drawn as a straight arrow from its first point to its last. */
+    arrow?: boolean
+    /** A text box's leaders: the points they run to, in page units. */
+    leaders?: [number, number][] }
   body: string | null
   created_by: string | null
   created_at: string
 }
 
-const PAD_COLUMNS = 'id, project_id, kind, title, noted_on, pages, rule, rule_ink, issued_id, created_by, created_at, updated_at'
+const PAD_COLUMNS = 'id, project_id, kind, title, noted_on, pages, rule, rule_ink, contrast, issued_id, created_by, created_at, updated_at'
 const MARK_COLUMNS = 'id, pad_id, project_id, page, kind, geometry, style, body, created_by, created_at'
 
 /** The colours a pen writes in. Ink first, because most notes are written in it. */
-export const PAD_COLOURS = ['#2b2d2c', '#1f4e79', '#c0392b', '#1f6f3f'] as const
+export const PAD_COLOURS = ['#2b2d2c', '#1f4e79', '#4aa3df', '#c0392b', '#e67e22', '#1f6f3f'] as const
 /** What a highlighter lays down. Pale, because it goes over words rather than instead of them. */
 export const HIGHLIGHTS = ['#f4e07a', '#b8e4c9', '#f6c6b8', '#c9d9f2'] as const
 
@@ -124,7 +130,7 @@ export async function newPad(projectId: string, kind: PadKind, fields: {
   return pad
 }
 
-export async function setPad(id: string, patch: Partial<Pick<NotePad, 'title' | 'noted_on' | 'pages' | 'rule' | 'rule_ink' | 'issued_id'>>): Promise<void> {
+export async function setPad(id: string, patch: Partial<Pick<NotePad, 'title' | 'noted_on' | 'pages' | 'rule' | 'rule_ink' | 'contrast' | 'issued_id'>>): Promise<void> {
   const updated_at = new Date().toISOString()
   const had = await localGet<NotePad>('pads', id).catch(() => undefined)
   if (had) await localPut('pads', { ...had, ...patch, updated_at })

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { graphiteOf, handOf, outlineOf, reachAhead, seedOf, traceTo, type Nib } from '../lib/nib'
 import type { InkPoint } from '../lib/ink'
 import type { PadMark, PadRule } from '../lib/pads'
+import { headOf, leaderFrom, leaderWidth, shaftOf, type Pt } from '../lib/arrows'
+
+/** A text box's type size when none is set — the same as the pad's own TEXT_SIZE. */
+const TEXT_SIZE = 0.03
 
 /**
  * Where the ink actually goes.
@@ -24,7 +28,7 @@ import type { PadMark, PadRule } from '../lib/pads'
 
 export interface View { scale: number; x: number; y: number }
 interface Box { x: number; y: number; w: number; h: number }
-export interface InkStyle { colour: string; width: number; nib: Nib }
+export interface InkStyle { colour: string; width: number; nib: Nib; arrow?: boolean }
 /** What the pad gets back: a way to show the stroke in progress. */
 export interface PadInk {
   /** `seed` is the id the stroke will be saved under, so the wet ink and the dry ink are the
@@ -35,12 +39,14 @@ export interface PadInk {
 const nibOf = (m: PadMark): Nib =>
   m.kind === 'highlight' ? 'highlight' : m.style?.nib === 'pencil' ? 'pencil' : 'pen'
 
-export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
+export function PadSurface({ marks, view, rule, ruleInk, onReady, contrast = false }: {
   marks: PadMark[]
   view: View
   rule: PadRule
   ruleInk: number
   onReady?: (ink: PadInk) => void
+  /** Every mark drawn with a thin white edge, to read over a photograph. */
+  contrast?: boolean
 }) {
   const paper = useRef<HTMLCanvasElement | null>(null)
   const live = useRef<HTMLCanvasElement | null>(null)
@@ -114,6 +120,36 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     return made
   }, [])
 
+  /** A straight arrow or a leader: a line through the points and a head at the last. */
+  const arrow = useCallback((ctx: CanvasRenderingContext2D, pts: Pt[], style: InkStyle, v: View): Box | null => {
+    const { dpr } = size.current
+    const k = v.scale * dpr
+    const width = Math.max(1.4 * dpr, style.width * k)
+    const at = pts.map(([x, y]) => [x * k + v.x * dpr, y * k + v.y * dpr] as Pt)
+    const shaft = shaftOf(at, width), head = headOf(at, width)
+    const trace = () => {
+      ctx.beginPath()
+      shaft.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+    }
+    const tip = () => { ctx.beginPath(); head.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath() }
+    ctx.save()
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    if (contrast) {
+      ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.95
+      ctx.lineWidth = width + 3.2 * dpr; trace(); ctx.stroke()
+      ctx.lineWidth = 3.2 * dpr; tip(); ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+    ctx.strokeStyle = style.colour; ctx.fillStyle = style.colour; ctx.lineWidth = width
+    trace(); ctx.stroke()
+    tip(); ctx.fill()
+    ctx.restore()
+    const xs = [...at, ...head].map((p) => p[0]), ys = [...at, ...head].map((p) => p[1])
+    const pad = width * 2 + 4 * dpr
+    const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad
+    return { x: x0, y: y0, w: Math.max(...xs) + pad - x0, h: Math.max(...ys) + pad - y0 }
+  }, [contrast])
+
   /** One stroke, onto whichever canvas is asked for, at the view it is asked for. */
   const stroke = useCallback((
     ctx: CanvasRenderingContext2D,
@@ -124,6 +160,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     seed: number,
   ): Box | null => {
     if (points.length < 2) return null
+    if (style.arrow) return arrow(ctx, points.map((p) => [p[0], p[1]] as Pt), style, v)
     const drawn = pathFor(id, points, style, v, seed)
     if (!drawn) return null
     const { dpr } = size.current
@@ -131,24 +168,42 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     ctx.save()
     ctx.translate(v.x * dpr, v.y * dpr)
     ctx.globalAlpha = hand.alpha
+    if (contrast && style.nib !== 'highlight') {
+      ctx.save()
+      ctx.globalAlpha = 0.95
+      ctx.strokeStyle = '#fff'
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = 3.2 * dpr
+      ctx.stroke(drawn.path)
+      ctx.restore()
+    }
     const grain = style.nib === 'pencil' ? graphiteOf(ctx, style.colour) : null
     ctx.fillStyle = grain ?? style.colour
     ctx.fill(drawn.path)
     ctx.restore()
     const b = drawn.box
     return { x: b.x + v.x * dpr, y: b.y + v.y * dpr, w: b.w, h: b.h }
-  }, [pathFor])
+  }, [pathFor, arrow, contrast])
 
   /** One saved mark. */
   const drawMark = useCallback((ctx: CanvasRenderingContext2D, m: PadMark, v: View) => {
-    const g = m.geometry as { points?: InkPoint[] }
-    if (!g.points) return
+    const g = m.geometry as { points?: InkPoint[]; x?: number; y?: number; w?: number }
+    // A text box's leaders are drawn here, under the box; the words themselves are not.
+    if (!g.points) {
+      if (m.kind !== 'text' || !m.style?.leaders?.length || g.x == null) return
+      const size = m.style.size ?? TEXT_SIZE
+      for (const to of m.style.leaders) {
+        arrow(ctx, leaderFrom({ x: g.x, y: g.y!, w: g.w! }, size, to), { colour: m.style.colour ?? '#2b2d2c', width: leaderWidth(size), nib: 'pen' }, v)
+      }
+      return
+    }
     stroke(ctx, m.id, g.points, {
       colour: m.style?.colour ?? '#2b2d2c',
       width: m.style?.width ?? 0.005,
       nib: nibOf(m),
+      arrow: !!m.style?.arrow,
     }, v, seedOf(m.id))
-  }, [stroke])
+  }, [stroke, arrow])
 
   /** The ruling, drawn under the ink on a full redraw. */
   const ground = useCallback((ctx: CanvasRenderingContext2D, v: View) => {
@@ -202,7 +257,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     const resized = fitCanvas(c)
     if (fitCanvas(live.current)) wetBox.current = null
     const ids = marks.map((m) => m.id)
-    const sig = `${rule}|${ruleInk}`
+    const sig = `${rule}|${ruleInk}|${contrast}`
     const was = laid.current
     const appended = !!was && !resized && was.sig === sig
       && was.view.scale === view.scale && was.view.x === view.x && was.view.y === view.y
@@ -221,7 +276,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
       }
     }
     laid.current = { ids, view, sig, marks }
-  }, [marks, view, rule, ruleInk, ground, drawMark, fitCanvas])
+  }, [marks, view, rule, ruleInk, contrast, ground, drawMark, fitCanvas])
 
   /** The stroke under the nib. Held here so a redraw can put it back where it was. */
   const wetNow = useRef<{ points: InkPoint[]; style: InkStyle; seed: number } | null>(null)
@@ -241,7 +296,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
     const now = wetNow.current
     if (!now || now.points.length < 2) { wetBox.current = null; return }
     // Drawn a little ahead of the pen, and only here: the guess never reaches the paper.
-    const guess = reachAhead(now.points)
+    const guess = now.style.arrow ? null : reachAhead(now.points)
     const points = guess ? [...now.points, guess] : now.points
     wetBox.current = stroke(ctx, null, points, now.style, viewRef.current, now.seed)
   }, [stroke])
@@ -267,7 +322,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
         ctx.clearRect(0, 0, c.width, c.height)
         ground(ctx, viewRef.current)
         for (const m of marks) drawMark(ctx, m, viewRef.current)
-        laid.current = { ids: marks.map((m) => m.id), view: viewRef.current, sig: `${rule}|${ruleInk}`, marks }
+        laid.current = { ids: marks.map((m) => m.id), view: viewRef.current, sig: `${rule}|${ruleInk}|${contrast}`, marks }
       }
       drawWet()
     }
@@ -281,7 +336,7 @@ export function PadSurface({ marks, view, rule, ruleInk, onReady }: {
       window.removeEventListener('resize', again)
       watch?.disconnect()
     }
-  }, [marks, rule, ruleInk, ground, drawMark, drawWet, fitCanvas])
+  }, [marks, rule, ruleInk, contrast, ground, drawMark, drawWet, fitCanvas])
 
   return (
     <>

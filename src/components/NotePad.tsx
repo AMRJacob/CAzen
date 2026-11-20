@@ -13,6 +13,7 @@ import { keepPhoto, photoUrl } from '../lib/photos'
 import type { ProjectStore } from '../lib/files'
 import { SheetClip } from './SheetClip'
 import { handOf, outlineOf, pathOf, seedOf, type Nib } from '../lib/nib'
+import { headOf, leaderFrom, leaderWidth, shaftOf, type Pt } from '../lib/arrows'
 import { Mark } from './Logo'
 
 /**
@@ -31,7 +32,7 @@ import { Mark } from './Logo'
  * written is where it was, and the canvas simply carries on past where the page used to stop.
  */
 
-type Tool = 'pen' | 'pencil' | 'highlight' | 'text' | 'erase' | 'select'
+type Tool = 'pen' | 'pencil' | 'highlight' | 'arrow' | 'text' | 'erase' | 'select'
 
 /**
  * Pen weights, as fractions of a page's width — so 0.005 is about a millimetre, the weight of
@@ -118,6 +119,10 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
   const [picked, setPicked] = useState<string[]>([])
   /** The select tool's drag: moving what is picked, or stretching a box round more. */
   const grab = useRef<{ id: number; x: number; y: number; moved: boolean; moving: boolean } | null>(null)
+  /** A text box whose next leader is being placed: the next touch on the paper is where it points. */
+  const [leading, setLeading] = useState<string | null>(null)
+  /** A leader's point being dragged: which box, which leader. */
+  const pulling = useRef<{ id: string; i: number; pointer: number } | null>(null)
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const sizing = useRef<{ id: string; x: number; y: number; gx: number; gy: number; w: number; h: number | undefined; size: number; tall: number; grip: Grip } | null>(null)
   const [mine, setMine] = useState<string[]>([])
@@ -146,6 +151,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
     colour: tool === 'highlight' ? highlight : colour,
     width: (tool === 'highlight' ? 0.03 : WIDTHS[width]) * atZoom(),
     nib: tool === 'highlight' ? 'highlight' : tool === 'pencil' ? 'pencil' : 'pen',
+    ...(tool === 'arrow' ? { arrow: true } : {}),
   })
   /** Show the stroke in progress. Straight onto the canvas: no render, no reconciliation. */
   const showWet = () => ink.current?.wet(wetRef.current, nibNow(), seedOf(nowId.current))
@@ -371,6 +377,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
 
   function down(e: React.PointerEvent) {
     measure()
+    // Placing a leader: wherever the next touch lands is what it points to.
+    if (leading && e.button === 0) {
+      const p = at(e)
+      setLeaders(leading, [...leadersOf(leading), [p.x, p.y]])
+      setLeading(null)
+      e.preventDefault()
+      return
+    }
     const read = readTouch(e)
     setTouch({ read, across: Math.round(Math.max(e.width || 0, e.height || 0)) })
     // Back on the canvas means done with the menu.
@@ -498,6 +512,12 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
     if (drawing.current !== e.pointerId) return
     if (tool === 'erase') { rub(e); return }
     const more = samplesFrom(e.nativeEvent as PointerEvent, at)
+    // An arrow is straight: where it began, and where the pen is now.
+    if (tool === 'arrow') {
+      if (wetRef.current?.length && more.length) wetRef.current = [wetRef.current[0], more[more.length - 1]]
+      showWet()
+      return
+    }
     // Added to the stroke in place. Copying it afresh for every sample meant a stroke cost
     // the square of its own length by the time it was finished.
     if (wetRef.current) for (const p of more) wetRef.current.push(p)
@@ -642,6 +662,12 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
     let points = wetRef.current
     wetRef.current = null
     if (!points || !points.length) { showWet(); return }
+    // An arrow too short to have a direction was a tap, not an arrow.
+    if (tool === 'arrow') {
+      const a = points[0], b = points[points.length - 1]
+      if (points.length < 2 || Math.hypot(b[0] - a[0], b[1] - a[1]) * viewRef.current.scale < 6) { showWet(); return }
+      points = [[a[0], a[1]], [b[0], b[1]]]
+    }
     // A tap is a dot — an i, a bullet, a full stop. One point draws nothing, so it is given a
     // second a hair away and the round cap makes it a dot.
     if (points.length === 1) {
@@ -653,6 +679,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
       colour: kind === 'highlight' ? highlight : colour,
       width: (kind === 'highlight' ? 0.03 : WIDTHS[width]) * atZoom(),
       ...(tool === 'pencil' ? { nib: 'pencil' as const } : {}),
+      ...(tool === 'arrow' ? { arrow: true } : {}),
     }
 
     /**
@@ -722,6 +749,20 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
     setMarks((all) => all.map((m) => (next.has(m.id) ? { ...m, style: next.get(m.id)! } : m)))
     for (const [id, style] of next) setMarkStyle(id, style).catch((err) => { complain(message(err)); load() })
   }
+
+  /** A text box's leaders changed: drawn at once, saved behind. */
+  function setLeaders(id: string, leaders: [number, number][], save = true) {
+    let style: PadMark['style'] | null = null
+    setMarks((all) => all.map((m) => {
+      if (m.id !== id) return m
+      style = { ...m.style }
+      if (leaders.length) style.leaders = leaders
+      else delete style.leaders
+      return { ...m, style }
+    }))
+    if (save) queueMicrotask(() => { if (style) setMarkStyle(id, style).catch((err) => { complain(message(err)); load() }) })
+  }
+  const leadersOf = (id: string): [number, number][] => marks.find((m) => m.id === id)?.style.leaders ?? []
 
   async function removePicked() {
     const ids = picked
@@ -1031,6 +1072,9 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
   const onePicture = picked.length === 1 ? here.find((m) => m.id === picked[0] && isPicture(m)) ?? null : null
   const texts = here.filter((m) => m.kind === 'text' && !isPicture(m))
   const pictures = here.filter(isPicture)
+  /** Text boxes with leaders: their leaders are drawn with the ink. */
+  const leadered = texts.filter((m) => m.style.leaders?.length)
+  const onlyText = picked.length === 1 ? texts.find((m) => m.id === picked[0]) ?? null : null
 
   const nib = tool === 'highlight' ? highlight : colour
   const chosen = here.filter((m) => picked.includes(m.id))
@@ -1040,7 +1084,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
     const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
     return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
   }) : null
-  const inky = tool === 'pen' || tool === 'pencil'
+  const inky = tool === 'pen' || tool === 'pencil' || tool === 'arrow'
   // Nothing on the pad is selectable but the text box being typed in. A pencil held still asks
   // the phone to select whatever words are nearest, and the phone then raises its own Copy /
   // Look Up menu over the page; any selection that starts anywhere else is refused, and one
@@ -1119,13 +1163,13 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
           })}
         </div>
         <PadSurface
-          marks={strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40}
+          marks={leadered.length ? [...strokes, ...leadered] : strokes} view={view} rule={pad.rule} ruleInk={pad.rule_ink ?? 40} contrast={!!pad.contrast}
           onReady={took} />
 
         {/* With a pen in hand the typed text is part of the paper: it takes no touch. A palm
             resting on a text box otherwise put the cursor in it, and iOS raised its Copy / Look Up
             menu over the page. The text tool, or Select, is how text is reached. */}
-        <div className={`pad-texts${tool === 'select' ? ' selecting' : ''}${tool !== 'text' && tool !== 'select' && editing === null ? ' resting' : ''}`} style={{
+        <div className={`pad-texts${pad.contrast ? ' contrast' : ''}${tool === 'select' ? ' selecting' : ''}${tool !== 'text' && tool !== 'select' && editing === null ? ' resting' : ''}`} style={{
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale / TEXT_UNIT})`,
           // One pixel of the glass, in this layer's units: frames and handles are sized by it,
           // so they are the same on screen at every zoom.
@@ -1238,6 +1282,24 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
               </div>
             )
           })()}
+          {onlyText && (onlyText.style.leaders ?? []).map(([lx, ly], i) => (
+            <span key={`${onlyText.id}:${i}`} className="pad-leaderdot" title="Drag to move where this leader points; double-click to remove it"
+              style={{ left: lx * TEXT_UNIT, top: ly * TEXT_UNIT }}
+              onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); pulling.current = { id: onlyText.id, i, pointer: e.pointerId } }}
+              onPointerMove={(e) => {
+                const g = pulling.current
+                if (!g || g.pointer !== e.pointerId) return
+                const p = at(e)
+                setLeaders(g.id, leadersOf(g.id).map((q, k) => (k === g.i ? [p.x, p.y] as [number, number] : q)), false)
+              }}
+              onPointerUp={(e) => {
+                const g = pulling.current
+                if (!g || g.pointer !== e.pointerId) return
+                pulling.current = null
+                setLeaders(g.id, leadersOf(g.id))
+              }}
+              onDoubleClick={(e) => { e.stopPropagation(); setLeaders(onlyText.id, leadersOf(onlyText.id).filter((_, k) => k !== i)) }} />
+          ))}
           {pickedBox && (
             <div className="pad-picked" style={{ left: pickedBox.x * TEXT_UNIT, top: pickedBox.y * TEXT_UNIT, width: pickedBox.w * TEXT_UNIT, height: pickedBox.h * TEXT_UNIT }} />
           )}
@@ -1280,12 +1342,27 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
               ))}
             </>
           )}
+          {onlyText && (
+            <>
+              <span className="padbar-split" />
+              <button className="padbar-key" aria-label="Add a leader" title="Add a leader — then touch where it points" onClick={() => setLeading(onlyText.id)}>{icon.leader}</button>
+              {!!onlyText.style.leaders?.length && (
+                <button className="padpop-word" onClick={() => setLeaders(onlyText.id, [])}>No leaders</button>
+              )}
+            </>
+          )}
           <span className="padbar-split" />
           <button className="padbar-key" aria-label="Delete what is selected" title="Delete" onClick={() => void removePicked()}>{icon.erase}</button>
           <button className="padbar-key" aria-label="Done" title="Done" onClick={() => setPicked([])}>{icon.close}</button>
         </div>
       )}
 
+      {leading && (
+        <div className="pad-leading" role="status" onPointerDown={(e) => e.stopPropagation()}>
+          <span>Touch where the leader points</span>
+          <button className="link" onClick={() => setLeading(null)}>Cancel</button>
+        </div>
+      )}
       {trouble && (
         <div className="pad-trouble" role="alert">
           <span>{trouble}</span>
@@ -1329,9 +1406,11 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
               {key('Bullets', false, () => retype(toggleBullets), lines('M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01'))}
               {key('Level out', false, () => retype(outdent), lines('M11 6h9M11 12h9M11 18h9M7 9l-3 3 3 3'))}
               {key('Level in', false, () => retype(indent), lines('M11 6h9M11 12h9M11 18h9M4 9l3 3-3 3'))}
+              <span className="padbar-split" />
+              {key('Leader', false, () => { const id = typingId; (document.activeElement as HTMLElement | null)?.blur(); if (id) { setLeading(id); setPicked([id]) } }, icon.leader)}
             </>
           })()}
-          {typingId === null && (['pen', 'pencil', 'highlight', 'text', 'erase', 'select'] as Tool[]).map((t) => (
+          {typingId === null && (['pen', 'pencil', 'highlight', 'arrow', 'text', 'erase', 'select'] as Tool[]).map((t) => (
             <button key={t} className={`padbar-key${tool === t ? ' on' : ''}`}
               aria-pressed={tool === t} aria-label={LABEL[t]} title={LABEL[t]}
               onClick={() => { setTool(t); setMenu(null); goingAway() }}>
@@ -1412,6 +1491,14 @@ export function NotePad({ pad, onChanged, onClose, onTrouble, drawOver, backdrop
             <input ref={photoIn} type="file" accept="image/*" hidden onChange={(e) => void photoChosen(e.target.files?.[0])} />
           </div>
           <label className="check small">
+            <input type="checkbox" checked={!!pad.contrast} onChange={(e) => {
+              const contrast = e.target.checked
+              onChanged({ ...pad, contrast })
+              setPad(pad.id, { contrast }).catch((err) => complain(message(err)))
+            }} />
+            Contrast — a white edge on everything drawn, to read over a photograph
+          </label>
+          <label className="check small">
             <input type="checkbox" checked={fingerDraws} onChange={(e) => setFingerDraws(e.target.checked)} />
             Draw with a finger
           </label>
@@ -1446,7 +1533,7 @@ function PadPicture({ project, path, style }: { project: ProjectStore | null; pa
 }
 
 const LABEL: Record<Tool, string> = {
-  pen: 'Pen', pencil: 'Pencil', highlight: 'Highlighter', text: 'Type', erase: 'Erase', select: 'Select',
+  pen: 'Pen', pencil: 'Pencil', highlight: 'Highlighter', arrow: 'Arrow', text: 'Type', erase: 'Erase', select: 'Select',
 }
 
 
@@ -1467,6 +1554,8 @@ const icon = {
   pencil: stroked(<><path d="M3 21l1.2-4.6L15 5.6l3.4 3.4L7.6 19.8 3 21Z" /><path d="M13 7.6l3.4 3.4" /><path d="M4.2 16.4l3.4 3.4" /></>),
   highlight: stroked(<><path d="M5 18h5l8.5-8.5a2 2 0 0 0-3-3L7 15v3Z" /><path d="M4 21h9" /></>),
   text: stroked(<><path d="M5 6V4h14v2" /><path d="M12 4v16" /><path d="M9 20h6" /></>),
+  arrow: stroked(<><path d="M5 19 18 6" /><path d="M10 6h8v8" /></>),
+  leader: stroked(<><path d="M3 6h9" /><path d="M12 6 19 17" /><path d="M15.5 16.5 19 17l.4-3.6" /></>),
   select: stroked(<><path d="M5 3.5 18.5 12l-6 1.4-2.3 5.9L5 3.5Z" /></>),
   erase: stroked(<><path d="M8 20h11" /><path d="M15.5 4.5 20 9l-9 9H6.5L3.5 15l12-10.5Z" /><path d="M9 9l6 6" /></>),
   undo: stroked(<><path d="M4 9h11a5 5 0 0 1 0 10h-5" /><path d="M7.5 5.5 4 9l3.5 3.5" /></>),
@@ -1562,9 +1651,28 @@ export function extentOf(marks: PadMark[]): { x1: number; y1: number; x2: number
  * The same outline the canvas fills, as an SVG path — so a thumbnail is made of the same ink
  * as the pad, rather than of a second idea of what ink looks like.
  */
-export function Stroke({ mark, across = 1 }: { mark: PadMark; across?: number }) {
+/** An arrow or a leader in a still: a line and a head, in the pad's own units. */
+function StillArrow({ pts, width, colour, contrast }: { pts: Pt[]; width: number; colour: string; contrast?: boolean }) {
+  const shaft = shaftOf(pts, width), head = headOf(pts, width)
+  const line = shaft.map((p) => p.join(',')).join(' '), tip = head.map((p) => p.join(',')).join(' ')
+  const edge = width * 0.9 + 0.0012
+  return (
+    <g>
+      {contrast && <polyline points={line} fill="none" stroke="#fff" strokeWidth={width + edge * 2} strokeLinecap="round" strokeLinejoin="round" />}
+      {contrast && <polygon points={tip} fill="#fff" stroke="#fff" strokeWidth={edge * 2} strokeLinejoin="round" />}
+      <polyline points={line} fill="none" stroke={colour} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" />
+      <polygon points={tip} fill={colour} />
+    </g>
+  )
+}
+
+export function Stroke({ mark, across = 1, contrast }: { mark: PadMark; across?: number; contrast?: boolean }) {
   const g = mark.geometry as { points: InkPoint[] }
   if (!g?.points?.length) return null
+  if (mark.style?.arrow) {
+    const pts = g.points.map((p) => [p[0], p[1]] as Pt)
+    return <StillArrow pts={[pts[0], pts[pts.length - 1]]} width={mark.style.width ?? 0.005} colour={mark.style.colour ?? '#2b2d2c'} contrast={contrast} />
+  }
   const nib: Nib = mark.kind === 'highlight' ? 'highlight'
     : mark.style?.nib === 'pencil' ? 'pencil' : 'pen'
   /*
@@ -1579,7 +1687,9 @@ export function Stroke({ mark, across = 1 }: { mark: PadMark; across?: number })
   const width = Math.max(1.4, (mark.style?.width ?? 0.005) * px)
   const d = pathOf(outlineOf(here, width, nib, seedOf(mark.id)))
   if (!d) return null
-  return <path d={d} transform={`scale(${1 / px})`} fill={mark.style?.colour ?? '#2b2d2c'} opacity={handOf(nib).alpha} />
+  const edge = contrast && nib !== 'highlight'
+  return <path d={d} transform={`scale(${1 / px})`} fill={mark.style?.colour ?? '#2b2d2c'} opacity={handOf(nib).alpha}
+    {...(edge ? { stroke: '#fff', strokeWidth: 3, strokeLinejoin: 'round' as const, paintOrder: 'stroke' } : {})} />
 }
 
 /** How many pixels wide a still is taken to be when its ink is worked out. */
@@ -1592,7 +1702,9 @@ const STILL_PX = 900
  * to its own extent. Used for the thumbnails in the list and for reading a pad while typing
  * it up, where a live pad would only be something a stray touch could change.
  */
-export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5, frame }: {
+export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5, frame, contrast }: {
+  /** A white edge on everything, as the pad was drawn. */
+  contrast?: boolean
   /** Show exactly this part of the paper, with no ground: ink to be laid over a picture. */
   frame?: { x: number; y: number; w: number; h: number }
   marks: PadMark[]
@@ -1621,7 +1733,14 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5, frame }: {
     <svg className="pad-still" viewBox={`${x} ${y} ${w} ${h}`} preserveAspectRatio="xMidYMid meet"
       aria-hidden="true">
       {!frame && <StillGround rule={rule} ink={ink} x={x} y={y} w={w} h={h} />}
-      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} across={w} />)}
+      {marks.filter((m) => m.kind !== 'text').map((m) => <Stroke key={m.id} mark={m} across={w} contrast={contrast} />)}
+      {marks.filter((m) => m.kind === 'text' && m.style.leaders?.length).flatMap((m) => {
+        const g = m.geometry as { x: number; y: number; w: number }
+        const size = m.style.size ?? TEXT_SIZE
+        return (m.style.leaders ?? []).map((to, i) => (
+          <StillArrow key={`${m.id}:L${i}`} pts={leaderFrom(g, size, to)} width={leaderWidth(size)} colour={m.style.colour ?? '#2b2d2c'} contrast={contrast} />
+        ))
+      })}
       {marks.filter((m) => m.kind === 'text').map((m) => {
         const g = m.geometry as { x: number; y: number; w: number }
         // Wrapped at the box's width, near enough: the still is a thumbnail, not the page.
@@ -1637,6 +1756,7 @@ export function PadStill({ marks, rule, ink = 40, ratio = 11 / 8.5, frame }: {
         }
         return (
           <text key={m.id} x={g.x} y={g.y + fs * 1.08} fontSize={fs} fill={m.style.colour ?? '#2b2d2c'}
+            {...(contrast ? { stroke: '#fff', strokeWidth: fs * 0.14, strokeLinejoin: 'round' as const, paintOrder: 'stroke' } : {})}
             fontWeight={m.style.bold ? 700 : undefined} fontStyle={m.style.italic ? 'italic' : undefined} textDecoration={m.style.underline ? 'underline' : undefined}>
             {lines.slice(0, 40).map((l, i) => <tspan key={i} x={g.x + 0.006} dy={i ? fs * 1.3 : 0}>{l}</tspan>)}
           </text>
@@ -1705,7 +1825,7 @@ export function PadPages({ pad, onTrouble }: { pad: Pad; onTrouble: (m: string) 
         const here = marks.filter((m) => m.page === n)
         return (
           <figure key={n} className="pad-page-read">
-            <PadStill marks={here} rule={pad.rule} ink={pad.rule_ink ?? 40} />
+            <PadStill marks={here} rule={pad.rule} ink={pad.rule_ink ?? 40} contrast={!!pad.contrast} />
             {pad.pages > 1 && <figcaption className="muted small">Page {n}</figcaption>}
           </figure>
         )

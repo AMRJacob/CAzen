@@ -2366,7 +2366,7 @@ body:has(.nb) .phone-nav { display: none; }
 .pcrop-gap { flex: 1; }
 
 /* Ten keys on a phone: a little narrower each, so redo fits beside undo. */
-@media (max-width: 480px) { .padbar .padbar-key, .padbar .padbar-out, .padbar .padbar-ink { width: 30px; } }
+@media (max-width: 480px) { .padbar .padbar-key, .padbar .padbar-out, .padbar .padbar-ink { width: 27px; } }
 
 /* ---------- Tag marks ---------- */
 .tagmark { display: inline-block; vertical-align: middle; flex: none; overflow: visible; }
@@ -3364,3 +3364,12 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 a.trb-open { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-size: 13px; text-decoration: none; color: #2b2d2c;
   background: linear-gradient(180deg, #fffdf8, #f3eee2); border: 1px solid rgba(160, 130, 70, 0.25); box-shadow: 0 1px 1px rgba(40, 35, 25, 0.08), 0 6px 14px -8px rgba(40, 35, 25, 0.45); }
 a.trb-open:hover { box-shadow: 0 1px 1px rgba(40, 35, 25, 0.08), 0 10px 18px -8px rgba(40, 35, 25, 0.5); }
+
+/* ---------- Pad: leaders, and contrast over a photograph ---------- */
+.pad-leaderdot { position: absolute; width: calc(16 * var(--u, 1px)); height: calc(16 * var(--u, 1px)); margin: calc(-8 * var(--u, 1px)) 0 0 calc(-8 * var(--u, 1px));
+  border-radius: 50%; background: #fff; border: calc(2 * var(--u, 1px)) solid #2b2d2c; box-shadow: 0 0 0 calc(1 * var(--u, 1px)) #fff; cursor: move; touch-action: none; pointer-events: auto; z-index: 3; }
+.pad-leading { position: fixed; z-index: 75; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center;
+  padding: 8px 16px; border-radius: 999px; background: #2b2d2c; color: #fff; font-size: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
+.pad-leading .link { color: #fff; text-decoration: underline; }
+.pad-texts.contrast .pad-text { paint-order: stroke fill; -webkit-text-stroke: calc(3 * var(--u, 1px)) #fff;
+  text-shadow: 0 0 calc(2 * var(--u, 1px)) #fff, 0 0 calc(2 * var(--u, 1px)) #fff; }

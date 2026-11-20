@@ -59,7 +59,7 @@ function PhotoInk({ pad }: { pad: Pad }) {
   const pic = marks?.find(isPicture)
   if (!marks || !pic) return null
   const g = pic.geometry as { x: number; y: number; w: number; h?: number }
-  return <span className="nb-light-ink"><PadStill marks={marks.filter((m) => !isPicture(m))} rule="blank" frame={{ x: g.x, y: g.y, w: g.w, h: g.h ?? g.w }} /></span>
+  return <span className="nb-light-ink"><PadStill marks={marks.filter((m) => !isPicture(m))} rule="blank" frame={{ x: g.x, y: g.y, w: g.w, h: g.h ?? g.w }} contrast={!!pad.contrast} /></span>
 }
 
 function Thumb({ project, path }: { project: Project; path: string | null }) {
@@ -682,7 +682,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
       <section className="nb-z nb-z-sketch">
         <div className="nb-z-top"><h2>Sketch</h2><button className="link" onClick={() => void draw()}>{marks.length ? 'Open' : 'Start'}</button></div>
         <button ref={frame} className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
-          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} ratio={shape} />
+          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} ratio={shape} contrast={!!pad?.contrast} />
           {!marks.length && <span className="nb-pad-empty">Tap to draw or write by hand</span>}
         </button>
       </section>
