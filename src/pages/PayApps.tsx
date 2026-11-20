@@ -1,4 +1,5 @@
 import { ContractSetup } from '../components/ContractSetup'
+import { PayRead } from '../components/PayRead'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
@@ -534,6 +535,16 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
               {' '}Either it went into the work and was not billed, or it has left the site.
             </span>
           </div>
+        )}
+        {editable && (
+          <PayRead
+            known={data.lines.map((l) => ({ id: l.id, item_no: l.item_no, description: l.description, scheduled: l.scheduled_value,
+              previous: figures.lines.find((x) => x.line.id === l.id)?.previous ?? 0, heading: l.is_heading }))}
+            current={valueOf}
+            onKeep={async (rows) => {
+              for (const r of rows) await setBilled(app.id, r.id, r.value)
+              setEdits({}); onChanged()
+            }} />
         )}
         <div className="pay-703-wrap">
           <table className="pay-703">

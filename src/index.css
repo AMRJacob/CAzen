@@ -3001,3 +3001,16 @@ a.ov-card:hover { border-color: var(--moss); }
   .subs-do { white-space: normal; }
   .subs-do > * { margin: 0 0 6px 8px; }
 }
+
+/* ---------- Pay applications: read from the contractor's PDF ---------- */
+.pay-read-drop { margin: 6px 0 12px; padding: 10px 12px; min-height: 0; flex-direction: row; justify-content: flex-start; cursor: default; }
+.pay-read .pay-read-card { width: min(980px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 40px); display: flex; flex-direction: column; text-align: left; }
+.pay-read-table { flex: 1 1 auto; min-height: 120px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0 12px; }
+.pay-read-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.pay-read-table th { position: sticky; top: 0; background: var(--wash); z-index: 1; }
+.pay-read-table th, .pay-read-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pay-read-table input.cell { width: 130px; }
+.pay-read-unsure input.cell { border-color: #c0553c; background: #fbeeea; color: #8a2f1a; }
+.pay-read-warn { color: #a2452f; }
+.pay-read-missing td { color: var(--muted); }
+.pay-read-from { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
