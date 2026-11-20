@@ -1,3 +1,4 @@
+import { ConfirmDelete } from '../components/ConfirmDelete'
 import { ContractSetup } from '../components/ContractSetup'
 import { PayRead } from '../components/PayRead'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -12,7 +13,7 @@ import { Money } from '../components/Money'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
-  addSovLine, listContracts, loadContract, newApplication, setApplication, setBilled, setContract,
+  addSovLine, listContracts, loadContract, newApplication, removeApplication, setApplication, setBilled, setContract,
   setSovLine, setSteps,
   type LoadedContract,
 } from '../lib/payappsDb'
@@ -150,6 +151,7 @@ export default function PayApps() {
                 index={i}
                 figures={figured[i]}
                 onChanged={load}
+                onRemoved={() => { setTab('summary'); load() }}
                 onTrouble={setError}
               />
             )
@@ -175,8 +177,14 @@ function Summary({ data, figures, all, onChanged, onTrouble }: {
     .filter((s) => s.scheduled > 0)
     .sort((a, b) => b.outstanding - a.outstanding)
 
+  // Jacob, 11/20: the summary was too much. It is the comparison with the schedule, and only
+  // for what is tied to a schedule activity; the money figures, the by-trade table and the
+  // retainage settings are still here, folded away under one line.
   return (
     <>
+      <AgainstTheSchedule data={data} figures={figures} />
+      <details className="pay-more">
+        <summary>Contract figures, by trade, and retainage</summary>
       <div className="card pay-summary">
         <div className="pay-figures">
           <Figure label="Contract sum to date" value={money(g.contractSum)}
@@ -227,8 +235,7 @@ function Summary({ data, figures, all, onChanged, onTrouble }: {
       </div>
 
       <Retainage data={data} figures={figures} onChanged={onChanged} onTrouble={onTrouble} />
-
-      <AgainstTheSchedule data={data} figures={figures} />
+      </details>
     </>
   )
 }
@@ -353,6 +360,7 @@ function AgainstTheSchedule({ data, figures }: { data: LoadedContract; figures: 
   }, [data, figures])
 
   const apart = (rows ?? []).filter((r) => Math.abs(r.gap) >= 5)
+  const agree = (rows?.length ?? 0) - apart.length
 
   return (
     <div className="card">
@@ -365,33 +373,38 @@ function AgainstTheSchedule({ data, figures }: { data: LoadedContract; figures: 
             Nothing to compare yet. An activity is compared once it says which lines of the schedule
             of values it covers — <Link to="/schedule">the schedule</Link> is where that is set.
           </p>
-        ) : !apart.length ? (
-          <p className="muted small">
-            Every activity that is mapped agrees with this application to within five points.
-          </p>
         ) : (
           <>
-            <p className="muted small">
-              Where the schedule and this application are five points or more apart.
-            </p>
-            <table className="pay-trades">
+            <div className="pay-figures pay-sched-figures">
+              <Figure label="Tied to the schedule" value={String(rows.length)} note={rows.length === 1 ? 'activity with pay lines' : 'activities with pay lines'} />
+              <Figure label="Agree" value={String(agree)} note="within five points" />
+              <Figure label="Billed ahead" value={String(apart.filter((r) => r.gap > 0).length)} note="five points or more over the schedule" />
+              <Figure label="Billed behind" value={String(apart.filter((r) => r.gap < 0).length)} note="five points or more under the schedule" />
+            </div>
+            <table className="pay-trades pay-sched">
               <thead><tr>
                 <th>Activity</th><th className="right">Schedule says</th>
                 <th className="right">Billed</th><th className="right">Difference</th>
               </tr></thead>
               <tbody>
-                {apart.map((r) => (
-                  <tr key={r.activity.id}>
-                    <td>{r.activity.name}</td>
-                    <td className="right mono">{percent(r.planned)}</td>
-                    <td className="right mono">{percent(r.billed)}</td>
-                    <td className="right mono">
-                      {r.gap > 0 ? `+${percent(r.gap)} billed` : `${percent(Math.abs(r.gap))} behind`}
-                    </td>
-                  </tr>
-                ))}
+                {[...rows].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap)).map((r) => {
+                  const off = Math.abs(r.gap) >= 5
+                  return (
+                    <tr key={r.activity.id} className={off ? (r.gap > 0 ? 'ahead' : 'behind') : 'agrees'}>
+                      <td>{r.activity.name}</td>
+                      <td className="right mono">{percent(r.planned)}</td>
+                      <td className="right mono">{percent(r.billed)}</td>
+                      <td className="right mono">
+                        {!off ? <span className="muted">agrees</span> : r.gap > 0 ? `+${percent(r.gap)} billed` : `${percent(Math.abs(r.gap))} behind`}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
+            <p className="muted small">
+              Only activities that say which pay lines they cover are here — <Link to="/schedule">the schedule</Link> is where that is set.
+            </p>
           </>
         )}
     </div>
@@ -410,7 +423,8 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
 
 // ---------- One application ----------
 
-function OneApplication({ data, index, figures, onChanged, onTrouble }: {
+function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble }: {
+  onRemoved: () => void
   data: LoadedContract
   index: number
   figures: Figures
@@ -438,6 +452,11 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
     } catch (e) { onTrouble(message(e)) }
   }
 
+  // Only the last application can go: each one's "from previous" is what the ones before it
+  // add up to, so taking one out of the middle would quietly change every later one.
+  const last = data.applications[data.applications.length - 1]?.id === app.id
+  const [deleting, setDeleting] = useState(false)
+
   async function certify() {
     try {
       await setApplication(app.id, { status: 'certified', certified_sum: g.due } as never)
@@ -452,7 +471,15 @@ function OneApplication({ data, index, figures, onChanged, onTrouble }: {
           <h3>Application {app.number}</h3>
           <span className="muted small">Period to {usDate(app.period_to)} · {app.status}</span>
           {editable && <button className="primary-lite" onClick={() => void certify()}>Certify</button>}
+          <button className="link danger-link pay-delete" disabled={!last} onClick={() => setDeleting(true)}
+            title={last ? 'Delete this application' : 'Only the last application can be deleted — delete the later ones first'}>Delete</button>
         </div>
+        {deleting && (
+          <ConfirmDelete what={`Application ${app.number}`}
+            detail={`Period to ${usDate(app.period_to)}${app.status === 'certified' ? ' — certified' : ''}. Everything entered on it for this period goes with it. The schedule of values and the other applications are not touched.`}
+            onCancel={() => setDeleting(false)}
+            onConfirm={async () => { await removeApplication(app.id); setDeleting(false); onRemoved() }} />
+        )}
         <p className="pay-702-preamble">
           Application is made for payment, as shown below, in connection with the contract.
           The continuation sheet below is the G703.

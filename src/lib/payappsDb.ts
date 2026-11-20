@@ -87,6 +87,13 @@ export async function setBilled(payAppId: string, sovLineId: string, value: Bill
   if (error) throw error
 }
 
+/** Delete an application for payment; what was billed on it goes with it (the database cascades). */
+export async function removeApplication(id: string): Promise<void> {
+  const { data, error } = await db().from('pay_apps').delete().eq('id', id).select('id')
+  if (error) throw error
+  if (!data?.length) throw new Error('The application was not deleted — it may already be gone, or this account may not remove it.')
+}
+
 export async function setApplication(id: string, patch: Partial<Application>): Promise<void> {
   const { error } = await db().from('pay_apps').update(patch).eq('id', id)
   if (error) throw error

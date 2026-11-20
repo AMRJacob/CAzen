@@ -25,6 +25,6 @@ with sync_playwright() as p:
         for c in cards: print('  ',c[:230])
         print('   fits the screen:',pg.evaluate("document.documentElement.scrollWidth<=innerWidth"),'| errors:',errs[:2]); pg.screenshot(path='overview_%s.png'%name,full_page=True)
         if name=='desk':
-            pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-exit'); pg.click('.nb-exit'); pg.wait_for_timeout(500); print('   closing a notebook lands on:',pg.url.split('#')[1])
+            pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-menu-contents'); pg.click('.nb-menu-contents .nb-menu-mark'); pg.wait_for_timeout(450); pg.click('.nb-menu-contents .nb-menu-spot:has-text("Close")'); pg.wait_for_timeout(500); print('   closing a notebook lands on:',pg.url.split('#')[1])
         ctx.close()
     b.close()

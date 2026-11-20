@@ -3036,3 +3036,14 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .padbar .padbar-out span { font-size: 9.5px; line-height: 1.1; color: inherit; }
 .padbar .padbar-out svg { width: 20px; height: 20px; }
 @media (max-width: 480px) { .padbar .padbar-out { width: 34px; } }
+
+.pay-702-head .pay-delete { margin-left: auto; }
+.pay-702-head .pay-delete:disabled { opacity: 0.4; }
+
+/* ---------- Pay applications: a summary that is the schedule comparison ---------- */
+.pay-more { margin-top: 14px; }
+.pay-more > summary { cursor: pointer; color: var(--muted); font-size: 13.5px; padding: 8px 2px; }
+.pay-more[open] > summary { margin-bottom: 8px; }
+.pay-sched-figures { margin-bottom: 12px; }
+.pay-sched tr.ahead td:last-child { color: #a2452f; }
+.pay-sched tr.behind td:last-child { color: #2f436b; }
