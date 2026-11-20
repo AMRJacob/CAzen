@@ -11,6 +11,15 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 14:10 CST
+
+**Sign-in no longer offers "Email me a link"** (Jacob, 14:07). That option had Supabase email
+the person a one-time sign-in link (`signInWithOtp`); it never emailed an admin. Removed from
+`SignIn` in `src/lib/auth.tsx`. Password sign-in and *Forgot password?* are unchanged — the
+latter still has Supabase email the person a reset link (`resetPasswordForEmail`).
+
+---
+
 # Checkpoint — 2026-11-19, 22:20 CST
 
 **Working down the not-built list** (Jacob, 21:58–22:00: is every feature discussed in; then
