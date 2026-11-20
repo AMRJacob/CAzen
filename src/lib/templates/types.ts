@@ -9,7 +9,8 @@ export const PAGE_H = 792
 export type FormKind = 'submittal_cover' | 'asi' | 'rfi_response' | 'pr' | 'ccd' | 'field_report' | 'meeting_notes' | 'change_order'
 export type TemplateKind = 'general' | FormKind   // 'general' = the shared letterhead
 
-export type ColorRole = 'ink' | 'muted' | 'accent'
+/** `light` is a pale grey for rules and bands — the grey bar under a form's title. */
+export type ColorRole = 'ink' | 'muted' | 'accent' | 'light'
 export type Align = 'left' | 'center' | 'right'
 
 interface Base {
@@ -31,6 +32,7 @@ export interface TextEl extends Base {
   color: ColorRole
   serif?: boolean
   caps?: boolean
+  italic?: boolean
   /** Shrink the text slightly if it doesn't fit its box, rather than cutting it off. */
   fit?: boolean
 }

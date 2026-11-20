@@ -192,7 +192,7 @@ function drawBlock(c: Ctx, text: string, x: number, y: number, w: number, h: num
 }
 
 function drawText(c: Ctx, el: TextEl) {
-  const font = fontFor(c.fonts, el.serif, el.bold)
+  const font = fontFor(c.fonts, el.serif, el.bold, el.italic)
   const text = el.caps ? el.text.toUpperCase() : el.text
   let size = el.size
   if (el.fit) {
@@ -363,7 +363,7 @@ export async function renderForm({ layout, letterhead, brand, values }: RenderIn
     serifItalic: await doc.embedFont(StandardFonts.TimesRomanItalic),
   }
   const accent = hexToRgb(brand.accent)
-  const colors = { ink: rgb(0.13, 0.14, 0.15), muted: rgb(0.4, 0.42, 0.44), accent }
+  const colors = { ink: rgb(0.13, 0.14, 0.15), muted: rgb(0.4, 0.42, 0.44), light: rgb(0.8, 0.8, 0.8), accent }
   const tint = rgb(1 - (1 - accent.red) * 0.12, 1 - (1 - accent.green) * 0.12, 1 - (1 - accent.blue) * 0.12)
   const wash = rgb(0.95, 0.94, 0.92)
   const logo = brand.logo ? (brand.logo.type === 'png' ? await doc.embedPng(brand.logo.bytes) : await doc.embedJpg(brand.logo.bytes)) : undefined

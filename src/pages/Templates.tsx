@@ -354,7 +354,7 @@ function box(el: El, s: number): CSSProperties {
   return { left: el.x * s, top: el.y * s, width: el.w * s, height: el.h * s }
 }
 
-const COLOR: Record<ColorRole, string> = { ink: '#222425', muted: '#66696f', accent: 'var(--accent)' }
+const COLOR: Record<ColorRole, string> = { ink: '#222425', muted: '#66696f', light: '#cccccc', accent: 'var(--accent)' }
 
 /** Approximate on-screen rendering of an element; the PDF preview is exact. */
 function ElView({ el, values, logoUrl, scale, accent }: { el: El; values: Record<string, string>; logoUrl: string | null; scale: number; accent: string }) {
@@ -365,7 +365,7 @@ function ElView({ el, values, logoUrl, scale, accent }: { el: El; values: Record
   const wrap: CSSProperties = { ['--accent' as string]: accent }
   switch (el.type) {
     case 'text':
-      return <div className="el-text" style={{ ...wrap, ...style(el.size, el.bold, el.serif), color: COLOR[el.color], textAlign: el.align, textTransform: el.caps ? 'uppercase' : 'none' }}>{el.text}</div>
+      return <div className="el-text" style={{ ...wrap, ...style(el.size, el.bold, el.serif), fontStyle: el.italic ? 'italic' : undefined, color: COLOR[el.color], textAlign: el.align, textTransform: el.caps ? 'uppercase' : 'none' }}>{el.text}</div>
     case 'field': {
       const v = fieldText(el, (k) => values[k] ?? '')
       const label = el.labelMode !== 'none' && el.label
@@ -466,7 +466,7 @@ function Seg<T extends string>({ value, options, onChange, disabled }: { value: 
   )
 }
 
-const COLORS: [ColorRole, string][] = [['ink', 'Ink'], ['muted', 'Grey'], ['accent', 'Accent']]
+const COLORS: [ColorRole, string][] = [['ink', 'Ink'], ['muted', 'Grey'], ['light', 'Light grey'], ['accent', 'Accent']]
 
 /** Properties for the selected element. */
 function Props({ el, kind, onChange, disabled }: { el: El; kind: TemplateKind; onChange: (p: Partial<El>) => void; disabled: boolean }) {
@@ -597,7 +597,7 @@ function Props({ el, kind, onChange, disabled }: { el: El; kind: TemplateKind; o
   )
 }
 
-function TypeControls({ el, set }: { el: { size: number; bold: boolean; align: string; color: ColorRole; serif?: boolean }; set: (p: Record<string, unknown>) => void }) {
+function TypeControls({ el, set }: { el: { size: number; bold: boolean; align: string; color: ColorRole; serif?: boolean; italic?: boolean; type?: string }; set: (p: Record<string, unknown>) => void }) {
   return (
     <>
       <div className="two">
@@ -611,6 +611,7 @@ function TypeControls({ el, set }: { el: { size: number; bold: boolean; align: s
       <Seg value={el.align as 'left'} onChange={(v) => set({ align: v })} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} />
       <Seg value={el.color} onChange={(v) => set({ color: v })} options={COLORS} />
       <label className="check"><input type="checkbox" checked={el.bold} onChange={(e) => set({ bold: e.target.checked })} /> Bold</label>
+      {el.type === 'text' && <label className="check"><input type="checkbox" checked={!!el.italic} onChange={(e) => set({ italic: e.target.checked })} /> Italic</label>}
     </>
   )
 }

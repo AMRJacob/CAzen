@@ -615,7 +615,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             'fr.date': day,
             ...(page.visited_at ? { 'fr.time': clockTime(page.visited_at) } : {}),
             ...(page.weather ? { 'fr.weather': page.weather } : {}),
-            ...(page.location ? { 'fr.location': page.location.replace(/, /g, '\n') } : {}),
+            ...(page.location ? { 'fr.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'fr.participants': who } : {}),
             'fr.observations': notes + recorded,
           }} />
@@ -624,7 +624,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             'mn.date': day,
             ...(page.visited_at ? { 'mn.time': clockTime(page.visited_at) } : {}),
             ...(page.title ? { 'mn.title': page.title } : {}),
-            ...(page.location ? { 'mn.location': page.location.replace(/, /g, '\n') } : {}),
+            ...(page.location ? { 'mn.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'mn.participants': who } : {}),
             'mn.notes': notes,
           }} />
