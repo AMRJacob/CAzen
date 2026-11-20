@@ -11,6 +11,32 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-19, 18:46 CST
+
+**Four things, one message and three entries from Requests & issues** (Jacob, 18:3x: "move the
+buttons for take a photo and add an observation to the left side of those zones on the iphone
+app"; requests "Desktop Full Screen", "Rescanning Sheets", "Field Notes Page").
+
+- **Take a photo / New observation / the sketch's Start** — on a phone they sit under the
+  section heading at the left edge instead of out at the right. Library follows Take a photo
+  on the same line.
+- **Field notes contents page on a phone** — the CA mark is at the bottom right; tapping it
+  opens two choices, **New page** and **Exit** (Exit → the project's Overview). The New page
+  button and the × at the top are gone on a phone; a desk keeps both and shows no mark. The
+  same `BookMenu` as an open page uses, with `contents` set.
+  An open page's mark is still at the bottom *left* (unchanged) — the two are on opposite
+  corners now.
+- **Desktop fills the window** — above 900 px `.content` and the Overview have no maximum
+  width. At 1920 the working area is 1688 px (was capped); the Overview's cards flow into as
+  many columns as fit.
+- **Re-read dialog with a long selection** — the card is never taller than the window, the
+  sheet list scrolls inside it under its headings, and the Change button stays on screen.
+  Checked with 59 sheets at 1440×800 and 1920×1000.
+
+Checks: `t_contents.py`, `t_reread_long.py` (new); `t_board`, `t_tear`, `t_overview`,
+`t_reread`, `t_template` rerun clean. `t_page.py` and `t_quick.py` are stale since the notes
+board replaced the outline box. **Test browser only — not seen on the iPhone or the PC.**
+
 # Checkpoint — 2026-11-19, 16:45 CST
 
 **The L sheets on UARM Medical Sciences will not give up their titles** (Jacob, 16:42–16:43:

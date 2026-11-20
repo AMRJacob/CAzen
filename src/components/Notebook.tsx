@@ -201,6 +201,9 @@ export function Notebook({ project, kind, pages, onPages }: {
               <span className="nb-today-day">{longDay(new Date().toISOString().slice(0, 10))}</span>
             </span>
           </button>
+          {/* On a phone the corner mark is the way to a new page and the way out; the button and
+              the × above are for a desk. */}
+          <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')} />
           {pages.length > 0 && <h2>Pages</h2>}
           <ol className="nb-toc">
             {pages.map((p, n) => {
@@ -259,13 +262,15 @@ export function Notebook({ project, kind, pages, onPages }: {
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
 interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void }
 
-function BookMenu({ onNew, onClose, adds, visit }: {
+function BookMenu({ onNew, onClose, adds, visit, contents }: {
+  /** On the book's contents page: nothing to add to, only a new page or the way out. */
+  contents?: boolean
   /** A site visit has photographs and observations; a meeting does not. */
   visit: boolean
   onNew: () => void
   onClose: () => void
   /** The page's own ways of adding to itself, read when the menu is used. */
-  adds: React.RefObject<PageAdds>
+  adds?: React.RefObject<PageAdds>
 }) {
 
   const [open, setOpen] = useState(false)
@@ -292,19 +297,21 @@ function BookMenu({ onNew, onClose, adds, visit }: {
     </button>
   )
   return (
-    <nav ref={nav} className={`nb-menu${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
+    <nav ref={nav} className={`nb-menu${contents ? ' nb-menu-contents' : ''}${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
       <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => setOpen(!open)}>
         <Mark size={30} />
       </button>
       <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
         {/* What can be added to this page, where the thumb already is. The parts a page does
             not have — a meeting has no photographs or observations — are not offered. */}
-        {spot('Note', I(<><path d="M5 5h14v10H9l-4 4V5Z" /><path d="M9 9h6M9 12h4" /></>), () => adds.current?.note?.())}
-        {spot('Sketch', I(<><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4Z" /><path d="M14 7l3 3" /></>), () => adds.current?.sketch?.())}
-        {visit && spot('Photo', I(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7l1.5-3h5L16 7" /><circle cx="12" cy="13.5" r="3.2" /></>), () => adds.current?.photo?.())}
-        {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds.current?.observation?.())}
+        {!contents && <>
+        {spot('Note', I(<><path d="M5 5h14v10H9l-4 4V5Z" /><path d="M9 9h6M9 12h4" /></>), () => adds?.current?.note?.())}
+        {spot('Sketch', I(<><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4Z" /><path d="M14 7l3 3" /></>), () => adds?.current?.sketch?.())}
+        {visit && spot('Photo', I(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7l1.5-3h5L16 7" /><circle cx="12" cy="13.5" r="3.2" /></>), () => adds?.current?.photo?.())}
+        {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds?.current?.observation?.())}
+        </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
-        {spot('Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
+        {spot(contents ? 'Exit' : 'Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
       </div>
     </nav>
   )

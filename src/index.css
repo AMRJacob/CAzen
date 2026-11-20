@@ -2896,3 +2896,38 @@ a.ov-card:hover { border-color: var(--moss); }
 }
 .tb-word { position: absolute; pointer-events: none; outline: 1px solid rgba(31, 78, 121, 0.55); background: rgba(31, 78, 121, 0.07); }
 .tb-show { display: flex; gap: 7px; align-items: center; margin-top: 8px; color: var(--muted); }
+
+/* ---------- A book's contents page on a phone: the corner mark, not buttons at the top ---------- */
+.nb-menu-contents { display: none; }
+@media (max-width: 759px) {
+  /* Bottom right, where the mark sits everywhere else on a phone; two things to offer, so it
+     opens only as wide as they need. */
+  .nb-menu-contents { display: flex; left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
+  .nb-menu-contents.open { width: 190px; }
+  .nb-menu-contents .nb-menu-bar { overflow: hidden; }
+  .nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
+  .nb-menu-contents.open .nb-menu-bar { padding-left: 8px; padding-right: 8px; }
+  .nb-menu-contents .nb-menu-spot { font-size: 12px; min-width: 70px; padding: 5px 8px; }
+  .nb-contents .nb-today, .nb-contents .nb-exit { display: none; }
+  /* Take a photo, New observation, and the sketch's Open: under the heading at the left, where
+     the thumb of the hand holding the phone is, not out at the far edge. */
+  .nb-page .nb-z-photos .nb-z-top, .nb-page .nb-z-seen .nb-z-top, .nb-page .nb-z-sketch .nb-z-top { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .nb-page .nb-z-do { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 14px; align-items: center; }
+  .nb-page .nb-z-top .primary-lite { padding: 9px 16px; font-size: 14.5px; }
+}
+
+/* ---------- Re-read: the list scrolls, the buttons stay ----------
+   With a long selection the table grew past the bottom of the window and took the Change
+   button with it. The card is never taller than the window; the table takes what is left and
+   scrolls inside itself, under its own headings. */
+.reread-card { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); min-height: 0; }
+.reread-card > * { flex: none; }
+.reread-card > .reread-table { flex: 1 1 auto; min-height: 140px; overflow: auto; }
+
+/* ---------- At a desk the app uses the window it is given ---------- */
+@media (min-width: 901px) {
+  .content { max-width: none; }
+  .overview { max-width: none; }
+  .ov-grid { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .ov-wide { grid-column: auto / span 2; }
+}
