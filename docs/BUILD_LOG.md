@@ -11,6 +11,65 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:21 CST
+
+Eight from Jacob, 15:08–15:18. Test browser only throughout; nothing seen on the iPhone.
+
+**The pad**
+
+- **What a tool makes is sized for the zoom in hand** (15:08). Line widths and type size are
+  kept in the pad's own units, so a line drawn zoomed far in arrived as wide as one drawn
+  zoomed out. Pen, pencil, highlighter, the eraser's reach, new text and its box, and a width
+  set from the selection bar are now scaled by the zoom at the moment of making
+  (`atZoom`, `SIZED_AT = 600`): a medium line is 3 px on the glass and new type 18 px at any
+  zoom. Marks already on a pad are unchanged. `checks/t_atzoom.py` at three zooms.
+  **Taken as the pad only.** Markups on a drawing sheet are not changed: on 11/19 he asked for
+  notes there to be sized by the sheet, which is the opposite rule.
+- **A text box left empty goes away** (15:09) when the typing ends; and a touch on the paper
+  while typing only ends the typing — it no longer starts another box where it landed (that
+  was leaving a trail of empty boxes). Escape ends typing too.
+- **Text box handles, after Freeform** (15:09: "look for precedent… a little awkward").
+  Apple's Freeform guide: one kind of handle scales the text with the box, the other resizes
+  the box and leaves the text its size; Acrobat's: a box is moved by its border. So: the box
+  has a thin frame; **dragging the frame moves it**; a small square at the middle of each side
+  changes where the words wrap; a round dot at each corner scales box and type together about
+  the opposite corner. The ✥ move button, the round **A** size button and the old
+  wrap/resize tabs are gone. Frame and handles are 10 px on the glass at every zoom (`--u`).
+  `t_select.py` and `t_padmenu.py` still look for the old grips and are stale.
+- **The bar while typing** (15:10). While a box is being typed in, the corner menu is open and
+  holds: Bold, Italic, Underline; Left, Centre, Right; Bullets, Level out, Level in. Tab and
+  Shift+Tab are level in and out; Enter in a list starts the next bullet at the same level,
+  and on an empty bullet steps out, then ends the list. **Bold, italic, underline and
+  alignment apply to the whole box, not to selected words** — the box holds plain text. A
+  bullet is "• " and a level is four spaces; a bullet that wraps does not hang. The pad's
+  thumbnail shows bold, italic and underline but not alignment. `src/lib/padText.ts`,
+  `checks/padtext.test.ts`, `checks/t_padtype.py`.
+- **Fingers move and pinch the paper again** (15:15: writing is great, pinch and finger
+  panning are not working). The palm rule was still taking finger-sized touches (over 45 px)
+  for a hand whenever a pen is how he writes. Now a finger-sized touch (up to 100 px) is a
+  hand **only while the pen is about** — writing, or within 1.5 s of it (`PEN_NEAR`). With
+  the pen away it is a finger: one drags the paper, two pinch. To keep a hand laid down ahead
+  of the pen from shifting the page: the paper does not follow until a finger has travelled
+  10 px (`STILL`), and if the pen then lands, the touches already down become the hand and
+  whatever they moved is put back. `checks/t_pinch_pen.py` covers each case with 56–80 px
+  contacts and a synthetic pen. **The 100 px, 1.5 s and 10 px are guesses.** The pad's More
+  menu shows "Last touch: … px across", which is the number that would settle them.
+
+**Pay applications** — the money figures are back at the top of the Summary (15:12): contract
+sum to date, paid to date, left to pay, retainage held, the progress bar and the application
+count; under them the schedule comparison; *By trade, and retainage* stays folded.
+
+**The all-projects page at a desk is the phone's landing page** (15:17, 15:18). On `/` there
+is no sidebar at any width; the list is the phone's cards (number, name, device status) in a
+760 px column; the CA mark at the bottom left is the menu. The phone's own CSS rules are
+carried over under `.shell.home` by a script (38 rules) rather than rewritten. **One thing a
+desk keeps: an *Edit* link on each card** — it is the only way to a project's details, folder
+link and archive/delete, which on a phone are not reachable at all. Owner and contractor
+columns are no longer shown on this page. Inside a project the sidebar is as it was.
+`checks/t_home.py`.
+
+---
+
 # Checkpoint — 2026-11-20, 15:08 CST
 
 **Duplicate a notebook page** (Jacob, 15:05: "add duplicate page to the options on the

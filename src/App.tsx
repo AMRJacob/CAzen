@@ -1,6 +1,6 @@
 import { OfflineNotice } from './components/OfflineNotice'
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react'
-import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { isConfigured } from './lib/supabase'
 import { AuthProvider, CreatePassword, SignIn, useAuth } from './lib/auth'
 import { FirmProvider } from './lib/firm'
@@ -98,8 +98,10 @@ function Gate() {
 
 function Shell({ offline = false }: { offline?: boolean }) {
   const screen = useFullscreen()
+  // The all-projects page is outside any project: no sidebar, the phone's landing page at every size.
+  const atHome = useLocation().pathname === '/'
   return (
-    <div className="shell">
+    <div className={`shell${atHome ? ' home' : ''}`}>
       {/* Always there while full screen, never hidden behind anything, and it says what it does. */}
       {screen.on && (
         <button className="fs-exit" onClick={screen.toggle}>Exit full screen</button>

@@ -177,14 +177,11 @@ function Summary({ data, figures, all, onChanged, onTrouble }: {
     .filter((s) => s.scheduled > 0)
     .sort((a, b) => b.outstanding - a.outstanding)
 
-  // Jacob, 11/20: the summary was too much. It is the comparison with the schedule, and only
-  // for what is tied to a schedule activity; the money figures, the by-trade table and the
-  // retainage settings are still here, folded away under one line.
+  // Jacob, 11/20: the summary was too much.
   return (
     <>
-      <AgainstTheSchedule data={data} figures={figures} />
-      <details className="pay-more">
-        <summary>Contract figures, by trade, and retainage</summary>
+      {/* The project's money at the top (Jacob, 11/20: "I really like the top portion"), then
+          how it stands against the schedule; the by-trade table and retainage are folded away. */}
       <div className="card pay-summary">
         <div className="pay-figures">
           <Figure label="Contract sum to date" value={money(g.contractSum)}
@@ -203,6 +200,9 @@ function Summary({ data, figures, all, onChanged, onTrouble }: {
         </p>
       </div>
 
+      <AgainstTheSchedule data={data} figures={figures} />
+      <details className="pay-more">
+        <summary>By trade, and retainage</summary>
       <div className="card">
         <h3>By trade</h3>
         <p className="muted small">

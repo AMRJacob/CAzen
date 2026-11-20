@@ -10,6 +10,7 @@ with sync_playwright() as p:
     b=p.chromium.launch(); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_selector('.pay-sched',timeout=10000)
+    print('top of the page:',[t.replace('\n',' / ')[:60] for t in pg.locator('.pay-summary .pay-figure').all_inner_texts()],'| above the schedule card:',pg.locator('.pay-summary').bounding_box()['y']<pg.locator('.pay-sched').bounding_box()['y'],'| outside the fold:',pg.locator('.pay-more .pay-summary').count()==0)
     print('figures:',[t.replace('\n',' / ') for t in pg.locator('.pay-sched-figures .pay-figure').all_inner_texts()])
     print('rows:',[t.replace('\t',' | ') for t in pg.locator('.pay-sched tbody tr').all_inner_texts()])
     print('by-trade table showing:',pg.locator('.pay-more .pay-trades').first.is_visible(),'| retainage showing:',pg.locator('.pay-more h3:has-text("Retainage")').is_visible())
