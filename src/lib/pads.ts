@@ -48,7 +48,8 @@ export interface PadMark {
   geometry: MarkGeometry
   /** `nib` says whether a stroke is ink or graphite; they are drawn differently. */
   /** `size` is a text box's type size, in page units like everything else on the pad. */
-  style: { colour?: string; width?: number; nib?: 'pencil'; size?: number }
+  /** `align`, `bold`, `italic`, `underline` are a text box's, and apply to the whole box. */
+  style: { colour?: string; width?: number; nib?: 'pencil'; size?: number; align?: 'left' | 'center' | 'right'; bold?: boolean; italic?: boolean; underline?: boolean }
   body: string | null
   created_by: string | null
   created_at: string
@@ -159,7 +160,7 @@ export async function addMark(mark: {
   page: number
   kind: MarkKind
   geometry: MarkGeometry
-  style?: { colour?: string; width?: number; nib?: 'pencil' }
+  style?: PadMark['style']
   body?: string | null
 }): Promise<PadMark> {
   const row: PadMark = {

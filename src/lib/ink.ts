@@ -30,7 +30,9 @@ export function forceOf(e: PointerEvent): number | null {
 /** Across the glass, in CSS pixels, past which a contact is a hand and not a fingertip. */
 export const PALM_ACROSS = 45
 /** Past this it is a hand whatever else is going on: no fingertip, however flat, is this wide. */
-export const PALM_SURE = 80
+export const PALM_SURE = 100
+/** How long after the pen was last busy a wide contact is still taken for the hand that holds it. */
+export const PEN_NEAR = 1500
 /** Two contacts landing within this of each other are two fingers arriving to pinch. */
 export const PINCH_TOGETHER = 400
 /** How long after the pen was last busy a new contact is still taken for the hand holding it. */
@@ -76,7 +78,15 @@ export function isHandContact(e: {
   const across = Math.max(e.width || 0, e.height || 0)
   // A wide contact is a hand — unless fingers are already working the page and it is no wider
   // than a finger pressed flat, in which case it is the other finger of a pinch.
-  if (world.sized !== false && across > PALM_ACROSS && !(world.fingers > 0 && across <= PALM_SURE)) return true
+  if (world.sized !== false && across > PALM_ACROSS) {
+    // Too wide for any fingertip: a hand, whatever else is going on.
+    if (across > PALM_SURE) return true
+    // Finger-sized. It is the hand only while the pen is about — writing, or just lifted. With
+    // the pen away it is a finger come to move the paper: a fingertip pressed flat reports
+    // wider than the old limit, and treating every such touch as a palm left the paper unable
+    // to be moved or pinched by anyone who writes with a pen.
+    if (world.fingers === 0 && world.now - world.penAt < PEN_NEAR) return true
+  }
   if (world.fingers > 0) return false
   return world.now - world.penAt < PEN_TAIL
 }

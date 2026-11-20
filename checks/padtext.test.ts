@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict'
+import { enterInList, indent, outdent, toggleBullets } from '../src/lib/padText.ts'
+let e = toggleBullets('Doors\nFrames', 2, 2); assert.deepEqual(e, { text: '• Doors\nFrames', start: 4, end: 4 }, 'the cursor keeps its place in the word')
+e = toggleBullets('Doors\nFrames', 0, 12); assert.equal(e.text, '• Doors\n• Frames')
+e = toggleBullets('• Doors\nFrames', 0, 14); assert.equal(e.text, '• Doors\n• Frames', 'a mixed selection is made all bullets')
+e = toggleBullets('• Doors\n• Frames', 0, 16); assert.equal(e.text, 'Doors\nFrames', 'all bullets: taken off')
+e = indent('• Doors\n• Frames', 12, 12); assert.equal(e.text, '• Doors\n    • Frames'); assert.equal(e.start, 16)
+e = outdent('• Doors\n    • Frames', 16, 16); assert.equal(e.text, '• Doors\n• Frames'); assert.equal(e.start, 12)
+e = outdent('Doors', 0, 0); assert.equal(e.text, 'Doors', 'nothing to take off')
+e = enterInList('• Doors', 7)!; assert.deepEqual(e, { text: '• Doors\n• ', start: 10, end: 10 })
+e = enterInList('• Doors\n    • Frames', 20)!; assert.equal(e.text, '• Doors\n    • Frames\n    • ')
+e = enterInList('• Doors\n    • ', 14)!; assert.equal(e.text, '• Doors\n• ', 'an empty bullet steps out a level')
+e = enterInList('• Doors\n• ', 10)!; assert.equal(e.text, '• Doors\n', 'and at the outer level ends the list')
+assert.equal(enterInList('Doors', 5), null)
+console.log('padtext: 12 checks pass')

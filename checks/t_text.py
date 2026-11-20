@@ -26,5 +26,5 @@ with sync_playwright() as p:
     pg.click('.padmenu-mark') if pg.locator('.padmenu.open').count()==0 else None
     n0=pg.locator('.pad-textbox').count(); pg.click('button[aria-label="Undo"]'); pg.wait_for_timeout(300); n1=pg.locator('.pad-textbox').count()
     pg.click('.padmenu-mark') if pg.locator('.padmenu.open').count()==0 else None
-    pg.click('button[aria-label="Redo"]'); pg.wait_for_timeout(300); n2=pg.locator('.pad-textbox').count(); print('text boxes: %d → undo %d → redo %d | redo posted with the same id: %s'%(n0,n1,n2,len(made)>=3 and made[-1]['id']==made[-2]['id']))
+    pg.click('button[aria-label="Redo"]'); pg.wait_for_timeout(300); n2=pg.locator('.pad-textbox').count(); print('text boxes: %d → undo %d → redo %d | redo posted with the same id: %s'%(n0,n1,n2,len(made)>=2 and made[-1]['id']==made[-2]['id']))
     print('errors:',errs[:3]); b.close()

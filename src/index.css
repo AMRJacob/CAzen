@@ -1564,7 +1564,8 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pad-textbox:focus-within { border-style: solid; border-color: rgba(43, 45, 44, 0.45); background: rgba(255, 255, 255, 0.85); }
 .pad-text {
   font: inherit; font-size: 30px; line-height: 1.3;
-  padding: 4px 6px; min-height: 40px;
+  /* In ems, so a box made for small type (typed while zoomed in) is not padded for large. */
+  padding: 0.13em 0.2em; min-height: 1.33em;
   white-space: pre-wrap; overflow-wrap: anywhere; outline: none; cursor: text;
   /* Words can be selected only in the box being typed in. Left selectable everywhere, a palm
      resting on any text raised the phone's Copy / Look Up menu. */
@@ -3056,3 +3057,32 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .nb-removing.nb-copying { background: var(--moss-soft); color: #2f4a38; }
 .nb-toc button.nb-toc-copy { border-color: #c5d3c8; color: #2f4a38; }
 @media (max-width: 420px) { .nb-menu:not(.nb-menu-contents) .nb-menu-spot { min-width: 40px; padding: 4px 3px; font-size: 10px; } .nb-menu-contents .nb-menu-spot { min-width: 58px; padding: 5px 4px; font-size: 11px; } }
+
+/* ---------- Pad text boxes: a frame to move by, side handles to wrap, corner handles to scale ----------
+   After Freeform and Keynote. Everything here is sized in --u, one pixel of the glass, so the
+   frame and its handles look the same at every zoom. */
+.pad-textbox { border: none; outline: calc(1.5 * var(--u, 1px)) dashed transparent; outline-offset: 0; border-radius: 0; }
+.pad-textbox.shown { outline-color: rgba(43, 45, 44, 0.32); }
+.pad-textbox:focus-within { outline-style: solid; outline-color: var(--moss); background: rgba(255, 255, 255, 0.85); }
+.pad-textedge { position: absolute; display: none; touch-action: none; cursor: move; }
+.pad-textbox.shown .pad-textedge { display: block; }
+.pad-textedge.n, .pad-textedge.s { left: 0; right: 0; height: calc(14 * var(--u, 1px)); }
+.pad-textedge.n { top: calc(-9 * var(--u, 1px)); } .pad-textedge.s { bottom: calc(-9 * var(--u, 1px)); }
+.pad-textedge.w, .pad-textedge.e { top: 0; bottom: 0; width: calc(14 * var(--u, 1px)); }
+.pad-textedge.w { left: calc(-9 * var(--u, 1px)); } .pad-textedge.e { right: calc(-9 * var(--u, 1px)); }
+.pad-textbox .pad-textgrip { width: calc(10 * var(--u, 1px)); height: calc(10 * var(--u, 1px)); border: calc(1.5 * var(--u, 1px)) solid var(--moss); background: #fff; border-radius: calc(2 * var(--u, 1px)); box-sizing: border-box; top: auto; right: auto; bottom: auto; left: auto; }
+/* A larger place to take hold of than the square that is seen. */
+.pad-textbox .pad-textgrip::after { content: ''; position: absolute; inset: calc(-9 * var(--u, 1px)); }
+.pad-textbox .pad-textgrip.side { top: calc(50% - 5 * var(--u, 1px)); cursor: ew-resize; }
+.pad-textbox .pad-textgrip.side.w { left: calc(-5 * var(--u, 1px)); } .pad-textbox .pad-textgrip.side.e { right: calc(-5 * var(--u, 1px)); }
+.pad-textbox .pad-textgrip.corner { border-radius: 50%; background: var(--moss); border-color: #fff; }
+.pad-textbox .pad-textgrip.corner.nw { left: calc(-5 * var(--u, 1px)); top: calc(-5 * var(--u, 1px)); cursor: nwse-resize; }
+.pad-textbox .pad-textgrip.corner.se { right: calc(-5 * var(--u, 1px)); bottom: calc(-5 * var(--u, 1px)); cursor: nwse-resize; }
+.pad-textbox .pad-textgrip.corner.ne { right: calc(-5 * var(--u, 1px)); top: calc(-5 * var(--u, 1px)); cursor: nesw-resize; }
+.pad-textbox .pad-textgrip.corner.sw { left: calc(-5 * var(--u, 1px)); bottom: calc(-5 * var(--u, 1px)); cursor: nesw-resize; }
+
+/* ---------- Pad: the bar while words are being typed ---------- */
+.padbar .pad-fmt { font-size: 17px; font-family: Georgia, 'Times New Roman', serif; }
+.padbar .pad-fmt.on { background: var(--moss-soft); color: var(--ink); }
+.padmenu.typing .padbar { justify-content: flex-start; gap: 2px; }
+.pad-text { tab-size: 4; }
