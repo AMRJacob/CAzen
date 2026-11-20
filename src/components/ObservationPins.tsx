@@ -3,7 +3,7 @@ import { TagMark } from './TagMark'
 import { useFirm } from '../lib/firm'
 import { useCallback, useEffect, useState } from 'react'
 import { ObservationForm } from './ObservationForm'
-import { listObservations, listTypes, nameOf, watchObservations, type Observation, type ObservationType } from '../lib/observations'
+import { listObservations, listTypes, nameOf, spotsOn, watchObservations, type Observation, type ObservationType } from '../lib/observations'
 import { message } from '../lib/errors'
 import type { ProjectStore } from '../lib/files'
 
@@ -40,7 +40,7 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
 
   const load = useCallback(() => {
     listObservations(project.id)
-      .then((list) => setAll(list.filter((o) => o.sheet_id === sheetId && o.region)))
+      .then((list) => setAll(list.filter((o) => spotsOn(o, sheetId).length > 0)))
       .catch(() => setAll([]))
   }, [project.id, sheetId])
   useEffect(() => { load() }, [load])
@@ -49,8 +49,9 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
   useEffect(() => {
     try {
       return watchObservations(project.id, {
-        added: (o) => { if (o.sheet_id === sheetId && o.region) setAll((l) => (l.some((x) => x.id === o.id) ? l : [...l, o])) },
-        changed: (o) => setAll((l) => l.map((x) => (x.id === o.id ? { ...x, ...o } : x))),
+        added: (o) => { if (spotsOn(o, sheetId).length) setAll((l) => (l.some((x) => x.id === o.id) ? l : [...l, o])) },
+        // An observation may gain or lose a place on this sheet when it is changed.
+        changed: () => load(),
         removed: (id) => setAll((l) => l.filter((x) => x.id !== id)),
       })
     } catch { return }
@@ -70,16 +71,16 @@ export function ObservationPins({ project, sheetId, revisionId, pinning, onDoneP
       {/* On the sheet an observation is a dot, so thirty of them do not bury the drawing. Under
           the pointer it opens into its mark and number; held there a moment longer, into what
           was seen. A touch has no hover, and opens the observation itself. */}
-      {all.map((o) => (
-        <button key={o.id} className={`obs-dot${o.status === 'closed' ? ' closed' : ''}`}
-          style={{ left: `${(o.region?.x ?? 0) * 100}%`, top: `${(o.region?.y ?? 0) * 100}%` }}
+      {all.flatMap((o) => spotsOn(o, sheetId).map((at, n) => (
+        <button key={`${o.id}-${n}`} className={`obs-dot${o.status === 'closed' ? ' closed' : ''}`}
+          style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%` }}
           aria-label={[nameOf(o, types), o.trade, o.title].filter(Boolean).join(' — ')}
           onClick={() => setOpen(o)}>
           <span className="obs-dot-mark"><TagMark mark={markOf(o.trade, o.title, custom) ?? plain(o)} size={30} /></span>
           <span className="obs-dot-no">{nameOf(o, types)}</span>
           <span className="obs-dot-said">{o.trade && <b>{o.trade}</b>}{o.title}</span>
         </button>
-      ))}
+      )))}
 
       {placing && (
         <span className="obs-pin obs-pin-new" style={{ left: `${placing.x * 100}%`, top: `${placing.y * 100}%` }}>

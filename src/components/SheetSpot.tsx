@@ -43,7 +43,7 @@ function cropAround(img: HTMLImageElement, at: { x: number; y: number }): string
   } catch { return undefined }
 }
 
-export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade, onTag }: {
+export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups, trade, onTag }: {
   /** The trades and their tags, to choose what kind of thing is being tagged without going back to the form. */
   groups?: { trade: string; colour: string; mark: Mark; tags: Tag[] }[]
   trade?: string
@@ -52,6 +52,8 @@ export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade
   /** What the tag will look like, if the observation has a trade yet. */
   mark?: Mark | null
   start?: { sheetId: string; region: { x: number; y: number } } | null
+  /** Opened to add another place: the sheet is the one given, with no tag on it yet. */
+  fresh?: boolean
   onPick: (s: Spot) => void
   onClose: () => void
 }) {
@@ -59,7 +61,7 @@ export function SheetSpot({ project, start, mark, onPick, onClose, groups, trade
   const [find, setFind] = useState('')
   const [sheet, setSheet] = useState<CurrentSheet | null>(null)
   const [image, setImage] = useState<string | null>(null)
-  const [at, setAt] = useState<{ x: number; y: number } | null>(start?.region ?? null)
+  const [at, setAt] = useState<{ x: number; y: number } | null>(fresh ? null : start?.region ?? null)
   const wrap = useRef<HTMLDivElement>(null)
   const pageEl = useRef<HTMLDivElement>(null)
   const bytesRef = useRef<Uint8Array | null>(null)

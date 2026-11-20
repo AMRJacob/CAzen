@@ -64,7 +64,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Downloaded projects update themselves whenever the app is open with signal; hatched when not matched to the office within a day; removable from the device by holding the project | Live (2026-11-19); checked in a test browser, not yet on the iPhone |
 | Search of the words on drawings with no signal, from the copy on the device | Live (2026-11-19); checked in a test browser only |
 | Submittal register: log received, send to a consultant and back, review and return, resubmittals (R1, R2…), days out and late | Live (2026-11-19); checked in a test browser only; no submittal logged on a real project yet |
-| Several drawing tags per observation | Not built — needs a column on observations and changes to the offline path |
+| Several drawing tags per observation, on one sheet or several; tag type chosen on the drawing | Live (2026-11-20); checked in a test browser only |
 | AI access to project content | Planned |
 
 ## Decisions made

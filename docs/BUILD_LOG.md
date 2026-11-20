@@ -11,6 +11,35 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 15:53 CST
+
+**An observation can be tagged in several places** (Jacob, 15:49: "multiple places or multiple
+sheets… multiple tags per observation and multiple photos"). This is the item left unbuilt on
+the 19th for wanting a new column; it is done without one.
+
+- On the observation form, *Tag to drawing* now holds a tile for each place and a **+
+  Another** tile. *Another* opens the drawing on the sheet the last tag went on, with no pin
+  yet (the Sheets item in the corner menu goes to a different sheet); one touch places it.
+  Touching a tile reopens that place to move it; the × on a tile takes it off.
+- On a sheet, the observation shows a dot at each of its places on that sheet. Opening any of
+  them opens the one observation.
+- **How it is kept:** the first place is the observation's own `sheet_id` / `region`, as
+  before; the others ride inside the same value as `region.more` (sheet, revision, sheet
+  number, point). No database change, and nothing changed in how an observation made with no
+  signal is sent — which is why this route was taken. The cost: a query can only ask for
+  observations by their first sheet; the app reads the others after loading. A copy of the app
+  from before today shows only the first place, and **if it edits such an observation's tag it
+  will drop the others**.
+- The form's small picture of the drawing round a tag exists only for tags placed in this
+  sitting; a tag loaded from the database shows a pin and the sheet number, as before.
+- **Photos:** an observation already takes any number (`photos` is a list; camera and library
+  both add to it). Nothing changed there.
+- `checks/t_multitag.py`: two places on A-101 from the form, a third added and taken off, the
+  first moved; saved as first + `more`; two dots on the sheet. The stand-in project has one
+  sheet with a readable file, so **a second sheet was not driven**.
+
+---
+
 # Checkpoint — 2026-11-20, 15:38 CST
 
 **"I am not seeing the circle menu from the main menu notebook path"** (Jacob, 15:36). The

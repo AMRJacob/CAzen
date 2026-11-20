@@ -38,7 +38,7 @@ export interface Observation {
   /** Where on a sheet it was seen, when it was pinned to one. */
   sheet_id: string | null
   revision_id: string | null
-  region: { x: number; y: number } | null
+  region: Region | null
   title: string
   detail: string | null
   status: ObservationStatus
@@ -138,7 +138,7 @@ export function buildObservation(o: {
   status?: ObservationStatus
   sheetId?: string | null
   revisionId?: string | null
-  region?: { x: number; y: number } | null
+  region?: Region | null
   photos?: string[]
   by?: string | null
 }): Observation {
@@ -258,3 +258,24 @@ export function asReport(items: Observation[], types: ObservationType[]): string
 
 /** Every photograph taken on a day, in the order the observations were raised. */
 export const photosOf = (items: Observation[]): string[] => items.flatMap((o) => o.photos)
+
+/**
+ * Where an observation is on the drawings.
+ *
+ * The first place is the observation's own sheet and point, as it always was. Further places —
+ * the same thing seen somewhere else on that sheet, or on another sheet — ride along inside the
+ * same value as `more`. That keeps one observation one row and needed no change to the
+ * database or to how observations made with no signal are sent, at the cost that only the
+ * first place is a column a query can ask for.
+ */
+export interface MoreSpot { sheet_id: string; revision_id: string | null; number?: string; x: number; y: number }
+export interface Region { x: number; y: number; more?: MoreSpot[] }
+
+/** Every point of an observation that is on one sheet. */
+export function spotsOn(o: Pick<Observation, 'sheet_id' | 'region'>, sheetId: string): { x: number; y: number }[] {
+  if (!o.region) return []
+  const out: { x: number; y: number }[] = []
+  if (o.sheet_id === sheetId) out.push({ x: o.region.x, y: o.region.y })
+  for (const m of o.region.more ?? []) if (m.sheet_id === sheetId) out.push({ x: m.x, y: m.y })
+  return out
+}

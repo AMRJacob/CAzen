@@ -3201,3 +3201,8 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .spot-tags-issues { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .spot-tags .chip { display: inline-flex; align-items: center; gap: 6px; }
 .spot-page img { image-rendering: auto; }
+
+/* ---------- An observation in several places ---------- */
+.obs-spot-wrap { position: relative; display: inline-block; }
+.obs-spot-off { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 14px; line-height: 1; display: grid; place-items: center; }
+.obs-spot-off:hover { color: #a2452f; border-color: #e6c7bd; }

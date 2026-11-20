@@ -21,7 +21,7 @@ import { today } from '../lib/dates'
 import { message } from '../lib/errors'
 import {
   buildObservation, editObservation, saveObservation, STATUS_LABELS,
-  type Observation, type ObservationStatus, type ObservationType,
+  type Observation, type ObservationStatus, type ObservationType, type Region,
 } from '../lib/observations'
 import type { ProjectStore } from '../lib/files'
 import { readPref, writePref } from '../lib/prefs'
@@ -73,9 +73,23 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
   const [more, setMore] = useState(!!(existing?.area || existing?.trade || existing?.due_on))
   // Where on the drawings it is: given by the sheet it was raised from, already on the
   // observation, or chosen here with "Tag to drawing".
-  const [spot, setSpot] = useState<{ sheetId: string; revisionId: string; region: { x: number; y: number }; number?: string; thumb?: string } | null>(
-    pin ?? (existing?.sheet_id && existing.region ? { sheetId: existing.sheet_id, revisionId: existing.revision_id ?? '', region: existing.region } : null))
-  const [spotting, setSpotting] = useState(false)
+  // It can be in several places — more than one spot on a sheet, or on several sheets. The
+  // first is the observation's own; the rest ride along with it (`Region.more`).
+  type Place = { sheetId: string; revisionId: string; region: { x: number; y: number }; number?: string; thumb?: string }
+  const [spots, setSpots] = useState<Place[]>(() => {
+    const first: Place | null = pin ?? (existing?.sheet_id && existing.region
+      ? { sheetId: existing.sheet_id, revisionId: existing.revision_id ?? '', region: { x: existing.region.x, y: existing.region.y } } : null)
+    const more: Place[] = (existing?.region?.more ?? []).map((m) => ({ sheetId: m.sheet_id, revisionId: m.revision_id ?? '', region: { x: m.x, y: m.y }, number: m.number }))
+    return first ? [first, ...more] : more
+  })
+  const spot = spots[0] ?? null
+  /** The places as they are stored: the first as the observation's own, the others inside it. */
+  const regionNow = (): Region | null => (spot ? {
+    ...spot.region,
+    ...(spots.length > 1 ? { more: spots.slice(1).map((p) => ({ sheet_id: p.sheetId, revision_id: p.revisionId || null, ...(p.number ? { number: p.number } : {}), x: p.region.x, y: p.region.y })) } : {}),
+  } : null)
+  /** Which place the drawing is open on: one being moved, or a new one (`spots.length`). */
+  const [spotting, setSpotting] = useState<number | null>(null)
   const [tagging, setTagging] = useState(false)
   const [tagTrade, setTagTrade] = useState<string | null>(null)
   const { firm } = useFirm()
@@ -98,7 +112,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
         type_id: typeId, title: title.trim(), detail: joinDetail(detail, discussed),
         area: area.trim() || null, trade: trade.trim() || null,
         status, observed_on: observedOn, due_on: dueOn || null, photos,
-        sheet_id: spot?.sheetId ?? null, revision_id: spot?.revisionId || null, region: spot?.region ?? null,
+        sheet_id: spot?.sheetId ?? null, revision_id: spot?.revisionId || null, region: regionNow(),
       }
       if (existing) {
         onSaved(await editObservation(existing, patch))
@@ -116,7 +130,7 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
           photos,
           sheetId: spot?.sheetId ?? null,
           revisionId: spot?.revisionId || null,
-          region: spot?.region ?? null,
+          region: regionNow(),
         })
         await saveObservation(row)
         if (typeId) writePref(LAST_TYPE, typeId)
@@ -205,19 +219,20 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
         <div>
           <span className="obs-attach-label">Tag to drawing</span>
           <div className="photo-strip">
-            {spot && (
-              <button type="button" className="photo obs-spot" onClick={() => setSpotting(true)} title="Move it">
-                {spot.thumb ? <img src={spot.thumb} alt="" /> : <span className="obs-spot-pin" aria-hidden="true" />}
-                <span className="obs-spot-no">{spot.number ?? 'On a sheet'}</span>
-              </button>
-            )}
-            {!spot && (
-              <button type="button" className="photo photo-add" onClick={() => setSpotting(true)}>
-                <span aria-hidden="true">+</span>
-                <span className="small">Drawing</span>
-              </button>
-            )}
-            {spot && !pin && <button type="button" className="link" onClick={() => setSpot(null)}>Take off</button>}
+            {spots.map((p, n) => (
+              <span key={n} className="obs-spot-wrap">
+                <button type="button" className="photo obs-spot" onClick={() => setSpotting(n)} title="Move it">
+                  {p.thumb ? <img src={p.thumb} alt="" /> : <span className="obs-spot-pin" aria-hidden="true" />}
+                  <span className="obs-spot-no">{p.number ?? 'On a sheet'}</span>
+                </button>
+                {!(pin && n === 0) && <button type="button" className="obs-spot-off" aria-label={`Take the tag off ${p.number ?? 'the sheet'}`} title="Take off"
+                  onClick={() => setSpots((all) => all.filter((_, k) => k !== n))}>×</button>}
+              </span>
+            ))}
+            <button type="button" className="photo photo-add" onClick={() => setSpotting(spots.length)}>
+              <span aria-hidden="true">+</span>
+              <span className="small">{spots.length ? 'Another' : 'Drawing'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -250,8 +265,11 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
       )}
 
       {pin && <p className="muted small">Pinned to the sheet it was raised from.</p>}
-      {spotting && (
-        <SheetSpot project={project} mark={mark} start={spot ? { sheetId: spot.sheetId, region: spot.region } : null}
+      {spotting !== null && (
+        <SheetSpot project={project} mark={mark}
+          // A new place opens on the sheet the last one was put on: the same thing seen again is usually nearby.
+          start={(spots[spotting] ?? spots[spots.length - 1]) ? { sheetId: (spots[spotting] ?? spots[spots.length - 1]).sheetId, region: (spots[spotting] ?? spots[spots.length - 1]).region } : null}
+          fresh={spotting >= spots.length}
           groups={groups} trade={trade}
           onTag={(tr, t) => {
             setTrade(tr)
@@ -261,7 +279,8 @@ export function ObservationForm({ project, types, existing, pin, known, day, onS
             if (!title.trim()) setTitle(t.label)
             else if (!title.toLowerCase().includes(t.label.toLowerCase())) setTitle(`${t.label} — ${title.trim()}`)
           }}
-          onPick={(s) => { setSpot(s); setSpotting(false) }} onClose={() => setSpotting(false)} />
+          onPick={(s) => { const n = spotting; setSpots((all) => (n >= all.length ? [...all, s] : all.map((p, k) => (k === n ? s : p)))); setSpotting(null) }}
+          onClose={() => setSpotting(null)} />
       )}
 
       <div className="actions">
