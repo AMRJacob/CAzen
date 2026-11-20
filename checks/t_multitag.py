@@ -21,7 +21,9 @@ with sync_playwright() as p:
     pg.click('.obs-tag-open'); pg.click('.obs-tag-trades .chip:has-text("Glazing")'); pg.click('.obs-tag-issues .chip:has-text("Sealant missing")')
     print('after the tag: title=%r chip=%r'%(pg.input_value('input[placeholder^="Sealant"]'),pg.inner_text('.obs-tag-open')))
     pg.click('.obs-attach .photo-add:has-text("Drawing")'); pg.fill('.spot-bar input','101'); pg.click('.spot-list button'); pg.wait_for_selector('.spot-page img',timeout=15000); pg.wait_for_timeout(400)
-    tap=lambda fx,fy: (lambda bx: pg.mouse.click(bx['x']+bx['width']*fx,bx['y']+bx['height']*fy))(pg.locator('.spot-page').bounding_box())
+    def tap(fx,fy):
+        bx=pg.locator('.spot-page').bounding_box(); pg.mouse.click(bx['x']+bx['width']*fx,bx['y']+bx['height']*fy); pg.wait_for_timeout(250)
+        pg.click('.spot-menu .nb-menu-mark'); pg.wait_for_timeout(450); pg.click('.spot-menu .nb-menu-spot:has-text("Close")')
     tap(0.30,0.60); pg.wait_for_timeout(400); print('tile on the form shows the tag:',pg.evaluate("(()=>{const m=document.querySelector('.obs-spot .obs-spot-mark');return m?(m.textContent||'plain pin'):'none'})()")); print('first tag -> tiles on the form:',pg.locator('.obs-spot').count(),'| add button says:',pg.locator('.obs-attach .photo-add').last.inner_text().replace('\n',' '))
     pg.locator('.obs-attach .photo-add').last.click(); pg.wait_for_selector('.spot-page img',timeout=15000); pg.wait_for_timeout(400)
     print('  "Another" opens straight on the same sheet:',pg.inner_text('.spot-name').replace('\n',' '),'| with no pin yet:',pg.locator('.spot-pin').count()==0)

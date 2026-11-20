@@ -3228,3 +3228,28 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 .obs-dot-mark { transform: scale(0.68); }
 .obs-dot-mark text, .obs-dot-mark polyline { opacity: 1; }
 @media (hover: none) { .obs-dot-mark { transform: scale(0.72); } }
+
+/* ---------- Every corner menu sits the same distance in from the corner ----------
+   (Jacob, 11/20: the mark has drifted into the corner and under the bezel of his devices.)
+   The menus were 10 or 12 px from the edges plus whatever inset the device reports — and a
+   device may report none for a rounded corner. One figure for all of them, large enough to
+   clear a rounded corner on its own; what opens above a mark moves up with it. */
+:root { --corner: 22px; --corner-x: calc(var(--corner) + env(safe-area-inset-left)); --corner-y: calc(var(--corner) + env(safe-area-inset-bottom)); --corner-room: calc(2 * var(--corner) + env(safe-area-inset-left) + env(safe-area-inset-right)); }
+.nb-menu, .padmenu, .spot .spot-menu { left: var(--corner-x); bottom: var(--corner-y); }
+.nb-menu.open { width: min(470px, calc(100vw - var(--corner-room))); }
+.nb-menu-contents.open { width: min(390px, calc(100vw - var(--corner-room))); }
+.spot .spot-menu.open { width: min(430px, calc(100vw - var(--corner-room))); }
+.padmenu.open { width: min(494px, calc(100vw - var(--corner-room))); }
+.padpop { left: var(--corner-x); bottom: calc(var(--corner) + 62px + env(safe-area-inset-bottom)); max-width: calc(100vw - var(--corner-room)); }
+.spot-tags { left: var(--corner-x); bottom: calc(var(--corner) + 64px + env(safe-area-inset-bottom)); }
+.phone-nav, .shell.home .phone-nav { left: var(--corner-x); bottom: var(--corner-y); }
+@supports (height: 100dvh) { .phone-nav, .shell.home .phone-nav { bottom: auto; top: calc(100dvh - var(--pn-h, 52px) - var(--corner) - env(safe-area-inset-bottom)); } }
+.phone-nav.open, .shell.home .phone-nav.open { width: calc(100vw - var(--corner-room)); }
+@supports (width: 100dvw) { .phone-nav.open, .shell.home .phone-nav.open { width: calc(100dvw - var(--corner-room)); } }
+@media (min-width: 900px) { .shell.home .phone-nav.open { width: min(520px, calc(100vw - var(--corner-room))); } }
+.content, .shell.home > .content { padding-bottom: calc(var(--corner) + 70px + env(safe-area-inset-bottom)); }
+
+.spot-pin { cursor: grab; touch-action: none; pointer-events: auto; }
+.spot-pin::after { content: ''; position: absolute; inset: -12px; }
+/* The pad's mark is held by its top where the browser knows the real height of the window. */
+@supports (height: 100dvh) { .padmenu { bottom: auto; top: calc(100dvh - 52px - var(--corner) - env(safe-area-inset-bottom)); } }

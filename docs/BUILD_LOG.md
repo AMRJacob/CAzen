@@ -11,6 +11,29 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 16:02 CST
+
+**A placed tag stays on the screen to be adjusted** (Jacob, 15:58: do not exit at once; he may
+need to drag it; save and close from the circle menu). This replaces 15:38's touch-and-return.
+On the tagging screen a touch puts the tag down and the screen stays. **The tag is dragged by
+itself** to where it belongs (the sheet does not move under it); a touch elsewhere moves it
+there; dragging and pinching anywhere else still move the sheet. **Close in the corner menu
+keeps the tag** where it now is and returns to the observation; with no tag placed, Close just
+leaves. There is no way on this screen to leave *without* keeping a tag once one is down — it
+is taken off on the form (the × on its tile). `checks/t_spotmenu.py`, `checks/t_multitag.py`.
+
+**Every corner menu is 22 px in from the corner** (15:59: the circle has shifted further into
+the corner; it must stay out of the bezel). The app's menu was 10 px from the edges and the
+notebook, pad and tagging menus 12 px, each plus whatever inset the device reports — and a
+device may report none for a rounded corner. They are now all `--corner` (22 px) plus the
+inset, at the left and the bottom; what opens above a mark (the pad's colour and More panels,
+the tag chooser) moves with it, and the open bars are that much narrower. Measured at 402 px:
+all four marks at 22, 22; each open bar ends 22 px from the right edge with its last item
+inside it. **What moved it on his devices is not known** — nothing today reduced these
+offsets, and no device was seen; if 22 is not enough it is one number.
+
+---
+
 # Checkpoint — 2026-11-20, 15:58 CST
 
 **Each photograph has its own sketch overlay** (Jacob, 15:52: *Draw on it* should not go to

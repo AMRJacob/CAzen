@@ -94,6 +94,13 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
   const [error, setError] = useState<string | null>(null)
   // The corner mark: the way out, the way back to the sheets, the kind of tag, and the zoom.
   const [menu, setMenu] = useState(false)
+  const carrying = useRef(false)
+  /** Close keeps the tag where it now is — or, with none placed, just leaves. */
+  const done = () => {
+    if (!sheet || !at) { onClose(); return }
+    const img = pageEl.current?.querySelector('img')
+    onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
+  }
   const [choosing, setChoosing] = useState<string | null>(null)
 
   useEffect(() => {
@@ -170,6 +177,8 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
           onPointerDown={(e) => {
             if ((e.target as Element).closest('button')) return
             e.currentTarget.setPointerCapture(e.pointerId)
+            // Taken hold of by the tag itself: it is the tag that moves, not the sheet.
+            carrying.current = !!(e.target as Element).closest('.spot-pin') && ptrs.current.size === 0
             ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
             if (ptrs.current.size === 1) hand.current = { moved: false, sx: e.clientX, sy: e.clientY }
             else if (ptrs.current.size === 2 && hand.current) {
@@ -182,6 +191,12 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
             const was = ptrs.current.get(e.pointerId), h = hand.current
             if (!was || !h) return
             ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+            if (ptrs.current.size === 1 && carrying.current && pageEl.current) {
+              h.moved = true
+              const box = pageEl.current.getBoundingClientRect()
+              setAt({ x: Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)), y: Math.min(1, Math.max(0, (e.clientY - box.top) / box.height)) })
+              return
+            }
             if (ptrs.current.size === 1) {
               if (!h.moved && Math.hypot(e.clientX - h.sx, e.clientY - h.sy) < 7) return
               h.moved = true
@@ -202,13 +217,9 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
             if (h.moved || !pageEl.current) return
             const box = pageEl.current.getBoundingClientRect()
             const x = (e.clientX - box.left) / box.width, y = (e.clientY - box.top) / box.height
-            if (x < 0 || x > 1 || y < 0 || y > 1) return
-            // A touch that did not drag is the tag: it is placed and the screen is done with.
-            // (There was a Tag it here button to press afterwards; Jacob, 11/20: not needed.)
-            const at = { x, y }
-            setAt(at)
-            const img = pageEl.current.querySelector('img')
-            onPick({ sheetId: sheet.sheet_id, revisionId: sheet.revision_id, number: sheet.number, region: at, thumb: img ? cropAround(img, at) : undefined })
+            // A touch that did not drag puts the tag there. The screen stays: the tag can be
+            // dragged to where it belongs, and Close in the corner menu is what keeps it.
+            if (x >= 0 && x <= 1 && y >= 0 && y <= 1) setAt({ x, y })
           }}
           onPointerCancel={(e) => { ptrs.current.delete(e.pointerId); if (!ptrs.current.size) hand.current = null }}>
           {!image ? <p className="muted">Opening {sheet.number}…</p> : (
@@ -221,7 +232,7 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
               )}
             </div>
           )}
-          {image && <p className="spot-hint">{at ? 'Touch the drawing to move the tag.' : 'Drag and pinch to get there, then touch the drawing where it was seen.'}</p>}
+          {image && <p className="spot-hint">{at ? 'Drag the tag to adjust it. Close, in the corner menu, keeps it.' : 'Drag and pinch to get there, then touch the drawing where it was seen.'}</p>}
         </div>
       )}
       {sheet && (() => {
@@ -254,7 +265,7 @@ export function SheetSpot({ project, start, fresh, mark, onPick, onClose, groups
             <nav className={`nb-menu spot-menu${open ? ' open' : ''}`} aria-label="The drawing">
               <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => { setMenu(!open); setChoosing(null) }}><Enso size={30} /></button>
               <div className="nb-menu-bar" {...(open ? {} : { inert: '' as unknown as boolean })}>
-                {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), onClose)}
+                {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), done)}
                 {spot('Sheets', I(<><rect x="5" y="4" width="14" height="16" rx="1.5" /><path d="M8.5 9h7M8.5 13h7" /></>), () => { setSheet(null); setAt(null) })}
                 {groups && onTag && spot('Tag type', mark ? <TagMark mark={mark} size={20} /> : I(<><path d="M4 12V5h7l9 9-7 7-9-9Z" /><circle cx="8.5" cy="8.5" r="1.2" /></>),
                   () => setChoosing(choosing !== null ? null : (trade && groups.some((g) => g.trade === trade) ? trade : groups[0]?.trade ?? '')), choosing !== null)}
