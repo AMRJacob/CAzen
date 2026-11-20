@@ -11,6 +11,39 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 14:31 CST
+
+Four from Jacob on the pad and the corner menus (14:25–14:30).
+
+- **Pinch to zoom on the pad** (14:25). It worked only where fingers draw. For someone who
+  writes with a pen, a contact wider than 45 px is taken for a resting hand, and fingers
+  pressed to glass report wider than that — so both fingers of a pinch were swallowed.
+  Reproduced with 56 px contacts: the previous build does not zoom, this one does. Now, with
+  the pen away (not busy in the last 0.3 s), two finger-sized contacts (up to 80 px,
+  `PALM_SURE`) landing within 0.4 s of each other (`PINCH_TOGETHER`) are a pinch; a wide
+  second finger joining a gesture under way counts as a finger. Still a hand: one wide contact
+  alone, a second arriving later than that, anything over 80 px, and anything while the pen is
+  writing. `checks/t_pinch_pen.py`. **The 80 px and 0.4 s are guesses** — what his phone
+  reports for a finger or a palm is still not known.
+- **"Now my palm is activating Copy Link with Highlight"** (14:27). That is Chrome's menu for
+  selected text, so something was still being selected — or the 14:23 build had not reached
+  his phone yet; which is not known. Added: the pad claims every touch as it lands
+  (`touchstart`, not only the pointer events), which is what the phone watches to decide a
+  long press wants a selection. Buttons and the box being typed in are left out so they still
+  take taps. **Not reproducible here.**
+- **Close is the same on every corner menu** (14:28): a circle with a cross in it and the
+  word *Close* — on the pad (it was a bare ‹ arrow), on a notebook page (a bare ×), and on the
+  contents page (it said *Exit*). The app's own phone menu has nothing to close and is
+  unchanged. Where Close sits in each bar was left as it was: first on the pad, last on the
+  notebook menus.
+- **The contents page's mark is at the bottom left on a desk** (14:30, drawn on a
+  screenshot: New page and the × crossed out, arrows to a box at the bottom left). His
+  screenshot was of the page before 14:17's change reached it. From 760 px up the mark is now
+  bottom left, as drawn and as on an open page; on a phone it stays bottom right, as he asked
+  on 11/19. `checks/t_contents.py` at 402, 820, 1600 px.
+
+---
+
 # Checkpoint — 2026-11-20, 14:23 CST
 
 **A section of the project manual reads straight through** (Jacob, 14:18: keep the view exactly

@@ -1080,7 +1080,7 @@ export function NotePad({ pad, onChanged, onClose, onTrouble }: {
 
         <div className="padbar" {...(open ? {} : { inert: '' as unknown as boolean })}>
           <button className="padbar-out" onClick={onClose} aria-label="Close the pad" title="Close the pad">
-            {icon.close}
+            {icon.close}<span>Close</span>
           </button>
           <span className="padbar-split" />
           {(['pen', 'pencil', 'highlight', 'text', 'erase', 'select'] as Tool[]).map((t) => (
@@ -1199,7 +1199,8 @@ const icon = {
   undo: stroked(<><path d="M4 9h11a5 5 0 0 1 0 10h-5" /><path d="M7.5 5.5 4 9l3.5 3.5" /></>),
   redo: stroked(<><path d="M20 9H9a5 5 0 0 0 0 10h5" /><path d="M16.5 5.5 20 9l-3.5 3.5" /></>),
   more: stroked(<><circle cx="5.5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18.5" cy="12" r="1.3" /></>),
-  close: stroked(<><path d="M15 5l-7 7 7 7" /></>),
+  // The same on every corner menu: a circle with a cross in it, and the word under it.
+  close: stroked(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>),
   back: stroked(<><path d="M15 5l-7 7 7 7" /></>),
   on: stroked(<><path d="M9 5l7 7-7 7" /></>),
 }

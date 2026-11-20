@@ -2902,8 +2902,12 @@ a.ov-card:hover { border-color: var(--moss); }
 .tb-show { display: flex; gap: 7px; align-items: center; margin-top: 8px; color: var(--muted); }
 
 /* ---------- A book's contents page: the corner mark, not buttons at the top ---------- */
-/* Bottom right, at a desk and on a phone alike. It opens only as wide as what it offers. */
-.nb-menu-contents { display: flex; left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
+/* Bottom left at a desk, where Jacob drew it (11/20) and where an open page has it; bottom
+   right on a phone, as he asked for there (11/19). It opens only as wide as what it offers. */
+.nb-menu-contents { display: flex; }
+@media (max-width: 759px) {
+  .nb-menu-contents { left: auto; right: calc(12px + env(safe-area-inset-right)); flex-direction: row-reverse; }
+}
 .nb-menu-contents.open { width: min(300px, calc(100vw - 24px)); }
 .nb-menu-contents .nb-menu-bar { overflow: hidden; }
 .nb-menu-contents:not(.open) .nb-menu-bar { pointer-events: none; padding: 0; }
@@ -3029,3 +3033,9 @@ a.ov-card:hover { border-color: var(--moss); }
 button.gx-swatch { width: 16px; height: 16px; min-height: 0; padding: 0; border-radius: 50%; border: 1.5px solid transparent; }
 button.gx-swatch.on { border-color: #2b2d2c; }
 button.gx-swatch.none { background: #cfdad0; position: relative; }
+
+/* ---------- Close, the same on every corner menu: a circled cross with the word under it ---------- */
+.padbar .padbar-out { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; height: auto; padding: 2px 0; }
+.padbar .padbar-out span { font-size: 9.5px; line-height: 1.1; color: inherit; }
+.padbar .padbar-out svg { width: 20px; height: 20px; }
+@media (max-width: 480px) { .padbar .padbar-out { width: 34px; } }

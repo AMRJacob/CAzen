@@ -325,7 +325,8 @@ function BookMenu({ onNew, onClose, onDelete, adds, visit, contents }: {
         </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
         {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
-        {spot(contents ? 'Exit' : 'Close', I(<path d="M6 6l12 12M18 6 6 18" />), onClose)}
+        {/* The same on every corner menu: a circle with a cross in it, and the word Close. */}
+        {spot('Close', I(<><circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" /></>), onClose)}
       </div>
     </nav>
   )
