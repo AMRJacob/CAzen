@@ -2939,3 +2939,33 @@ a.ov-card:hover { border-color: var(--moss); }
 
 .pay-contracts .pay-another { margin-left: auto; border: none; background: none; font-size: 13px; }
 @media (max-width: 760px) { .pay-contracts .pay-another { display: none; } }
+
+/* ---------- A form as it will print, edited where it is read ---------- */
+.pf-tabs { margin-bottom: 12px; }
+.pf { display: grid; grid-template-columns: minmax(0, 860px) minmax(300px, 420px); gap: 22px; align-items: start; margin-bottom: 16px; }
+.pf-pages { display: flex; flex-direction: column; gap: 16px; }
+.pf-page { position: relative; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 8px 28px rgba(0,0,0,0.10); aspect-ratio: 612 / 792; }
+.pf-page img { display: block; width: 100%; height: 100%; user-select: none; transition: opacity 0.15s; }
+.pf-page.pf-stale img { opacity: 0.82; }
+.pf-blank { display: grid; place-items: center; }
+.pf-page button.pf-spot { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0 !important; line-height: 1; border: 1px dashed transparent; background: none; padding: 0; border-radius: 2px; cursor: text; min-height: 0; overflow: hidden; text-align: left; }
+.pf-page button.pf-spot:hover { border-color: rgba(74, 106, 84, 0.75); background: rgba(74, 106, 84, 0.07); }
+.pf-page button.pf-spot.on { border: 1.5px solid var(--moss); background: rgba(74, 106, 84, 0.10); }
+.pf-page button.pf-spot.empty { border-color: rgba(0, 0, 0, 0.16); }
+.pf-ghost { display: block; font-size: clamp(8px, 1.15vw, 11.5px); line-height: 1.2; padding: 1px 3px; color: rgba(0,0,0,0.38); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-side { position: sticky; top: 14px; max-height: calc(100dvh - 28px); overflow: auto; }
+.pf-form { grid-template-columns: minmax(0, 1fr); }
+.pf-form textarea { min-height: 220px; }
+.pf-edit-foot { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+.pf-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.pf-jump { border: none; background: none; text-align: left; padding: 5px 6px; border-radius: 6px; font-size: 13.5px; }
+.pf-jump:hover { background: var(--moss-soft); }
+.form.card.pf-rest:empty { display: none; }
+@media (max-width: 1180px) {
+  .pf { grid-template-columns: minmax(0, 1fr); }
+  .pf-side { position: static; max-height: none; }
+  .pf-editing .pf-side { position: fixed; z-index: 70; left: 0; right: 0; top: auto; bottom: 0; max-height: 62dvh; padding: 0 8px calc(8px + env(safe-area-inset-bottom)); }
+  .pf-editing .pf-edit { box-shadow: 0 -8px 30px rgba(0,0,0,0.22); border-radius: 14px 14px 10px 10px; }
+  .pf-editing .pf-pages { padding-bottom: 64dvh; }
+  .pf-form textarea { min-height: 150px; }
+}

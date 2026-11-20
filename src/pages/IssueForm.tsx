@@ -21,6 +21,7 @@ import { loadLayouts } from '../lib/templates/store'
 import type { FormKind, Layout } from '../lib/templates/types'
 import type { Project } from '../lib/types'
 import { PhotoSheet } from '../components/PhotoSheet'
+import { PrintedForm } from '../components/PrintedForm'
 import { photosForPdf, sheetFor, type SheetState } from '../lib/photoSheetBytes'
 import { appendPhotoPages } from '../lib/templates/photoPages'
 import { remember, remembered } from '../lib/remembered'
@@ -89,6 +90,9 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ bytes: Uint8Array; name: string } | null>(null)
   const [weather, setWeather] = useState<string | null>(null)
+  // As printed (the page itself, edited where it is read) or as a list of fields. Per device.
+  const [printed, setPrinted] = useState<boolean>(() => remembered<boolean>('cazen.pref.formAsPrinted') ?? true)
+  const showAs = (v: boolean) => { setPrinted(v); remember('cazen.pref.formAsPrinted', v) }
 
   const loadLog = useCallback(async () => {
     if (project) setLog(await listIssued(project.id, kind).catch(() => []))
@@ -183,6 +187,13 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
   const set = (k: string, v: string) => setOverrides((o) => ({ ...o, [k]: v }))
   const reset = (k: string) => setOverrides((o) => { const n = { ...o }; delete n[k]; return n })
 
+  const one = (f: FieldDef) => (
+    <Input key={f.key} f={f} value={value(f.key)} onChange={(v) => set(f.key, v)} layout={layout}
+      autoValue={liveAuto[f.key]} overridden={f.key in overrides && !!liveAuto[f.key]} onReset={() => reset(f.key)}
+      suggestions={suggestions(f)}
+      chips={f.key === 'fr.observations' ? tradeSuggestions(value(f.key), trades).slice(0, 10) : []} />
+  )
+
   async function build(mode: 'issue' | 'preview') {
     setBusy(true)
     setError(null)
@@ -242,13 +253,18 @@ function Form({ kind, brand, layouts, project, signer, prefill, photos, sheetKey
       {!project && isConfigured && (
         <div className="notice">Choose a project in the sidebar and this form fills itself in, numbers itself, and keeps a record.</div>
       )}
-      <div className="form card">
-        {shown.map((f) => (
-          <Input key={f.key} f={f} value={value(f.key)} onChange={(v) => set(f.key, v)} layout={layout}
-            autoValue={liveAuto[f.key]} overridden={f.key in overrides && !!liveAuto[f.key]} onReset={() => reset(f.key)}
-            suggestions={suggestions(f)}
-            chips={f.key === 'fr.observations' ? tradeSuggestions(value(f.key), trades).slice(0, 10) : []} />
-        ))}
+      <div className="tabs pf-tabs" role="tablist" aria-label="How the form is shown">
+        <button role="tab" aria-selected={printed} className={printed ? 'on' : ''} onClick={() => showAs(true)}>As printed</button>
+        <button role="tab" aria-selected={!printed} className={!printed ? 'on' : ''} onClick={() => showAs(false)}>List of fields</button>
+      </div>
+      {printed && (
+        <PrintedForm layout={layout} fields={shown} value={value}
+          stamp={JSON.stringify(fields.map((f) => value(f.key)))}
+          render={() => { const v = values(); return renderForm({ layout, letterhead: layouts.general, brand, values: { ...v, ...firmValues(brand) } }) }}
+          input={one} />
+      )}
+      <div className={`form card${printed ? ' pf-rest' : ''}`}>
+        {!printed && shown.map(one)}
         {kind === 'submittal_cover' && (
           <label className="wide">Contractor’s submittal (PDF) — added behind the transmittal
             <input type="file" accept="application/pdf" onChange={async (e) => setAttachment((await e.target.files?.[0]?.arrayBuffer()) ?? null)} />
