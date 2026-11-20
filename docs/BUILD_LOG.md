@@ -11,6 +11,60 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-20, 17:10 CST (pay applications)
+
+**This period read from the contractor's PDF, printed or scanned, with no template** (Jacob,
+16:35, with Carson's Westrock App 8 and Kinco's UCA CW Loop App 8: use line numbers to account
+for everything; templates only if needed, fully automatic preferred). Commit `654d6f2`.
+`src/lib/payTable.ts` (dependency-free), `matchTable` in `src/lib/payRead.ts`,
+`src/lib/pdf/payText.ts`, `checks/paytable.test.ts`.
+
+- **Columns** are found by where right-aligned figures stack up on the page; the percent column
+  is the one ending in %. Which column is C, D, E, F, G, H is the choice under which the most
+  rows come out G = D + E + F and H = C − G. A contractor's own form without a stored column is
+  allowed for.
+- **Line numbers**: the item number at the left of each row of figures, even split in two by a
+  scan ("7 1"). A number that breaks the run between two good ones is put right from them
+  ("83" between 32 and 34 is 33); one the run says should be there and is not is named in the
+  dialog. Rows are matched to the schedule of values by item number, and by name and scheduled
+  value where a line has none (change orders).
+- **Grand total**: each column's lines added up against the printed total. Agreement is shown
+  as one line, "Every column adds up to the grand total printed on the PDF." Where a column
+  disagrees and another disagrees by the opposite amount, the row that accounts for it is named.
+- **Within a row**, a misread figure breaks the row's arithmetic; the fewest figures that make it
+  hold are worked out from the rest, using what the app knows of the line (scheduled value,
+  previous) and the percent column to choose. A mended this-period or stored figure is red unless
+  its column's grand total agrees; anything else mended is a grey note.
+- **Also said**: rows on the PDF that are not in the schedule of values (a new change order), a
+  PDF whose "Application No." is not this application's, scheduled values and "from previous"
+  that differ from the record.
+- **Scans**: the file's own words are used when they pass those checks (Westrock's scanner text
+  does). Otherwise each page is drawn at 300 dpi, **the table's ruled lines are taken out of the
+  picture**, and the page is read by Tesseract here; reading stops after the page with the grand
+  total. Rule removal is what made it work: without it Westrock's scan read 0.00 as "ooo]" and
+  lost decimal points.
+- Falls back to the old line-at-a-time reader when no table is found.
+
+**pdf.js was not drawing scanners' black-and-white layer anywhere in the app.** pdf.js 6 decodes
+CCITT and JBIG2 (and JPEG 2000) images with WebAssembly fetched from `wasmUrl`, which was never
+given; the images were dropped with a console warning. Kinco's pages drew as ruled lines with
+almost no figures. `getDocument` in `src/lib/pdf/pdfjs.ts` now always passes it, and the build
+copies `jbig2.wasm`, `openjpeg.wasm`, `qcms_bg.wasm` to `pdfjs/` (precached, about 450 KB).
+**This affects every PDF view** — scanned drawings and specs compressed this way will now show
+their text. Not checked on a scanned drawing set.
+
+**Checked** in the test browser against the stand-in, with the two real PDFs (kept out of the
+repository): Westrock — 80 of 80 lines, every this-period and stored figure equal to App 8 as
+entered in CAzen, every column agreeing with the grand total, nothing red, 0.9 s. UCA — 83 of 83
+from the scan, 21 s, against a reading verified line by line against the page pictures; it
+reports that Kinco's total counts line 33's $163,476 as this period while the row shows it as
+stored. Also read with the table rules left in (the degraded case): every wrong figure came out
+red or not found — none wrong and plain. **Not tried** on an exported (non-scanned) contractor PDF
+or on a phone. `t_sched.py` fails at its last step (waiting for a notice) with or without this
+change.
+
+---
+
 # Checkpoint — 2026-11-20, 17:05 CST
 
 **The phone menu stays in its corner while a page scrolls** (Jacob, 16:5x: the circle moved up the screen as he scrolled, in the observation window and everywhere on the phone). The mark was placed by its top — `100dvh` less its own height — so the bar could grow upward, with a 0.26 s transition on `top`. While the browser's toolbars slide away during a scroll the browser's 100dvh changes, and the mark followed it. It is now held by its bottom edge (`bottom: var(--corner-y)`, `top: auto`), grows upward by its height alone, and `top` is no longer transitioned. In the test browser: 22 px from the bottom before and after a 600 px scroll; the open bar and the More bar both end at the same bottom edge. **The moving itself could not be reproduced here** (no iOS toolbars in a headless browser); this is the cause as read from the stylesheet. The pad's mark still uses the 100dvh rule — the pad does not scroll.
