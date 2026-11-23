@@ -11,6 +11,22 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:00 CST (making a line a heading)
+
+A heading can look like any other line, so it can now be marked as one in three places:
+- **Pasting a schedule of values** (contract setup): a Heading box on each row of the preview; the
+  line and heading counts and the total follow. A value on a row ticked as a heading is shown as
+  left out.
+- **Adding lines from a PDF** (the review window): "a heading" under each line to be added. It is
+  added as a heading with no value, its figures are not billed, and if the PDF had figures on it
+  the window says they are left out.
+- **On the sheet** (G703): right-click a line's description for "Make this a heading", or a heading
+  for "Make this a line item". The menu says what changes first — a billed line's billing leaves
+  the totals while it is a heading, and its scheduled value leaves the contract sum; turning it back
+  brings both back, since nothing is deleted.
+Headings now show their item number on the sheet. Browser checks `checks/t_heading.py`,
+`checks/t_paynew.py`.
+
 # Checkpoint — 2026-11-23, 16:45 CST (check-all for lines to add)
 
 The Add column in the pay-read review window has a box in its heading that ticks or unticks every

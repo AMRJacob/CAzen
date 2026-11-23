@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Money } from './Money'
 import { MoneyInput } from './MoneyInput'
 import { money as asMoney } from '../lib/money'
@@ -32,7 +32,12 @@ export function ContractSetup({ project, onCreated, another, onCancel }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const lines = useMemo(() => readSov(pasted), [pasted])
+  const read = useMemo(() => readSov(pasted), [pasted])
+  // Rows turned into headings, or back into lines, by hand: a heading can look like any other line.
+  const [flipped, setFlipped] = useState<Set<number>>(new Set())
+  useEffect(() => { setFlipped(new Set()) }, [pasted])
+  const lines = useMemo(() => read.map((l, i) => (flipped.has(i) ? { ...l, is_heading: !l.is_heading } : l)), [read, flipped])
+  const flip = (i: number) => setFlipped((f) => { const n = new Set(f); if (n.has(i)) n.delete(i); else n.add(i); return n })
   const total = sovTotal(lines)
   const counted = lines.filter((l) => !l.is_heading).length
   const typedSum = readMoney(sum)
@@ -111,13 +116,14 @@ export function ContractSetup({ project, onCreated, another, onCancel }: {
           </p>
           <div className="sov-preview">
             <table>
-              <thead><tr><th>Item</th><th>Description of work</th><th className="right">Scheduled value</th></tr></thead>
+              <thead><tr><th title="A heading groups the lines under it and carries no value">Heading</th><th>Item</th><th>Description of work</th><th className="right">Scheduled value</th></tr></thead>
               <tbody>
                 {lines.map((l, i) => (
                   <tr key={i} className={l.is_heading ? 'sov-heading' : ''}>
+                    <td><input type="checkbox" checked={l.is_heading} onChange={() => flip(i)} aria-label={`${l.description} is a heading`} /></td>
                     <td className="mono">{l.item_no ?? ''}</td>
                     <td>{l.description}</td>
-                    <td className="right">{l.is_heading ? '' : <Money n={l.scheduled_value} />}</td>
+                    <td className="right">{l.is_heading ? (l.scheduled_value ? <span className="muted small" title="A heading carries no value, so this is left out of the total">{asMoney(l.scheduled_value)} left out</span> : '') : <Money n={l.scheduled_value} />}</td>
                   </tr>
                 ))}
               </tbody>

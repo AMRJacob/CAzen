@@ -15,7 +15,7 @@ import type { PdfRead } from '../lib/payCompare'
  */
 export function PayRead({ known, current, onKeep, onAddLines, number, start, onStarted }: {
   /** Add lines the PDF has to the schedule of values; returns their ids, in the same order. */
-  onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number }[]) => Promise<string[]>
+  onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number; is_heading?: boolean }[]) => Promise<string[]>
   known: (Known & { heading?: boolean })[]
   /** A PDF chosen while starting the application, to be read as soon as the application is open. */
   start?: File | null
@@ -42,6 +42,8 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
   const [extra, setExtra] = useState<Extra[]>([])
   const [adds, setAdds] = useState<Set<number>>(new Set())
+  /** Lines to be added that are headings, though the PDF prints them like any other line. */
+  const [heads, setHeads] = useState<Set<number>>(new Set())
 
   async function read(f: File | undefined | null) {
     if (!f) return
@@ -71,7 +73,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
       if (!out.found && !(onAddLines && more.length)) { setError('None of this PDF’s rows could be matched to the schedule of values. Is it this contract’s application?'); return }
       // A contract with no schedule of values yet takes the PDF's lines as its schedule of values.
       setExtra(onAddLines ? more : [])
-      setAdds(new Set(sov.length ? [] : more.map((_, i) => i)))
+      setAdds(new Set(sov.length ? [] : more.map((_, i) => i))); setHeads(new Set())
       setRows(out.rows); setEdits({}); setSeen(new Set()); setOpen(false)
     } catch (e) { setError(message(e)) } finally { setBusy(null); if (file.current) file.current.value = '' }
   }
@@ -101,14 +103,14 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
     try {
       const chosen = extra.map((x, i) => [x, i] as const).filter(([, i]) => adds.has(i))
       const ids = chosen.length && onAddLines
-        ? await onAddLines(chosen.map(([x]) => ({ item_no: x.item, description: x.name, scheduled_value: x.scheduled })))
+        ? await onAddLines(chosen.map(([x, i]) => ({ item_no: x.item, description: x.name, scheduled_value: heads.has(i) ? 0 : x.scheduled, ...(heads.has(i) ? { is_heading: true } : {}) })))
         : []
       await onKeep([
         ...rows.filter((r) => r.found).map((r) => {
           const v = val(r)
           return { id: r.id, value: { this_period: num(v.e), stored: num(v.f) } }
         }),
-        ...chosen.map(([x, i], k) => ({ id: ids[k], value: { this_period: num(xval(x, i).e), stored: num(xval(x, i).f) } })),
+        ...chosen.flatMap(([x, i], k) => (heads.has(i) ? [] : [{ id: ids[k], value: { this_period: num(xval(x, i).e), stored: num(xval(x, i).f) } }])),
       ], checks ? {
         file: fileName, read_at: new Date().toISOString(),
         ...(checks.application ? { application: checks.application } : {}),
@@ -116,7 +118,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
         ...(checks.total ? { total: checks.total } : {}),
         lines: Object.fromEntries([
           ...rows.filter((r) => r.found && r.pdf).map((r) => [r.id, r.pdf!] as const),
-          ...chosen.map(([x], k) => [ids[k], x.pdf] as const),
+          ...chosen.filter(([, i]) => !heads.has(i)).map(([x, i]) => [ids[chosen.findIndex(([, j]) => j === i)], x.pdf] as const),
         ]),
       } : null, pdfBytes.current)
       setRows(null); setChecks(null); setExtra([])
@@ -215,20 +217,27 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                     )
                   })}
                   {extra.map((x, i) => {
-                    const v = xval(x, i), on = adds.has(i)
+                    const v = xval(x, i), on = adds.has(i), head = heads.has(i)
+                    const figures = x.scheduled || x.previous || x.this_period || x.stored
                     return (
-                      <tr key={`x${i}`} className={`pay-read-new${on ? '' : ' off'}`}>
+                      <tr key={`x${i}`} className={`pay-read-new${on ? '' : ' off'}${head ? ' heading' : ''}`}>
                         <td><input type="checkbox" checked={on} aria-label={`Add ${x.name} to the schedule of values`}
                           onChange={(e) => setAdds((a) => { const n = new Set(a); if (e.target.checked) n.add(i); else n.delete(i); return n })} /></td>
                         <td className="mono">{x.item ?? ''}</td>
-                        <td>{x.name}
-                          <div className="small muted">{lines.length ? 'not in the schedule of values — ' : ''}scheduled {money(x.scheduled)}</div>
+                        <td>{head ? <strong>{x.name}</strong> : x.name}
+                          <label className="pay-read-head small">
+                            <input type="checkbox" checked={head} disabled={!on}
+                              onChange={(e) => setHeads((h) => { const n = new Set(h); if (e.target.checked) n.add(i); else n.delete(i); return n })} />
+                            {' '}a heading
+                          </label>
+                          {!head && <div className="small muted">{lines.length ? 'not in the schedule of values — ' : ''}scheduled {money(x.scheduled)}</div>}
+                          {head && figures ? <div className="small pay-read-warn">As a heading it carries no value: the {money(x.scheduled)} scheduled and anything billed on this row are left out.</div> : null}
                           {on && x.previous !== 0 && <div className="small pay-read-warn">“From previous” on the PDF is {money(x.previous)}; added here, the line starts with nothing billed before this application.</div>}
                         </td>
                         <td className="right mono">{money(x.previous)}</td>
-                        <td className="right"><MoneyInput className="cell mono right" value={v.e} disabled={!on} aria-label={`This period for ${x.name}`}
+                        <td className="right"><MoneyInput className="cell mono right" value={v.e} disabled={!on || head} aria-label={`This period for ${x.name}`}
                           onChange={(raw) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, e: raw } }))} /></td>
-                        <td className="right"><MoneyInput className="cell mono right" value={v.f} disabled={!on} aria-label={`Stored for ${x.name}`}
+                        <td className="right"><MoneyInput className="cell mono right" value={v.f} disabled={!on || head} aria-label={`Stored for ${x.name}`}
                           onChange={(raw) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, f: raw } }))} /></td>
                       </tr>
                     )

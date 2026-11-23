@@ -555,6 +555,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   // the exact figure on hover.
   const rounding = data.contract.rounding ?? {}
   const [roundMenu, setRoundMenu] = useState<{ col: RoundColumn; x: number; y: number } | null>(null)
+  // Right-click a line's description: a line that is really a heading, or the other way round.
+  const [lineMenu, setLineMenu] = useState<{ line: SovLine; x: number; y: number } | null>(null)
   const roundHead = (col: RoundColumn) => ({
     className: `right pay-round-head${rounding[col] ? ' on' : ''}`,
     title: `${ROUND_SAYS[rounding[col] ?? 'exact']} — right-click to change`,
@@ -775,7 +777,12 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             <tbody>
               {data.lines.map((l) => {
                 if (l.is_heading) {
-                  return <tr key={l.id} className="pay-703-heading"><td /><td colSpan={9}>{l.description}</td></tr>
+                  return (
+                    <tr key={l.id} className="pay-703-heading" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}
+                      title="Right-click to make this a line item">
+                      <td className="mono pay-703-item">{l.item_no ?? ''}</td><td colSpan={9}>{l.description}</td>
+                    </tr>
+                  )
                 }
                 const f = figures.lines.find((x) => x.line.id === l.id)
                 if (!f) return null
@@ -783,7 +790,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 return (
                   <tr key={l.id} className={l.change_order_id ? 'pay-703-co' : ''}>
                     <td className="mono pay-703-item">{l.item_no ?? ''}</td>
-                    <td className="pay-703-name">
+                    <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
                       {l.description}
                       {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
                     </td>
@@ -836,6 +843,23 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             </tbody>
           </table>
         </div>
+        {lineMenu && (() => {
+          const l = lineMenu.line
+          const f = figures.lines.find((x) => x.line.id === l.id)
+          const billed = data.applications.some((a) => (data.billed.get(a.id)?.get(l.id)?.this_period ?? 0) || (data.billed.get(a.id)?.get(l.id)?.stored ?? 0))
+          return (
+            <LineMenu at={lineMenu} onClose={() => setLineMenu(null)} title={[l.item_no, l.description].filter(Boolean).join(' ')}
+              items={[l.is_heading
+                ? { label: 'Make this a line item', note: l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value counts again.` : 'It starts with no scheduled value.' }
+                : { label: 'Make this a heading', note: billed
+                  ? `It has been billed on (${money(f?.toDate ?? 0)} to date on this application); as a heading that leaves the totals. Making it a line item again brings it back.`
+                  : l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value leaves the total until it is a line item again.` : undefined }]}
+              onPick={async () => {
+                setLineMenu(null)
+                try { await setSovLine(l.id, { is_heading: !l.is_heading }); onChanged() } catch (e) { onTrouble(message(e)) }
+              }} />
+          )
+        })()}
         {roundMenu && (
           <RoundMenu at={roundMenu} way={rounding[roundMenu.col]} onClose={() => setRoundMenu(null)}
             onPick={async (w) => {
@@ -927,6 +951,32 @@ const ROUND_SAYS: Record<RoundWay | 'exact', string> = {
   exact: 'Exact, to the cent', nearest: 'Rounded to the nearest whole dollar', up: 'Rounded up to a whole dollar', down: 'Rounded down to a whole dollar',
 }
 const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: '↓' }
+
+/** Right-click on a line of the schedule of values. */
+function LineMenu({ at, title, items, onPick, onClose }: {
+  at: { x: number; y: number }
+  title: string
+  items: { label: string; note?: string }[]
+  onPick: (i: number) => void
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const off = (e: Event) => { if (!(e.target as Element)?.closest?.('.pay-round-menu')) onClose() }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('pointerdown', off); window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('pointerdown', off); window.removeEventListener('keydown', key) }
+  }, [onClose])
+  return (
+    <div className="pay-round-menu pay-line-menu" role="menu" style={{ left: Math.min(at.x, window.innerWidth - 300), top: at.y + 4 }}>
+      <div className="muted small pay-round-title">{title}</div>
+      {items.map((it, i) => (
+        <button key={it.label} role="menuitem" onClick={() => onPick(i)}>
+          {it.label}{it.note && <span className="muted small pay-line-note">{it.note}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /** Right-click on a column heading: how the contractor rounds that column. */
 function RoundMenu({ at, way, onPick, onClose }: {

@@ -3524,3 +3524,8 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-against-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 @media (max-width: 900px) { .sheet-viewer.docked { width: 100%; z-index: 50; } html.pdf-docked .content { margin-right: 0; } }
 .pay-read-all { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.pay-read-head { display: block; color: var(--muted); cursor: pointer; margin-top: 2px; }
+.pay-read-new.heading td { background: var(--wash); }
+.pay-line-menu { max-width: 300px; }
+.pay-line-note { display: block; margin-top: 2px; white-space: normal; }
+.pay-703-name { cursor: context-menu; }
