@@ -11,6 +11,24 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 18:10 CST (adding missed lines to a change order; change order warnings)
+
+- **Selecting without a mode.** Shift-, ctrl- or ⌘-clicking a line on the G703 starts a selection
+  (the Select lines bar appears); right-clicking a selected line acts on all of them.
+- **"Add to change order".** The right-click menu lists every change order in the change register
+  ("Add these 3 lines to CO-001 — Sitework changes", with its approval date, amount and how many
+  lines it has already); every group of change order lines marked here without a register entry,
+  by approval date; and "Mark as change order lines, approved <this application's period>". Adding
+  to a register change order ties the lines to it (`change_order_id`) and takes its date, which also
+  stops the register offering it as a new line. Headings, line items and "not a change order" are
+  in the same menu.
+- **Warnings.** The comparison card says when the contractor's cover sheet has change orders on
+  line 2 and no line here is marked as a change order line, or the marked lines total something
+  else. The sheet says when lines are named like change order lines ("CO 1 …") but aren't marked,
+  with a button to select them. And when a register change order's lines don't add up to its
+  amount in the register.
+Browser checks `checks/t_heading.py`, `checks/t_beside.py`.
+
 # Checkpoint — 2026-11-23, 17:55 CST (side by side: both scroll)
 
 With the contractor's PDF docked beside an application, the application could not be scrolled: the

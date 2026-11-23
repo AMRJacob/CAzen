@@ -16,6 +16,11 @@ with sync_playwright() as p:
     items=pg.locator('.pay-703 tbody td.pay-703-item'); items.nth(0).click(); items.nth(1).click(modifiers=['Shift'])
     print('selected:',pg.inner_text('.pay-pick-tools strong'))
     pg.click('button:has-text("Mark as change order lines")'); pg.wait_for_timeout(800); print('bulk saved:',patched)
+    pg.click('button:has-text("Done")'); patched.clear()
+    names=pg.locator('.pay-703 tbody td.pay-703-name'); names.nth(0).click(modifiers=['Shift']); names.nth(1).click(modifiers=['Shift'])
+    print('shift-selected without select mode:',pg.inner_text('.pay-pick-tools strong'))
+    names.nth(1).click(button='right'); pg.wait_for_selector('.pay-line-menu'); print('selection menu:',pg.inner_text('.pay-line-menu').replace('\n',' | ')[:500])
+    pg.click('.pay-line-menu button:has-text("CO-001")'); pg.wait_for_timeout(800); print('added to the register change order:',patched)
     b.close()
 
 # Pasting a schedule: a row that reads like a line is ticked as a heading.

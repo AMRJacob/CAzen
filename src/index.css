@@ -3582,3 +3582,4 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-703-wrap.picking .pay-703-item { white-space: nowrap; user-select: none; }
 .pay-703 tr.picked td { background: var(--moss-soft); }
 .sheet-viewer.docked, .sheet-viewer.docked * { overscroll-behavior: contain; }
+.pay-co-warn { margin: 6px 0 10px; }

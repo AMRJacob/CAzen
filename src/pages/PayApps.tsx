@@ -598,6 +598,14 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
+  // The register's change orders, for adding lines to.
+  const [changeOrders, setChangeOrders] = useState<RegisterRow[]>([])
+  const projectOf = (data.contract as unknown as { project_id: string }).project_id
+  useEffect(() => {
+    let live = true
+    listRegister(projectOf, ['change_order']).then((r) => { if (live) setChangeOrders(r.filter((x) => x.kind === 'change_order')) }).catch(() => {})
+    return () => { live = false }
+  }, [projectOf])
   // Selecting several lines at once: to say which are change order lines, or headings.
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -618,7 +626,17 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     })
     lastPick.current = id
   }
-  const pickCell = (id: string) => (picking ? { onClick: (e: React.MouseEvent) => { e.preventDefault(); pick(id, e.shiftKey) }, style: { cursor: 'pointer' } } : {})
+  // In select mode a click selects; at any other time shift-, ctrl- or ⌘-click starts a selection.
+  const pickCell = (id: string) => ({
+    onClick: (e: React.MouseEvent) => {
+      if (picking || e.shiftKey || e.metaKey || e.ctrlKey) {
+        e.preventDefault()
+        if (!picking) { setPicking(true); setPicked(new Set()); lastPick.current = null }
+        pick(id, e.shiftKey)
+      }
+    },
+    ...(picking ? { style: { cursor: 'pointer' } } : {}),
+  })
   const pickBox = (id: string) => (picking ? <input type="checkbox" className="pay-pick-box" checked={picked.has(id)} readOnly tabIndex={-1} aria-label="Selected" /> : null)
   async function bulk(patch: Record<string, unknown>) {
     setPickBusy(true)
@@ -747,7 +765,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       </div>
 
       {beside && <PdfPreview bytes={beside} title={pdf?.file ?? `Application ${app.number} — contractor’s PDF`} flow docked onClose={() => setBeside(null)} />}
-      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening}
+      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening} coHere={g.changeOrders}
         onBeside={() => (beside ? setBeside(null) : void showBeside())} onAttach={(f) => void attachPdf(f)} onForget={async () => {
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
       }} />}
@@ -792,13 +810,36 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               setEdits({}); onChanged()
             }} />
         )}
+        {(() => {
+          const named = data.lines.filter((l) => !l.is_heading && !l.change_order_id && /^(?:c\.?\s?o\.?|change\s*order)\s*#?\s*\d+\b/i.test(l.description.trim()))
+          if (!named.length) return null
+          return (
+            <div className="notice warn">
+              <span>{named.length} {named.length === 1 ? 'line is' : 'lines are'} named like change order lines ({named.slice(0, 3).map((l) => l.item_no ?? l.description).join(', ')}{named.length > 3 ? '…' : ''}) but {named.length === 1 ? 'isn’t' : 'aren’t'} marked as change orders, so line 2 of the cover sheet leaves {named.length === 1 ? 'it' : 'them'} out.</span>
+              <div className="notice-actions"><button onClick={() => { setPicking(true); setPicked(new Set(named.map((l) => l.id))) }}>Select {named.length === 1 ? 'it' : 'them'}</button></div>
+            </div>
+          )
+        })()}
+        {changeOrders.map((co) => {
+          // A change order's lines here against its amount in the change register.
+          const ls = data.lines.filter((l) => l.change_order_id === co.id && !l.is_heading)
+          const cost = changeCost(co)
+          if (!ls.length || cost == null) return null
+          const total = Math.round(ls.reduce((n, l) => n + l.scheduled_value, 0) * 100) / 100
+          if (Math.abs(total - cost) < 0.005) return null
+          return (
+            <div key={co.id} className="notice warn">
+              {co.number ?? 'A change order'}’s {ls.length} {ls.length === 1 ? 'line totals' : 'lines total'} {money(total)}; the change register has it at {money(cost)}.
+            </div>
+          )
+        })}
         <div className="pay-pick-bar">
           {!picking
-            ? <button className="link small" onClick={() => { setPicking(true); setPicked(new Set()) }}>Select lines</button>
+            ? <span className="muted small"><button className="link small" onClick={() => { setPicking(true); setPicked(new Set()) }}>Select lines</button> — or shift-click lines, then right-click them</span>
             : (
               <div className="pay-pick-tools">
                 <strong>{picked.size} {picked.size === 1 ? 'line' : 'lines'} selected</strong>
-                <span className="muted small">Click to select; shift-click selects everything between.</span>
+                <span className="muted small">Click to select; shift-click selects everything between; right-click a selected line for what to do with them.</span>
                 <span className="pay-pick-actions">
                   <label className="small">approved on <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)} aria-label="Change order approved on" /></label>
                   <button className="primary-lite" disabled={!picked.size || pickBusy} onClick={() => void bulk({ is_change_order: true, approved_on: pickDate || null })}>Mark as change order lines</button>
@@ -845,7 +886,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 return (
                   <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`}>
                     <td className="mono pay-703-item" {...pickCell(l.id)}>{pickBox(l.id)}{l.item_no ?? ''}</td>
-                    <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
+                    <td className="pay-703-name" {...pickCell(l.id)} onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
                       {l.description}
                       {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
                     </td>
@@ -900,18 +941,58 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         </div>
         {lineMenu && (() => {
           const l = lineMenu.line
-          const f = figures.lines.find((x) => x.line.id === l.id)
-          const billed = data.applications.some((a) => (data.billed.get(a.id)?.get(l.id)?.this_period ?? 0) || (data.billed.get(a.id)?.get(l.id)?.stored ?? 0))
+          // A right-click on a selected line acts on the whole selection; on any other line, on that line.
+          const ids = picked.has(l.id) && picked.size > 1 ? data.lines.filter((x) => picked.has(x.id)).map((x) => x.id) : [l.id]
+          const many = ids.length > 1
+          const these = many ? `these ${ids.length} lines` : 'this line'
+          const billedOn = (id: string) => data.applications.some((a) => (data.billed.get(a.id)?.get(id)?.this_period ?? 0) || (data.billed.get(a.id)?.get(id)?.stored ?? 0))
+          const actions: { label: string; note?: string; run: () => Promise<void> }[] = []
+          const patchAll = (patch: Record<string, unknown>) => async () => { for (const id of ids) await setSovLine(id, patch as never) }
+          // The change orders it could be added to: the register's, and lines marked here without one.
+          for (const co of changeOrders) {
+            const day = (co.issued_at ?? '').slice(0, 10)
+            const has = data.lines.filter((x) => x.change_order_id === co.id).length
+            actions.push({
+              label: `Add ${these} to ${co.number ?? 'change order'}${co.title ? ` — ${co.title}` : ''}`,
+              note: `From the change register${day ? `, approved ${usDate(day)}` : ''}${has ? `; ${has} ${has === 1 ? 'line' : 'lines'} on it already` : ''}${changeCost(co) != null ? `; ${money(changeCost(co)!)}` : ''}.`,
+              run: patchAll({ change_order_id: co.id, is_change_order: true, approved_on: day || null }),
+            })
+          }
+          const groups = new Map<string, number>()
+          for (const x of data.lines) if (x.change_order_id === 'unlinked' && !ids.includes(x.id)) groups.set(x.approved_on ?? '', (groups.get(x.approved_on ?? '') ?? 0) + 1)
+          for (const [day, n] of groups) {
+            actions.push({
+              label: `Add ${these} to the change order lines approved ${day ? usDate(day) : 'with no date'}`,
+              note: `${n} ${n === 1 ? 'line is' : 'lines are'} marked that way already.`,
+              run: patchAll({ is_change_order: true, change_order_id: null, approved_on: day || null }),
+            })
+          }
+          actions.push({
+            label: `Mark ${these} as ${many ? 'change order lines' : 'a change order line'}, approved ${usDate(app.period_to)}`,
+            note: 'This application’s period: the change order summary counts them as approved this month.',
+            run: patchAll({ is_change_order: true, change_order_id: null, approved_on: app.period_to }),
+          })
+          if (ids.some((id) => data.lines.find((x) => x.id === id)?.change_order_id)) {
+            actions.push({ label: `${many ? 'They are' : 'It is'} not a change order`, run: patchAll({ is_change_order: false, change_order_id: null }) })
+          }
+          if (many) {
+            actions.push({ label: 'Make them headings', note: ids.some(billedOn) ? 'Some have been billed on; as headings that leaves the totals until they are line items again.' : undefined, run: patchAll({ is_heading: true }) })
+            actions.push({ label: 'Make them line items', run: patchAll({ is_heading: false }) })
+          } else if (l.is_heading) {
+            actions.push({ label: 'Make this a line item', note: l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value counts again.` : 'It starts with no scheduled value.', run: patchAll({ is_heading: false }) })
+          } else {
+            const f = figures.lines.find((x) => x.line.id === l.id)
+            actions.push({ label: 'Make this a heading', note: billedOn(l.id)
+              ? `It has been billed on (${money(f?.toDate ?? 0)} to date on this application); as a heading that leaves the totals. Making it a line item again brings it back.`
+              : l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value leaves the total until it is a line item again.` : undefined, run: patchAll({ is_heading: true }) })
+          }
           return (
-            <LineMenu at={lineMenu} onClose={() => setLineMenu(null)} title={[l.item_no, l.description].filter(Boolean).join(' ')}
-              items={[l.is_heading
-                ? { label: 'Make this a line item', note: l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value counts again.` : 'It starts with no scheduled value.' }
-                : { label: 'Make this a heading', note: billed
-                  ? `It has been billed on (${money(f?.toDate ?? 0)} to date on this application); as a heading that leaves the totals. Making it a line item again brings it back.`
-                  : l.scheduled_value ? `Its ${money(l.scheduled_value)} scheduled value leaves the total until it is a line item again.` : undefined }]}
-              onPick={async () => {
+            <LineMenu at={lineMenu} onClose={() => setLineMenu(null)}
+              title={many ? `${ids.length} selected lines` : [l.item_no, l.description].filter(Boolean).join(' ')}
+              items={actions.map(({ label, note }) => ({ label, note }))}
+              onPick={async (i) => {
                 setLineMenu(null)
-                try { await setSovLine(l.id, { is_heading: !l.is_heading }); onChanged() } catch (e) { onTrouble(message(e)) }
+                try { await actions[i].run(); onChanged() } catch (e) { onTrouble(message(e)) }
               }} />
           )
         })()}
@@ -959,7 +1040,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach }: {
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, coHere }: {
+  /** Line 2 as CAzen has it: the change order lines on this application. */
+  coHere: number
   pdf: import('../lib/payCompare').PdfRead
   diffs: Discrepancy[]
   onForget: () => void
@@ -995,6 +1078,20 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach 
         {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
         applications; only this period and stored were taken from the PDF.
       </p>
+      {(() => {
+        // The cover sheet's change orders with nothing (or not enough) here to show for them.
+        const theirs = pdf.g702?.changeOrders
+        if (theirs == null || Math.abs(theirs - coHere) < 0.005) return null
+        return (
+          <div className="notice warn pay-co-warn">
+            <strong>The contractor’s cover sheet has {money(theirs)} of change orders (line 2)</strong>
+            {Math.abs(coHere) < 0.005
+              ? <> and no line here is marked as a change order line.</>
+              : <>; the lines marked as change order lines here total {money(coHere)}.</>}
+            {' '}Lines are marked by selecting them (shift-click) and right-clicking.
+          </div>
+        )
+      })()}
       {!diffs.length
         ? <p className="pay-read-ok">Every figure on the contractor’s PDF agrees with CAzen’s arithmetic.</p>
         : (
