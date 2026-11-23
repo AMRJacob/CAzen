@@ -39,5 +39,8 @@ with sync_playwright() as p:
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_timeout(1200)
     pg.click('button:has-text("New application")'); pg.set_input_files('.pay-new input[type=file]','g703.pdf'); pg.wait_for_selector('.pay-read-card',timeout=60000)
     print('empty contract says:',pg.inner_text('.pay-read-card p')[:150]); print('button:',pg.inner_text('.pay-read-card button.primary'))
+    allbox=pg.locator('.pay-read-all input'); allbox.uncheck(); print('all unticked →',pg.inner_text('.pay-read-card button.primary'))
+    pg.locator('.pay-read-new input[type=checkbox]').first.check(); print('one ticked → indeterminate:',allbox.evaluate('e=>e.indeterminate'))
+    allbox.check(); print('all ticked →',pg.inner_text('.pay-read-card button.primary'))
     pg.click('.pay-read-card button.primary'); pg.wait_for_timeout(1200)
     print('lines added:',[(l.get('item_no'),l['description'],l['scheduled_value']) for l in added]); print('billed:',[(x['this_period'],x['stored']) for x in billed],'| errors:',errs); b.close()

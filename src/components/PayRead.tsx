@@ -177,7 +177,17 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
             {checks && <ReadChecks checks={checks} number={number} listed={extra.length > 0} />}
             <div className="pay-read-table">
               <table>
-                <thead><tr>{extra.length > 0 && <th title="Add to the schedule of values">Add</th>}<th>Item</th><th>Description</th><th className="right">From previous</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
+                <thead><tr>{extra.length > 0 && (
+                  <th title="Add to the schedule of values">
+                    <label className="pay-read-all">
+                      <input type="checkbox" checked={adds.size === extra.length}
+                        ref={(el) => { if (el) el.indeterminate = adds.size > 0 && adds.size < extra.length }}
+                        aria-label="Add every line the PDF has that is not in the schedule of values"
+                        onChange={(e) => setAdds(e.target.checked ? new Set(extra.map((_, i) => i)) : new Set())} />
+                      {' '}Add
+                    </label>
+                  </th>
+                )}<th>Item</th><th>Description</th><th className="right">From previous</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
                 <tbody>
                   {lines.map((k) => {
                     const r = byId.get(k.id)

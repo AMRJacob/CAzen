@@ -11,6 +11,11 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:45 CST (check-all for lines to add)
+
+The Add column in the pay-read review window has a box in its heading that ticks or unticks every
+line the PDF has that isn't in the schedule of values; it shows a dash when only some are ticked.
+
 # Checkpoint — 2026-11-23, 16:40 CST (the contractor's PDF side by side with the figures)
 
 When figures are put in from a PDF, the PDF itself is now kept with the project's files (11 Pay

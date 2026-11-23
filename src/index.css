@@ -3523,3 +3523,4 @@ html.pdf-docked .content { width: auto; max-width: none; margin-right: min(46vw,
 html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-against-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 @media (max-width: 900px) { .sheet-viewer.docked { width: 100%; z-index: 50; } html.pdf-docked .content { margin-right: 0; } }
+.pay-read-all { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
