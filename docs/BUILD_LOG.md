@@ -11,6 +11,45 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 14:05 CST (Observations tabs: All / General / Field Notes / Punch list)
+
+Jacob, 13:26, confused by *One visit* vs *Punch list* and the issue information; 13:32: "maybe
+All / General / Field Notes / Punch List". His answers: **General** is an observation made in the
+Observations book; **Field Notes** picks one page.
+
+- **All** — every observation. **General** — made in the Observations book, or on a drawing; not
+  on a field-notes page. **Field Notes** — a list of the field-notes pages (newest first, "Fri,
+  Nov 20 · title"), the chosen page's observations, and *Open the page*, which opens the book at
+  that page (`#/field-notes/reports?page=<id>`). **Punch list** — unchanged: open items whose
+  *type* is a punch type, from anywhere; its note now names those types (in the database,
+  *Working punch* and *Closeout punch*).
+- **One visit is gone**, and with it the Observations page's *Write the field report* for a day:
+  the report is made from the page (*Make the field report*), which is where *Open the page* goes.
+- **An observation made on a notebook page now records the page** — `observations.visit_id`,
+  migration **`0045_observation_page`** (one nullable column, cleared if the page is torn out).
+  One rule decides which page an observation is on, used by the tab, by the notebook page's own
+  list and by *Tear out* (`pageOf`, `src/lib/obsPages.ts`): the recorded page if there is one;
+  otherwise, for an observation made before the link existed (before 14:00 CST today,
+  `LINKED_SINCE`), the page being written at the time, as before; otherwise General.
+- **0045 is written and NOT applied** — refused from this session, as 0044 was (neither is in the
+  database: checked). Until it is, `visit_id` is neither asked for nor sent (`canLinkPages`), and
+  every observation is placed by time — so *General* holds only what was made before the first
+  page, and what is made in the Observations book while a page is the latest counts as that
+  page's. An observation made on a page in the meantime is never given its page afterwards.
+- **Not changed, and part of what was confusing**: an observation has a *type* (the row of chips:
+  Non-conforming, Needs clarification, Progress, Working punch, Closeout punch) — the only thing
+  that puts it on the punch list — and, separately, a *trade tag* with that trade's preset
+  "issues", which set the drawing mark and fill in the name but are not stored as anything. Left
+  for Jacob to decide.
+
+Checks: `checks/obspages.test.ts`; `checks/t_obstabs.py` (and `t_obstabs.py premig`): the four
+tabs over four observations — one linked to a page, one old one placed by time, one made in the
+book since, one closed punch — the page list and each page's observations, *Open the page* landing
+on that page with the same observation, an observation made on the page sent with its page and
+one made in the book without. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-23, 13:30 CST (a fresh invitation link opens under the person)
 
 **New link opens under that person's row** (Jacob, 13:24: it was odd for the link and email to
@@ -65,6 +104,8 @@ of the top or bottom of the page scrolls the page under it. `checks/t_arrange_re
 the bottom edge the page scrolls about 450 px at desk and tablet size and the block lands lower
 down. **That check drives a mouse**: the swipe-to-scroll and the pill-only pickup by a real finger
 were not driven.
+
+---
 
 # Checkpoint — 2026-11-23 (notebook pages arranged by their writer)
 

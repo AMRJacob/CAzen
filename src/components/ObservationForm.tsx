@@ -37,13 +37,15 @@ const LAST_TYPE = 'cazen.pref.lastObservationType'
  * fills in are what it is and what kind of thing it is. Everything else is there when it
  * matters and out of the way when it doesn't.
  */
-export function ObservationForm({ project, types, existing, pin, day, onSaved, onCancel, onTrouble, onMark }: {
+export function ObservationForm({ project, types, existing, pin, day, visitId, onSaved, onCancel, onTrouble, onMark }: {
   /** Told the mark the observation would wear, as the kind of tag is chosen — so a tag being
    *  placed on a sheet behind the form can wear it too. */
   onMark?: (m: Mark | null) => void
   /** The day it was seen, when it is being added to a visit that has one. */
   day?: string
   project: ProjectStore
+  /** The notebook page it is being made on, when it is made on one. */
+  visitId?: string
   types: ObservationType[]
   existing?: Observation
   /** Where on a sheet it was raised, when it was raised from one. */
@@ -132,6 +134,7 @@ export function ObservationForm({ project, types, existing, pin, day, onSaved, o
           sheetId: spot?.sheetId ?? null,
           revisionId: spot?.revisionId || null,
           region: regionNow(),
+          visitId,
         })
         await saveObservation(row)
         if (typeId) writePref(LAST_TYPE, typeId)

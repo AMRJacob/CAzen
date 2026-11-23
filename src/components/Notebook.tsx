@@ -16,6 +16,8 @@ import {
   type Observation, type ObservationType,
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
+import { madeAt, pageOf } from '../lib/obsPages'
+import { canLinkPages } from '../lib/observations'
 import {
   canHoldLocation, clockTime, coverOf, longDay, setVisit, shortDay, startVisit,
   type SiteVisit, type VisitKind,
@@ -85,7 +87,11 @@ export function Notebook({ project, kind, pages, onPages }: {
 }) {
   const navigate = useNavigate()
   /** null is the contents page. */
-  const [at, setAt] = useState<string | null>(null)
+  // Opened at a page when the link says which (the Observations book's Field Notes tab does).
+  const [at, setAt] = useState<string | null>(() => {
+    const want = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('page')
+    return want && pages.some((p) => p.id === want) ? want : null
+  })
   const [turn, setTurn] = useState<'fwd' | 'back'>('fwd')
   const [paper] = useState<Paper>(() => readPref<Paper>(paperKey(kind), 'lines'))
   const [error, setError] = useState<string | null>(null)
@@ -110,9 +116,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   const [choosing, setChoosing] = useState<'delete' | 'duplicate' | null>(null)
   const removing = choosing !== null
   const askTear = (p: SiteVisit) => {
-    const from = startOf(p), to = nextStart(pages, p)
-    const made = (o: Observation) => Date.parse(o.created_at) || Date.parse(`${o.observed_on}T12:00:00`)
-    setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => made(o) >= from && (to === null || made(o) < to)) : [] })
+    setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => pageOf(o, pages, canLinkPages()) === p.id) : [] })
   }
   useEffect(() => {
     if (!tearing) return
@@ -223,7 +227,7 @@ export function Notebook({ project, kind, pages, onPages }: {
       {error && <button className="notice error nb-error" onClick={() => setError(null)} title="Dismiss">{error}<span aria-hidden="true"> ×</span></button>}
       {page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar} adds={adds}
-          until={nextStart(pages, page)}
+          pages={pages}
           earlier={pages.filter((x) => x.id !== page.id).flatMap((x) => linesOf(x.names))}
           observations={observations} types={types}
           onObserved={(o) => setObservations((all) => [o, ...all.filter((x) => x.id !== o.id)])}
@@ -387,14 +391,14 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents
  * photographs above the observations. A meeting's page is the same sheet without the right-hand
  * column. Everything is on the one page; nothing is behind a tab.
  */
-function Page({ project, page, turn, bar, adds, until, earlier, observations, types, onObserved, onChanged, onTear, onTrouble }: {
+function Page({ project, page, turn, bar, adds, pages, earlier, observations, types, onObserved, onChanged, onTear, onTrouble }: {
   project: Project
   page: SiteVisit
   turn: 'fwd' | 'back'
   bar: React.ReactNode
   adds: React.RefObject<PageAdds>
   /** When the next page of this book was started, if there is one: what was seen after that is its. */
-  until: number | null
+  pages: SiteVisit[]
   /** Attendee lines from the book's other pages. */
   earlier: string[]
   observations: Observation[]
@@ -610,9 +614,9 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   // On the page itself: what was seen while this page was the one being written, and then —
   // under a line — what was seen before it and is still open.
   const began = startOf(page)
-  const madeAt = (o: Observation) => { const t = Date.parse(o.created_at); return Number.isNaN(t) ? Date.parse(`${o.observed_on}T12:00:00`) : t }
-  const own = visit ? observations.filter((o) => madeAt(o) >= began && (until === null || madeAt(o) < until)).sort((a, b) => madeAt(a) - madeAt(b)) : []
-  const before = visit ? observations.filter((o) => madeAt(o) < began && o.status !== 'closed').sort((a, b) => madeAt(b) - madeAt(a)) : []
+  // Which page an observation is on is the same question the Observations book's Field Notes tab asks (src/lib/obsPages.ts).
+  const own = visit ? observations.filter((o) => pageOf(o, pages, canLinkPages()) === page.id).sort((a, b) => madeAt(a) - madeAt(b)) : []
+  const before = visit ? observations.filter((o) => madeAt(o) < began && o.status !== 'closed' && !own.includes(o)).sort((a, b) => madeAt(b) - madeAt(a)) : []
   const cover = visit ? coverOf(page, photosOf(seen)) : null
 
   if (photoPad) {
@@ -841,7 +845,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
       {observing && (
         <div className="nb-light nb-sheet" role="dialog" aria-label="Observation" onClick={() => setObserving(null)}>
           <div className="nb-sheet-in" onClick={(e) => e.stopPropagation()}>
-            <ObservationForm project={project} types={types} known={observations} day={page.visited_on}
+            <ObservationForm project={project} types={types} known={observations} day={page.visited_on} visitId={page.id}
               existing={observing === 'new' ? undefined : observing}
               onSaved={(o, another) => { onObserved(o); if (!another) setObserving(null) }}
               onCancel={() => setObserving(null)} onTrouble={onTrouble} />
@@ -865,12 +869,6 @@ function freshWidgets(w: Widgets | undefined): Widgets {
 function startOf(v: SiteVisit): number {
   const t = Date.parse(`${v.visited_on}T${v.visited_at ?? '00:00:00'}`)
   return Number.isNaN(t) ? 0 : t
-}
-/** The start of the page that follows this one in the book, if any. */
-function nextStart(pages: SiteVisit[], page: SiteVisit): number | null {
-  const mine = startOf(page)
-  const later = pages.filter((p) => p.id !== page.id).map(startOf).filter((t) => t > mine)
-  return later.length ? Math.min(...later) : null
 }
 
 // ---------- Who was there ----------

@@ -13,6 +13,8 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_arrange_premig.py  # the same before migration 0044: kept on the device, new blocks greyed
     python3 t_noscroll.py      # a full notebook page: nothing scrolls inside a block
     python3 t_arrange_reach.py # arranging a page longer than the screen: edge scrolling, touch settings
+    python3 t_obstabs.py       # Observations tabs: All, General, Field Notes (one page), Punch list; "premig" for before 0045
+    node --experimental-strip-types obspages.test.ts   # which field-notes page an observation is on
     node --experimental-strip-types layout.test.ts     # the notebook page grid
     python3 t_frames.py 4      # dropped frames while zooming and panning a hatch-heavy sheet
     python3 t_markup.py        # Delete, undo, and the question on leaving markup

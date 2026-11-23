@@ -51,6 +51,27 @@ export interface Observation {
   created_by: string | null
   created_at: string
   updated_at: string
+  /** The field-notes page it was made on (migration 0045); absent or null for one made elsewhere. */
+  visit_id?: string | null
+}
+
+/**
+ * Whether observations can carry the page they were made on. The column arrives with migration
+ * 0045; until then it is neither asked for nor sent, and pages are matched by time.
+ */
+const LINK_KEY = 'cazen.observations.visitLink'
+let linkKnown: boolean | null = (() => {
+  try { const v = localStorage.getItem(LINK_KEY); return v === null ? null : v === '1' } catch { return null }
+})()
+let linkAsked = false
+export const canLinkPages = () => linkKnown === true
+async function lookForLink(): Promise<void> {
+  if (linkAsked || !navigator.onLine) return
+  const { error } = await db().from('observations').select('visit_id').limit(1)
+  if (error && !(error as { code?: string }).code) return
+  linkAsked = true
+  linkKnown = !error
+  try { localStorage.setItem(LINK_KEY, linkKnown ? '1' : '0') } catch { /* private mode */ }
 }
 
 const COLUMNS =
@@ -101,8 +122,9 @@ export async function listObservations(projectId: string): Promise<Observation[]
   if (held && !navigator.onLine) return here.sort(byDate)
 
   try {
+    await lookForLink().catch(() => {})
     const { data, error } = await db()
-      .from('observations').select(COLUMNS).eq('project_id', projectId)
+      .from('observations').select(COLUMNS + (linkKnown ? ', visit_id' : '')).eq('project_id', projectId)
       .order('observed_on', { ascending: false })
     if (error) throw error
     const theirs = (data ?? []) as unknown as Observation[]
@@ -141,6 +163,8 @@ export function buildObservation(o: {
   region?: Region | null
   photos?: string[]
   by?: string | null
+  /** The notebook page it is being made on. */
+  visitId?: string | null
 }): Observation {
   const now = new Date().toISOString()
   return {
@@ -163,6 +187,8 @@ export function buildObservation(o: {
     created_by: o.by ?? null,
     created_at: now,
     updated_at: now,
+    // Sent only to a database that has the column, or the whole row would be refused.
+    ...(linkKnown && o.visitId ? { visit_id: o.visitId } : {}),
   }
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Navigate, NavLink, useParams } from 'react-router-dom'
+import { Navigate, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { TagMark } from '../components/TagMark'
 import { glowOf, markOf } from '../lib/tags'
@@ -10,15 +10,15 @@ import { usDate } from '../lib/dates'
 import { listRegister, type RegisterRow } from '../lib/issued'
 import { listMarks, listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind, type PadMark } from '../lib/pads'
 import {
-  asReport, editObservation, listObservations, listTypes, nameOf, onDay, photosOf, punchList,
-  STATUS_LABELS, watchObservations,
+  editObservation, listObservations, listTypes, nameOf, punchList,
+  STATUS_LABELS, watchObservations, canLinkPages,
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
 import { Notebook } from '../components/Notebook'
-import { listVisits, type SiteVisit, type VisitKind } from '../lib/visits'
+import { listVisits, shortDay, type SiteVisit, type VisitKind } from '../lib/visits'
+import { pageOf, startOf } from '../lib/obsPages'
 import { Photos } from '../components/Photos'
-import { today } from '../lib/dates'
 import type { Project } from '../lib/types'
 import { openFile } from '../lib/files'
 import { useProject } from '../lib/project'
@@ -351,10 +351,15 @@ function Observations() {
   const [error, setError] = useState<string | null>(null)
   const [writing, setWriting] = useState(false)
   const [editing, setEditing] = useState<Observation | null>(null)
-  const [view, setView] = useState<'all' | 'day' | 'punch'>('all')
-  const [day, setDay] = useState(today())
-  /** The day whose observations are being written up, while that is happening. */
-  const [reporting, setReporting] = useState<string | null>(null)
+  /**
+   * All; General — made in this book (or on a sheet), not on a notebook page; Field Notes — one
+   * field-notes page's, chosen from a list; Punch list. (Jacob, 11/23: in place of Everything /
+   * One visit / Punch list.)
+   */
+  const [view, setView] = useState<'all' | 'general' | 'page' | 'punch'>('all')
+  const navigate = useNavigate()
+  const [pages, setPages] = useState<SiteVisit[]>([])
+  const [pageId, setPageId] = useState<string | null>(null)
 
   const projectId = current?.id
   const load = useCallback(() => {
@@ -363,6 +368,13 @@ function Observations() {
   }, [projectId])
   useEffect(() => { load() }, [load])
   useEffect(() => { listTypes().then(setTypes).catch(() => setTypes([])) }, [])
+  useEffect(() => {
+    if (!projectId) return
+    listVisits(projectId, 'visit').then((p) => {
+      const newest = [...p].sort((x, y) => startOf(y) - startOf(x))
+      setPages(newest); setPageId((id) => id ?? newest[0]?.id ?? null)
+    }).catch(() => setPages([]))
+  }, [projectId])
 
   // Two people walking the same building, neither writing down what the other already has.
   useEffect(() => {
@@ -378,47 +390,13 @@ function Observations() {
 
   const shown = useMemo(() => {
     const list = all ?? []
-    if (view === 'day') return onDay(list, day)
+    const linked = canLinkPages()
+    if (view === 'general') return list.filter((o) => pageOf(o, pages, linked) === null)
+    if (view === 'page') return pageId ? list.filter((o) => pageOf(o, pages, linked) === pageId) : []
     if (view === 'punch') return punchList(list, types)
     return list
-  }, [all, view, day, types])
-
-  const days = useMemo(
-    () => [...new Set((all ?? []).map((o) => o.observed_on))].sort().reverse(),
-    [all])
-
-  if (reporting) {
-    const items = onDay(all ?? [], reporting)
-    return (
-      <section>
-        <div className="page-head">
-          <div>
-            <PageTitle>Field report</PageTitle>
-            <p className="lead">
-              Written from the {items.length} {items.length === 1 ? 'observation' : 'observations'} of{' '}
-              {usDate(reporting)}. Edit it as you like — the observations themselves are untouched.
-            </p>
-          </div>
-          <button onClick={() => setReporting(null)}>Back to the observations</button>
-        </div>
-        <IssueForm key={reporting} kind="field_report" prefill={{
-          'fr.date': usDateOf(new Date(`${reporting}T12:00:00`)),
-          'fr.observations': asReport(items, types),
-        }} />
-        {photosOf(items).length > 0 && current && (
-          <div className="card">
-            <h3>The photographs from that day</h3>
-            <p className="muted small">
-              {photosOf(items).length} taken with the observations above. They are in the project's
-              files under Field Reports.
-            </p>
-            <Photos project={current} paths={photosOf(items)} about="Field report"
-              editable={false} onChange={() => {}} onTrouble={setError} />
-          </div>
-        )}
-      </section>
-    )
-  }
+  }, [all, view, pages, pageId, types])
+  const page = pages.find((p) => p.id === pageId) ?? null
 
   if (current && (writing || editing)) {
     return (
@@ -453,35 +431,35 @@ function Observations() {
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''}
-          onClick={() => setView('all')}>Everything</button>
-        <button role="tab" aria-selected={view === 'day'} className={view === 'day' ? 'on' : ''}
-          onClick={() => setView('day')}>One visit</button>
+          onClick={() => setView('all')}>All</button>
+        <button role="tab" aria-selected={view === 'general'} className={view === 'general' ? 'on' : ''}
+          onClick={() => setView('general')}>General</button>
+        <button role="tab" aria-selected={view === 'page'} className={view === 'page' ? 'on' : ''}
+          onClick={() => setView('page')}>Field Notes</button>
         <button role="tab" aria-selected={view === 'punch'} className={view === 'punch' ? 'on' : ''}
           onClick={() => setView('punch')}>Punch list</button>
       </div>
 
-      {view === 'day' && (
-        <div className="set-actions">
-          <label className="inline-field">Seen on
-            <select value={day} onChange={(e) => setDay(e.target.value)}>
-              {days.length ? days.map((d) => <option key={d} value={d}>{usDate(d)}</option>)
-                : <option value={day}>{usDate(day)}</option>}
-            </select>
-          </label>
-          <span className="muted small">
-            {shown.length} {shown.length === 1 ? 'observation' : 'observations'} — what a field report of that day is made of.
-          </span>
-          {shown.length > 0 && (
-            <button className="primary-lite" onClick={() => setReporting(day)}>
-              Write the field report
-            </button>
-          )}
-        </div>
+      {view === 'general' && (
+        <p className="muted small">Made here, or on a drawing — not on a field-notes page.</p>
+      )}
+      {view === 'page' && (
+        !pages.length ? <p className="muted small">No field-notes pages yet.</p> : (
+          <div className="set-actions">
+            <label className="inline-field">Page
+              <select value={pageId ?? ''} onChange={(e) => setPageId(e.target.value)}>
+                {pages.map((p) => <option key={p.id} value={p.id}>{shortDay(p.visited_on)}{p.title ? ` · ${p.title}` : ''}</option>)}
+              </select>
+            </label>
+            <span className="muted small">{shown.length} {shown.length === 1 ? 'observation' : 'observations'} made on this page.</span>
+            {page && <button className="primary-lite" onClick={() => navigate(`/field-notes/reports?page=${page.id}`)}>Open the page</button>}
+          </div>
+        )
       )}
       {view === 'punch' && (
         <p className="muted small">
-          Everything still open that was raised under a type that belongs on a punch list. Nothing is
-          copied here; closing one closes it everywhere.
+          Open items whose type is a punch type ({types.filter((t) => t.is_punch).map((t) => t.name).join(' or ') || 'none set'}),
+          from anywhere. Nothing is copied here; closing one closes it everywhere.
         </p>
       )}
 
