@@ -11,6 +11,19 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 14:40 CST (title case in the navigation)
+
+**Menu labels and page headings capitalise their important words** (Jacob, 14:30). Sidebar:
+Project Manual, Change Documents, Pay Applications, Construction Schedule; the notebooks Field Notes
+and Meeting Notes (book covers and the open book's heading); the phone menu likewise (Pay Apps).
+Every page heading goes through `titleCase` (`src/lib/titleCase.ts`) in `PageTitle`: Applications
+for Payment, Review and Return, Form Templates, New Proposal Request. Short joining words (and, for,
+of, the, to…) stay small unless they lead; capitals already there are kept, so the "New …" headings
+no longer lower-case their form name first — "New RFI Response", where it read "New rfi response".
+Buttons, section headings inside pages and body text are unchanged. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-23, 14:35 CST (a section number that comes in twice)
 
 **Repeated sections are shown side by side above the upload list** (Jacob, 14:21, choosing this

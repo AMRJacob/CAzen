@@ -131,7 +131,7 @@ function Reports({ area }: { area: 'reports' | 'meetings' }) {
       <section>
         <div className="page-head">
           <div>
-            <PageTitle>New {FORM_LABELS[kind].toLowerCase()}</PageTitle>
+            <PageTitle>New {FORM_LABELS[kind]}</PageTitle>
             <p className="lead">On your firm’s template. It fills itself in, numbers itself and is kept with the project.</p>
           </div>
           <button onClick={() => { setWriting(false); setFrom(null); load() }}>Back to the list</button>

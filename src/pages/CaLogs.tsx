@@ -103,7 +103,7 @@ export default function CaLogs() {
       <section>
         <div className="page-head">
           <div>
-            <PageTitle>New {FORM_LABELS[writing].toLowerCase()}</PageTitle>
+            <PageTitle>New {FORM_LABELS[writing]}</PageTitle>
             <p className="lead">On your firm’s template. It fills itself in, numbers itself and is kept with the project.</p>
           </div>
           <button onClick={() => { setWriting(null); load() }}>Back to the register</button>

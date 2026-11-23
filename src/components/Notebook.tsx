@@ -50,8 +50,8 @@ type Paper = typeof PAPERS[number]
 const paperKey = (kind: VisitKind) => `cazen.pref.notebookPaper.${kind}`
 
 const BOOK: Record<VisitKind, { title: string; page: string; exportAs: string }> = {
-  visit: { title: 'Field notes', page: 'visit', exportAs: 'Make the field report' },
-  meeting: { title: 'Meeting notes', page: 'meeting', exportAs: 'Make the meeting notes' },
+  visit: { title: 'Field Notes', page: 'visit', exportAs: 'Make the field report' },
+  meeting: { title: 'Meeting Notes', page: 'meeting', exportAs: 'Make the meeting notes' },
 }
 
 /** What a photograph's overlay pad is called, so it can be found again from the photograph. */

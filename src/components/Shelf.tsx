@@ -6,8 +6,8 @@ import { NavLink } from 'react-router-dom'
  * cover. In the sidebar it is the menu itself, small; the book that is open is lifted.
  */
 const BOOKS: { mono: string; name: string; to: string; tone: string; line: string }[] = [
-  { mono: 'Fn', name: 'Field notes', to: '/field-notes/reports', tone: 'fn', line: 'Site visits' },
-  { mono: 'Mn', name: 'Meeting notes', to: '/field-notes/meetings', tone: 'mn', line: 'Meetings' },
+  { mono: 'Fn', name: 'Field Notes', to: '/field-notes/reports', tone: 'fn', line: 'Site visits' },
+  { mono: 'Mn', name: 'Meeting Notes', to: '/field-notes/meetings', tone: 'mn', line: 'Meetings' },
   { mono: 'Ob', name: 'Observations', to: '/field-notes/observations', tone: 'ob', line: 'Everything observed, and the punch list' },
 ]
 
