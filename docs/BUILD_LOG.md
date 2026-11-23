@@ -11,6 +11,25 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:15 CST (UCA CW Loop App 5: a "CO 1" row, a wrapped name)
+
+Jacob's June application (Kinco, scanned, 83 lines over three continuation sheets) against the 13
+lines on record:
+- **Line 50, "CO 1", was missing.** A row with no figures at all was only offered when the contract
+  had no schedule of values. It is now always offered, and starts ticked as a heading when the
+  contract already has lines (or when it reads "CO 1" / "Change Order 2"); untick it if it is a line
+  not yet billed.
+- **Line 79's wrapped "Bond" went onto line 80.** Which way names wrap was decided by comparing with
+  the schedule of values on record, and with nothing to compare (all new lines) it defaulted to
+  joining the line below. Now the words break the tie, counted over the whole sheet: a name ending
+  "&", "and", "of", "-" and so on, or a wrapped line starting in lower case, runs on downward; the
+  reverse runs upward. Line 45 ("North & South Plant Payment &" / "Performance Bond") settles it for
+  this sheet, so 79 reads "CO1 Payment & Performance Bond" and 80 "CO 1 General Liability".
+  Wrapped bits with fewer than three letters ("Co") are ignored.
+- **"59, Misc Flashings & Sealants"**: an item number read into the name is taken off once the
+  item numbers are settled; a leading ":" speck likewise.
+Test added to `checks/payread.test.ts`. Jacob's January application still reads as before.
+
 # Checkpoint — 2026-11-23, 17:00 CST (making a line a heading)
 
 A heading can look like any other line, so it can now be marked as one in three places:

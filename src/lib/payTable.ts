@@ -427,6 +427,8 @@ export function readTable(pages: PlacedWord[][]): TableRead {
         else text.unshift(...inCol)
       }
       const name = text.map((w) => w.text).join(' ').replace(/^[[|{]+/, '').replace(/\s+/g, ' ').trim()
+        // The item number read again at the start of the name ("59, Misc Flashings"), and scan specks.
+        .replace(item ? new RegExp(`^${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[.,:;)\\]]*\\s+`) : /^$/, '').replace(/^[:;.,'`]+/, '')
       const s = settle(read, {}, dotless)
       rows.push({
         page: pi + 1, item, name, kind: /\btotals?\b/i.test(name) && !item ? 'total' : 'line',
@@ -462,6 +464,8 @@ export function readTable(pages: PlacedWord[][]): TableRead {
     if (prev != null && next === prev + 2 && mine !== prev + 1 && (r.item != null || itemlessLooksNumbered(r))) {
       r.item = String(prev + 1); r.itemFixed = true
     }
+    // An item number read into the name, its own column having been missed: "59, Misc Flashings".
+    if (r.item) r.name = r.name.replace(new RegExp(`^${r.item}[.,:;)\\]]*\\s+`), '')
   }
   // What should be there and is not.
   const missing: string[] = []

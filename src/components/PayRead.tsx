@@ -73,7 +73,13 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
       if (!out.found && !(onAddLines && more.length)) { setError('None of this PDF’s rows could be matched to the schedule of values. Is it this contract’s application?'); return }
       // A contract with no schedule of values yet takes the PDF's lines as its schedule of values.
       setExtra(onAddLines ? more : [])
-      setAdds(new Set(sov.length ? [] : more.map((_, i) => i))); setHeads(new Set())
+      setAdds(new Set(sov.length ? [] : more.map((_, i) => i)))
+      // A row with no figures at all, among lines that have them, is taken for a heading to begin
+      // with ("CO 1" over the change order's lines); untick it if it is a line yet to be billed.
+      const bare = (x: Extra) => !x.scheduled && !x.previous && !x.this_period && !x.stored
+      setHeads(new Set(more.map((x, i) => [x, i] as const)
+        .filter(([x]) => bare(x) && (sov.length > 0 || /^(c\.?\s?o\.?|change\s*order)\s*#?\s*\d+$/i.test(x.name.trim())))
+        .map(([, i]) => i)))
       setRows(out.rows); setEdits({}); setSeen(new Set()); setOpen(false)
     } catch (e) { setError(message(e)) } finally { setBusy(null); if (file.current) file.current.value = '' }
   }

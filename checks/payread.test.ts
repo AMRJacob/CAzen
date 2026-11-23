@@ -25,3 +25,12 @@ const r = readPayLines([
 assert.deepEqual(r.rows.map((x) => [x.id, x.found, x.this_period, x.stored, !!x.unsure]), [['a', true, 100000, 0, false], ['b', true, 150000, 25000, false], ['c', true, 0, 0, false], ['d', false, 0, 0, false]])
 assert.equal(r.found, 3)
 console.log('payread: 12 checks pass')
+{ // A wrapped name joins the row whose words run on ("Payment &" + "Performance Bond"), with nothing on record to judge by; a figure-less row is still offered.
+  const { matchTable } = await import('../src/lib/payRead.ts')
+  const row = (item: string, name: string, C: number, y: number) => ({ page: 1, item, name, kind: 'line' as const, read: { C, D: 0, E: 0, F: 0, G: 0, H: C }, value: { C, D: 0, E: 0, F: 0, G: 0, H: C }, mended: [], text: name, y })
+  const t = { rows: [row('44', 'Contingency', 100, 10), row('45', 'Plant Payment &', 200, 20), row('46', 'General Liability', 300, 40), row('50', 'CO 1', 0, 50)], pages: 1, missing: [], totals: [],
+    wraps: [{ text: 'Performance Bond', above: 1, below: 2 }, { text: 'Co', above: 0, below: 1 }] }
+  const m = matchTable(t as any, [])
+  const names = m.extra.map((x) => `${x.item} ${x.name}`)
+  console.log(JSON.stringify(names) === JSON.stringify(['44 Contingency', '45 Plant Payment & Performance Bond', '46 General Liability', '50 CO 1']) ? 'ok   wrap joins the row that runs on; figure-less row offered' : 'FAIL wrap ' + JSON.stringify(names))
+}

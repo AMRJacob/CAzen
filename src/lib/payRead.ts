@@ -181,7 +181,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       const m = new Map(names)
       for (const w of table.wraps) {
         const k = way === 'up' ? w.below : w.above
-        if (k == null || /copyright|aia document|contract documents/i.test(w.text) || /^([A-I]\s*){1,9}$/.test(w.text.trim())) continue
+        if (k == null || /copyright|aia document|contract documents/i.test(w.text) || /^([A-I]\s*){1,9}$/.test(w.text.trim()) || w.text.replace(/[^A-Za-z]/g, '').length < 3) continue
         const r = table.rows[k]
         if (r.kind !== 'line') continue
         m.set(r, way === 'up' ? `${w.text} ${m.get(r)}` : `${m.get(r)} ${w.text}`)
@@ -191,7 +191,25 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       return { m, score }
     }
     const up = tryWay('up'), down = tryWay('down')
-    for (const [r, n] of (up.score >= down.score ? up : down).m) names.set(r, n)
+    // With nothing on record to judge by (or nothing to tell them apart), the words decide: a name
+    // that ends "Payment &" runs on below; a wrapped line that ends "&" or starts in lower case
+    // runs on the other way. The sheet wraps one way throughout, so the cues are counted together.
+    let way: 'up' | 'down' = up.score >= down.score ? 'up' : 'down'
+    if (Math.abs(up.score - down.score) < 1e-9) {
+      const RUNS_ON = /(?:&|\band|\bor|\bof|\bfor|\bto|\bthe|\bat|[-/,(])\s*$/i
+      let votes = 0
+      for (const w of table.wraps) {
+        const above = w.above != null ? table.rows[w.above] : null
+        const below = w.below != null ? table.rows[w.below] : null
+        if (above && RUNS_ON.test(names.get(above) ?? above.name)) votes++
+        if (/^[a-z]/.test(w.text.trim())) votes++
+        if (RUNS_ON.test(w.text)) votes--
+        if (below && /^[a-z]/.test((names.get(below) ?? below.name).trim())) votes--
+      }
+      if (votes > 0) way = 'down'
+      else if (votes < 0) way = 'up'
+    }
+    for (const [r, n] of (way === 'up' ? up : down).m) names.set(r, n)
   }
 
   const taken = new Set<TableRow>()
@@ -250,7 +268,9 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
 
   const extra: Extra[] = lines
     // With nothing on record, every line is the schedule of values to be — a $0 line included.
-    .filter((r) => !taken.has(r) && (!known.length || r.value.C || r.value.D || r.value.E || r.value.F))
+    // A row with no figures at all is offered too: on a sheet with a schedule of values it is most
+    // likely a heading ("CO 1" over the change order's lines), and is offered as one.
+    .filter((r) => !taken.has(r))
     .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value) }))
 
   // A column total that disagrees with its lines, where one row accounts for the difference.
