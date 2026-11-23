@@ -1348,6 +1348,17 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 }
 .upload-cover-note { grid-column: 1 / -1; line-height: 1.5; }
 .cover-cell { text-align: center; }
+/* What a page of an upload is: drawing, cover or manual. The two that aren't drawings are tinted
+   so a change document's parts can be told apart down a long list. */
+.role-cell { min-width: 92px; }
+.role-cell.role-cover { background: color-mix(in srgb, var(--moss) 12%, white); }
+.role-cell.role-spec { background: color-mix(in srgb, #8a7a5a 14%, white); }
+.pv-strip .pv-role select { padding: 5px 6px; }
+.change-manual { margin: 14px 0; }
+.change-manual h3 { margin: 0 0 4px; font-size: 15px; }
+.change-manual table { width: 100%; }
+.change-manual td { vertical-align: top; }
+.change-manual .cell.mono { width: 92px; }
 @media (max-width: 899px) { .desk-only { display: none; } }
 
 

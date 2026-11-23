@@ -106,6 +106,8 @@ export async function saveManual(
   issuance: { kind: IssuanceKind; number: string; issuedOn: string },
   sections: SectionToSave[],
   onProgress?: (done: number, total: number, section: string) => void,
+  /** File the sections under an issuance already made — a change document's drawings went in first. */
+  into?: string,
 ): Promise<{ id: string; added: number; revised: number }> {
   const client = db()
   const projectId = project.id
@@ -118,18 +120,23 @@ export async function saveManual(
   }
   const setFolder = `${issuance.issuedOn} ${issuance.number || kindLabel[issuance.kind]}`
 
-  const { data: iss, error: issErr } = await client
-    .from('issuances')
-    .insert({
-      project_id: projectId,
-      kind: issuance.kind,
-      number: issuance.number || null,
-      issued_on: issuance.issuedOn,
-      created_by: userId,
-    })
-    .select('id')
-    .single()
-  if (issErr) throw issErr
+  let iss: { id: string }
+  if (into) iss = { id: into }
+  else {
+    const made = await client
+      .from('issuances')
+      .insert({
+        project_id: projectId,
+        kind: issuance.kind,
+        number: issuance.number || null,
+        issued_on: issuance.issuedOn,
+        created_by: userId,
+      })
+      .select('id')
+      .single()
+    if (made.error) throw made.error
+    iss = made.data as { id: string }
+  }
 
   let added = 0
   let revised = 0

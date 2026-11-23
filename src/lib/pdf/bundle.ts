@@ -93,3 +93,20 @@ export async function joinPages(pages: Uint8Array[]): Promise<Uint8Array> {
   }
   return out.save()
 }
+
+/**
+ * A section put back together after an addendum reissued some of its pages: the current section's
+ * pages and the new ones, in the order `order` gives (from splicePages in changeDoc.ts).
+ */
+export async function assemble(old: Uint8Array, incoming: Uint8Array[], order: { from: 'old' | 'new'; i: number }[]): Promise<Uint8Array> {
+  const out = await PDFDocument.create()
+  const oldDoc = await PDFDocument.load(old, { ignoreEncryption: true })
+  const newDocs = await Promise.all(incoming.map((b) => PDFDocument.load(b, { ignoreEncryption: true })))
+  for (const o of order) {
+    const [p] = o.from === 'old'
+      ? await out.copyPages(oldDoc, [o.i])
+      : await out.copyPages(newDocs[o.i], [0])
+    out.addPage(p)
+  }
+  return out.save()
+}

@@ -20,7 +20,7 @@ import {
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
-import { listIssuanceSheets } from '../lib/sheets'
+import { listIssuanceSheets, setNameFor } from '../lib/sheets'
 import { byNumberLabel, disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
@@ -31,6 +31,9 @@ import { useClickAway } from '../lib/clickAway'
 import { joinPages } from '../lib/pdf/bundle'
 import { putFile, SECTIONS } from '../lib/files'
 import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
+import { classifyPages, countOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
+import { ChangeManual, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
+import { saveManual } from '../lib/manual'
 import { useColumnWidths } from '../components/ResizableColumns'
 
 /** The drawings register's columns, in order, for the widths a person can set by hand. */
@@ -818,8 +821,12 @@ interface Draft {
   /** Set once this sheet has been reduced, so it can be put back. */
   full?: { bytes: Uint8Array; before: number; after: number; note: string }
   include: boolean
-  /** This page is the cover or narrative of the change document, not a drawing. */
-  cover?: boolean
+  /**
+   * What the page is: a drawing, the cover or narrative of the change document, or a page of the
+   * project manual. Sorted when the file is read (classifyPages); changed by hand per page.
+   */
+  role: PageRole
+  roleByHand?: boolean
   number: string
   title: string
   revision: string
@@ -832,6 +839,23 @@ interface Draft {
   unsure?: boolean
   /** Fields typed by hand: kept when templates change. */
   touched: { number?: boolean; title?: boolean; revision?: boolean; date?: boolean }
+}
+
+/** Sort pages into cover, manual and drawings; a page sorted by hand stays where it was put. */
+function sortRoles(list: Draft[]): Draft[] {
+  const roles = classifyPages(list.map((d) => ({ text: d.page.text, readByTemplate: !!d.templateId })))
+  return list.map((d, i) => (d.roleByHand || d.role === roles[i] ? d : { ...d, role: roles[i] }))
+}
+
+const ROLE_LABEL: Record<PageRole, string> = { sheet: 'Drawing', cover: 'Cover', spec: 'Manual' }
+
+/** Which part of the upload a page is, as a select. */
+function RolePick({ value, onChange, label }: { value: PageRole; onChange: (r: PageRole) => void; label: string }) {
+  return (
+    <select className={`cell role-cell role-${value}`} value={value} aria-label={label} onChange={(e) => onChange(e.target.value as PageRole)}>
+      {(Object.keys(ROLE_LABEL) as PageRole[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+    </select>
+  )
 }
 
 export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
@@ -848,11 +872,18 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   // The sets already on this project, so the next one can be named without being asked for.
   const [sets, setSets] = useState<{ kind: IssuanceKind; number: string | null }[]>([])
   const [namedByHand, setNamedByHand] = useState(false)
+  // What the change document's cover says it is, and which of the fields it filled have since
+  // been typed over (those are left alone when the cover is read again).
+  const [coverRead, setCoverRead] = useState<CoverReading | null>(null)
+  const [byHand, setByHand] = useState<{ kind?: boolean; date?: boolean; subject?: boolean }>({})
+  const [subject, setSubject] = useState('')
   useEffect(() => { existingSets(project.id).then(setSets).catch(() => setSets([])) }, [project.id])
   useEffect(() => {
     if (namedByHand) return
-    setNumber(suggestSetName(kind, sets))
-  }, [kind, sets, namedByHand])
+    // The number on the cover, written the way this project writes its sets; else the next one.
+    const n = countOf(coverRead?.number ?? null)
+    setNumber(n != null && coverRead?.kind === kind ? setNameFor(kind, n, sets) : suggestSetName(kind, sets))
+  }, [kind, sets, namedByHand, coverRead])
   const [issuedOn, setIssuedOn] = useState(today())
   const [setRev, setSetRev] = useState('')
   const [drafts, setDrafts] = useState<Draft[]>([])
@@ -888,10 +919,26 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
     }
   }), [])
 
-  useEffect(() => { setDrafts((ds) => reread(ds, templates, preferred)) }, [templates, preferred, reread])
+  useEffect(() => { setDrafts((ds) => sortRoles(reread(ds, templates, preferred))) }, [templates, preferred, reread])
   // Files dropped before the templates loaded are read with whatever is current when they finish.
   const tplRef = useRef({ templates, preferred })
   tplRef.current = { templates, preferred }
+
+  // Cover, manual or drawing, page by page. A page whose part was chosen by hand keeps it.
+  const setRole = (i: number, role: PageRole) =>
+    setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, role, roleByHand: true } : x)))
+
+  // The cover read again whenever which pages make it up changes; fields typed by hand stay.
+  const coverKey = drafts.filter((d) => d.include && d.role === 'cover').map((d) => d.pageIndex).join(',')
+  useEffect(() => {
+    const pages = drafts.filter((d) => d.include && d.role === 'cover').map((d) => d.page.text)
+    const r = pages.length ? readCover(pages) : null
+    setCoverRead(r)
+    if (!r) return
+    if (r.kind && !byHand.kind) setKind(r.kind)
+    if (r.date && !byHand.date) setIssuedOn(r.date)
+    if (r.subject && !byHand.subject) setSubject(r.subject)
+  }, [coverKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const [dragOver, setDragOver] = useState(false)
 
@@ -911,9 +958,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
         bytesTotal += file.size
       }
       setSizeWarning(sizeCheck(bytesTotal, pages))
-      setDrafts(reread(pages.map((p) => ({
-        pageIndex: p.pageIndex, page: p, include: true, number: '', title: '', revision: '', date: '', templateId: null, touched: {},
-      })), tplRef.current.templates, tplRef.current.preferred))
+      setDrafts(sortRoles(reread(pages.map((p) => ({
+        pageIndex: p.pageIndex, page: p, include: true, role: 'sheet' as PageRole, number: '', title: '', revision: '', date: '', templateId: null, touched: {},
+      })), tplRef.current.templates, tplRef.current.preferred)))
       setStep('review')
     } catch (err) {
       setError(message(err))
@@ -1011,7 +1058,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   const pageSizes = drafts.map((d) => d.page.text.width * d.page.text.height).sort((a, b) => a - b)
   const median = pageSizes.length ? pageSizes[Math.floor(pageSizes.length / 2)] : 0
   const smallPages = median > 1_000_000
-    ? drafts.map((d, i) => [i, d] as const).filter(([, d]) => d.page.text.width * d.page.text.height < median * 0.5)
+    ? drafts.map((d, i) => [i, d] as const).filter(([, d]) => d.role === 'sheet' && d.page.text.width * d.page.text.height < median * 0.5)
     : []
   const smallStillIn = smallPages.filter(([, d]) => d.include)
   const inches1 = (pts: number) => Number((pts / 72).toFixed(1))
@@ -1054,12 +1101,25 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   // The date column only appears when a template is looking for one, since most sheets take
   // the set's date and a column of empty boxes is a column in the way.
   const datesRead = templates.some((t) => t.regions.date) || drafts.some((d) => d.date)
-  const covers = drafts.filter((d) => d.include && d.cover)
-  const chosen = drafts.filter((d) => d.include && !d.cover)
+  const covers = drafts.filter((d) => d.include && d.role === 'cover')
+  const chosen = drafts.filter((d) => d.include && d.role === 'sheet')
+  // The manual pages, remade only when which pages they are changes: typing a sheet number must
+  // not re-cut the manual.
+  const specKey = drafts.filter((d) => d.include && d.role === 'spec').map((d) => `${d.pageIndex}:${d.page.bytes.length}`).join(',')
+  const specPages = useMemo<SpecPageIn[]>(
+    () => drafts.filter((d) => d.include && d.role === 'spec').map((d) => ({ at: d.pageIndex, text: d.page.text, bytes: d.page.bytes })),
+    [specKey],  // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const [manualPlan, setManualPlan] = useState<ManualPlan | null>(null)
+  const sections = specPages.length ? manualPlan?.sections ?? [] : []
+  const manualProblem = specPages.length ? (manualPlan ? manualPlan.problem : 'Reading the manual pages…') : null
+
   const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
   const numbers = chosen.map((d) => d.number.trim().toUpperCase())
   const duplicates = new Set(numbers.filter((n, i) => n && numbers.indexOf(n) !== i))
   const missing = chosen.filter((d) => !d.number.trim()).length
+  const sheetTrouble = chosen.length > 0 && (missing > 0 || duplicates.size > 0)
+  const nothing = chosen.length === 0 && sections.length === 0 && covers.length === 0
   const readByTemplate = chosen.filter((d) => d.templateId).length
   const tplName = (id: string | null) => templates.find((t) => t.id === id)?.name
   const firstUnread = drafts.findIndex((d) => d.include && !d.templateId)
@@ -1076,7 +1136,19 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
         sheetDate: d.date || null,
         bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
-      const saved = await saveIssuance(project, { kind, number, issuedOn }, out, (done, total) => setProgress(`${done} of ${total}`))
+      const saved = await saveIssuance(project, { kind, number, issuedOn, title: subject }, out, (done, total) => setProgress(`${done} of ${total}`))
+
+      // The manual pages go in under the same issuance, so the change document carries its
+      // sections as well as its sheets.
+      if (saved?.id && sections.length) {
+        const built = []
+        for (const [k, sec] of sections.entries()) {
+          setProgress(`putting together ${sec.number} (${k + 1} of ${sections.length})`)
+          built.push(await sec.build())
+        }
+        await saveManual(project, { kind, number, issuedOn }, built,
+          (done, total, sec) => setProgress(`manual ${done} of ${total}${sec ? ` · ${sec}` : ''}`), saved.id)
+      }
 
       // Uploading sheets as an ASI or a PR is issuing that ASI or PR, so the entry in the change
       // register is made here rather than typed again afterwards — with the cover that came up
@@ -1104,7 +1176,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
           // called "ASI 003" is ASI-003.
           await documentForIssuance({
             projectId: project.id, issuanceId: saved.id, kind,
-            name: number || ISSUANCE_LABELS[kind], issuedOn, filePath: coverPath,
+            name: number || ISSUANCE_LABELS[kind], issuedOn, filePath: coverPath, title: subject,
           }).catch((e: unknown) => {
             setError(`The sheets went in, but the change register entry didn’t: ${message(e)}`)
           })
@@ -1143,11 +1215,12 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
 
   return (
     <div className="card upload-panel">
-      <h2>Upload a set or revised sheets</h2>
-      <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.</p>
+      <h2>Upload a set, revised sheets or a change document</h2>
+      <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.
+        A change document can come as one PDF — cover, project manual pages and drawings — and each page is sorted into its part.</p>
       <div className="form four">
         <label>Issued as
-          <select value={kind} onChange={(e) => setKind(e.target.value as IssuanceKind)}>
+          <select value={kind} onChange={(e) => { setByHand((b) => ({ ...b, kind: true })); setKind(e.target.value as IssuanceKind) }}>
             {(Object.entries(ISSUANCE_LABELS) as [IssuanceKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
@@ -1155,12 +1228,21 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
           <input value={number} placeholder="Addendum 2, ASI-003, Rev 1…"
             onChange={(e) => { setNamedByHand(true); setNumber(e.target.value) }} />
         </label>
-        <label>Issue date<input type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} /></label>
+        <label>Issue date<input type="date" value={issuedOn} onChange={(e) => { setByHand((b) => ({ ...b, date: true })); setIssuedOn(e.target.value) }} /></label>
+        <label>Subject<input value={subject} placeholder="Revised storefront head detail"
+          onChange={(e) => { setByHand((b) => ({ ...b, subject: true })); setSubject(e.target.value) }} /></label>
         {/* What this upload will do beyond putting sheets in, said before it does it. */}
         {(DOCUMENT_FOR[kind] || covers.length > 0) && (
           <p className="muted small upload-cover-note">
             {DOCUMENT_FOR[kind] && (
               <>This goes in Change documents as <strong>{number || ISSUANCE_LABELS[kind]}</strong>, with these sheets attached to it.{' '}</>
+            )}
+            {coverRead && (coverRead.kind || coverRead.number || coverRead.date || coverRead.subject) && (
+              <>Read from the cover: {[
+                coverRead.kind && `${ISSUANCE_LABELS[coverRead.kind]}${coverRead.number ? ` ${coverRead.number}` : ''}`,
+                coverRead.date && usDate(coverRead.date),
+                coverRead.subject && `“${coverRead.subject}”`,
+              ].filter(Boolean).join(' · ')}.{' '}</>
             )}
             {covers.length > 0
               ? <>{covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the cover, so {covers.length === 1 ? 'it is' : 'they are'} kept with the set rather than filed as {covers.length === 1 ? 'a drawing' : 'drawings'}{DOCUMENT_FOR[kind] ? ' and attached to that entry' : ''}.</>
@@ -1235,6 +1317,11 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             </div>
           )}
 
+          {specPages.length > 0 && (
+            <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
+              onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))} />
+          )}
+
           <div className="tb-bar">
             <div>
               <strong>Title blocks</strong>{' '}
@@ -1262,7 +1349,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>Page</th><th>View</th><th title="The cover sheet or narrative, filed as the document rather than as a drawing">Cover</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Sheet date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th>View</th><th title="A drawing; the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Sheet date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -1280,17 +1367,15 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                       <PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} />
                     </td>
                     <td className="cover-cell">
-                      <input type="checkbox" checked={!!d.cover}
-                        aria-label={`Page ${d.pageIndex + 1} is the cover, not a drawing`}
-                        onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, cover: e.target.checked } : x)))} />
+                      <RolePick value={d.role} onChange={(r) => setRole(i, r)} label={`What page ${d.pageIndex + 1} is`} />
                     </td>
-                    <td><input className={`cell mono ${d.include && !d.cover && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
-                      disabled={!!d.cover} onChange={(e) => type(i, 'number', e.target.value)} placeholder="A-201" /></td>
-                    <td><input className="cell" value={d.title} disabled={!!d.cover} onChange={(e) => type(i, 'title', e.target.value)} /></td>
-                    <td><input className="cell mono rev-cell" value={d.revision} disabled={!!d.cover}
+                    <td><input className={`cell mono ${d.include && d.role === 'sheet' && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.role === 'sheet' ? d.number : ''}
+                      disabled={d.role !== 'sheet'} onChange={(e) => type(i, 'number', e.target.value)} placeholder={d.role === 'sheet' ? 'A-201' : ''} /></td>
+                    <td><input className="cell" value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet'} onChange={(e) => type(i, 'title', e.target.value)} /></td>
+                    <td><input className="cell mono rev-cell" value={d.role === 'sheet' ? d.revision : ''} disabled={d.role !== 'sheet'}
                       onChange={(e) => type(i, 'revision', e.target.value)} aria-label={`Revision mark on page ${d.pageIndex + 1}`} /></td>
                     {datesRead && (
-                      <td><input className="cell date-cell" type="date" value={d.date} disabled={!!d.cover}
+                      <td><input className="cell date-cell" type="date" value={d.role === 'sheet' ? d.date : ''} disabled={d.role !== 'sheet'}
                         onChange={(e) => type(i, 'date', e.target.value)} aria-label={`Date on page ${d.pageIndex + 1}`} /></td>
                     )}
                     <td className="small nowrap size-cell">
@@ -1308,7 +1393,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                       )}
                     </td>
                     <td className="small read-by">
-                      {d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : templates.length === 0 ? (
+                      {d.role !== 'sheet' ? <span className="muted">{d.role === 'cover' ? 'filed as the document' : 'filed into its section, below'}</span> : d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : templates.length === 0 ? (
                         d.number === COVER && !d.touched.number
                           ? <span className="muted" title="No sheet number in its title block, and it lists other sheets">cover sheet</span>
                           : <button className="link" onClick={() => setEditing({ page: i })}>{d.number ? 'guessed · ' : ''}draw template</button>
@@ -1332,17 +1417,22 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                         </>
                       )}
                     </td>
-                    <td className="small">{!d.include ? 'skip' : !n ? <span className="bad-text">needs number</span> : duplicates.has(n) ? <span className="bad-text">duplicate</span> : existingNumbers.has(n) ? 'replaces current' : 'new sheet'}</td>
+                    <td className="small">{!d.include ? 'skip' : d.role === 'cover' ? 'cover' : d.role === 'spec' ? 'manual' : !n ? <span className="bad-text">needs number</span> : duplicates.has(n) ? <span className="bad-text">duplicate</span> : existingNumbers.has(n) ? 'replaces current' : 'new sheet'}</td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
           <div className="actions">
-            <button className="primary" onClick={save} disabled={step === 'saving' || missing > 0 || duplicates.size > 0 || chosen.length === 0}>
-              {step === 'saving' ? `Saving ${progress}…` : `Save ${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}`}
+            <button className="primary" onClick={save} disabled={step === 'saving' || sheetTrouble || nothing || !!manualProblem}>
+              {step === 'saving' ? `Saving ${progress}…` : `Save ${[
+                chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '',
+                sections.length ? `${sections.length} manual ${sections.length === 1 ? 'section' : 'sections'}` : '',
+                covers.length && !chosen.length && !sections.length ? 'the cover' : '',
+              ].filter(Boolean).join(' and ')}`}
             </button>
             <button onClick={onCancel} disabled={step === 'saving'}>Cancel</button>
+            {manualProblem && step !== 'saving' && <span className="muted small">{manualProblem}</span>}
             {chosen.length > 0 && <span className="muted small">{chosen.filter((d) => existingNumbers.has(d.number.trim().toUpperCase())).length} replace current sheets · {chosen.filter((d) => d.number.trim() && !existingNumbers.has(d.number.trim().toUpperCase())).length} new</span>}
           </div>
         </>
@@ -1370,26 +1460,24 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                     onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} />
                   Include
                 </label>
-                <label className="pv-check">
-                  <input type="checkbox" checked={!!d.cover}
-                    onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, cover: e.target.checked } : x)))} />
-                  Cover
+                <label className="pv-field pv-role">Part
+                  <RolePick value={d.role} onChange={(r) => setRole(i, r)} label="What this page is" />
                 </label>
                 <label className="pv-field pv-number">Sheet no.
-                  <input className="mono" value={d.number} disabled={!!d.cover} placeholder="A-201"
+                  <input className="mono" value={d.role === 'sheet' ? d.number : ''} disabled={d.role !== 'sheet'} placeholder="A-201"
                     onChange={(e) => type(i, 'number', e.target.value)} />
                 </label>
                 <label className="pv-field pv-title">Title
-                  <input value={d.title} disabled={!!d.cover}
+                  <input value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet'}
                     onChange={(e) => type(i, 'title', e.target.value)} />
                 </label>
                 <label className="pv-field pv-rev">Rev. mark
-                  <input value={d.revision} disabled={!!d.cover}
+                  <input value={d.role === 'sheet' ? d.revision : ''} disabled={d.role !== 'sheet'}
                     onChange={(e) => type(i, 'revision', e.target.value)} />
                 </label>
                 {datesRead && (
                   <label className="pv-field pv-date">Sheet date
-                    <input type="date" value={d.date} disabled={!!d.cover}
+                    <input type="date" value={d.role === 'sheet' ? d.date : ''} disabled={d.role !== 'sheet'}
                       onChange={(e) => type(i, 'date', e.target.value)} />
                   </label>
                 )}

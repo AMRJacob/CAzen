@@ -240,8 +240,15 @@ export async function documentForIssuance(args: {
   name: string
   issuedOn: string
   filePath?: string | null
+  /** The subject, where the cover gave one. */
+  title?: string | null
 }): Promise<void> {
   const formKind = DOCUMENT_FOR[args.kind]
+  const title = args.title?.trim() || null
+  const subjectKey: Partial<Record<string, string>> = { asi: 'asi.title', pr: 'pr.title', ccd: 'ccd.title', change_order: 'co.title' }
+  const values: Record<string, string> = {}
+  const key = formKind ? subjectKey[formKind] : undefined
+  if (title && key) values[key] = title
   if (!formKind) return
   const { data: u } = await db().auth.getUser()
   const { error } = await db().from('issued_forms').insert({
@@ -249,8 +256,8 @@ export async function documentForIssuance(args: {
     issuance_id: args.issuanceId,
     kind: formKind,
     number: args.name || null,
-    title: null,
-    values: {},
+    title,
+    values,
     file_path: args.filePath ?? null,
     issued_by: u.user?.id ?? null,
     issued_at: new Date(`${args.issuedOn}T12:00:00`).toISOString(),

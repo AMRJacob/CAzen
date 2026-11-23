@@ -512,7 +512,17 @@ export function suggestSetName(kind: IssuanceKind, existing: SetName[]): string 
   // Follow on from the highest number already in use, so deleting the second of three doesn't
   // hand the next upload a name somebody is already holding.
   const highest = used.reduce((n, i) => Math.max(n, numberIn(i.number) ?? 0), 0)
-  const next = Math.max(highest, used.length) + 1
+  return setNameFor(kind, Math.max(highest, used.length) + 1, existing)
+}
+
+/**
+ * A set's name for a number already known — the one printed on a change document's cover —
+ * written the way the project writes the rest: ASI 3 is "ASI-003" on a job whose ASIs read that way.
+ */
+export function setNameFor(kind: IssuanceKind, next: number, existing: SetName[]): string {
+  const word = KIND_WORD[kind]
+  if (kind === 'bid_set' || kind === 'conformed_set') return word
+  const used = existing.filter((i) => i.kind === kind)
 
   // This category's own last numbered set is the format to copy, wording and all. Failing that,
   // the last numbered set of any category, with its own word swapped for this one's.

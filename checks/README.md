@@ -26,6 +26,8 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_access.py        # people and access: list, per-project access, invite
     python3 t_relink.py        # a fresh link for someone listed opens under their row; each copy names only them
     python3 t_repeats.py       # a section number bound in twice: keep one, combine, renumber (repeat_spec.pdf)
+    python3 t_changedoc.py     # a change document as one PDF: cover, manual pages into their sections, drawings (change_doc.pdf)
+    node --experimental-strip-types changedoc.test.ts  # sorting a change document's pages, reading its cover, splicing manual pages
     python3 t_sched.py         # read a scanned schedule (scan.pdf), tie it to pay lines, keep it
     node --experimental-strip-types notes.test.ts      # where a typed note is filed
     node --experimental-strip-types schedule.test.ts   # the schedule reader and the tie suggestions

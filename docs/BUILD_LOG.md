@@ -11,6 +11,56 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:25 CST (a change document as one PDF: cover, manual pages, drawings)
+
+**Uploading a change document sorts its pages** (Jacob, 16:11: ASIs, addenda and the like arrive
+as one PDF holding a cover, project manual sections and drawing sheets; read the spec pages'
+headers and footers for numbering and replacement, and the document's details from the cover).
+On Drawings → *Upload a set, revised sheets or a change document*:
+
+- **Each page is given a part** — *Drawing*, *Cover* or *Manual* — in a column that replaces the
+  Cover tick box (`classifyPages` in `src/lib/pdf/changeDoc.ts`). A page a title block template
+  read, or anything larger than 14½ in on its long side, is a drawing. A letter/legal page that
+  names itself in its upper part as an ASI, addendum, PR, CCD, change order or bulletin is the
+  cover, and an unclaimed small page following a cover is the cover running on. A small page with
+  a section number in its running footer or header — or a section heading that is the only
+  section number on it — is manual; an unclaimed page between manual pages, or one carrying END OF
+  SECTION, is manual too. Any page can be moved by hand, and keeps what it was given.
+- **The cover fills the set** (`readCover`): kind, number, date and subject, read by their
+  labels ("ASI No.: 004", "ADDENDUM NO. 2", "Proposal Request Number:", "Date:", "Subject:" /
+  "RE:"). The number is written the way the project writes its sets (`setNameFor` in
+  `sheets.ts`: ASI 4 on a job with "ASI-003" is "ASI-004"). A new **Subject** field takes the
+  subject; it goes on the issuance's title and on the change register entry (`title`, and
+  `asi.title` / `pr.title` / `ccd.title` / `co.title` in its values). What was read is said in a
+  line under the fields; anything typed over is left alone if the cover is read again.
+- **The manual pages are cut into sections and set against the project's manual**
+  (`src/components/ChangeManual.tsx`), with the same reader as the manual upload — which is now
+  split out as `src/lib/pdf/specRead.ts` (no pdf.js, so it can be tested in Node);
+  `splitManual.ts` re-exports it and nothing that used it changed. Per section: a section the
+  manual hasn't got is **added**; one it has is either **replaced whole** or takes the pages
+  **into its pages, by number** — page 3 replaces page 3, and a lettered page (3A) goes in after
+  the page it follows (`splicePages`). The second is suggested when the footers show part of a
+  section: a lettered page, a first page after 1, or "of N" with fewer here and no END OF
+  SECTION. For it, the current section's file is opened and its own footers read; if any page
+  on either side has no readable page number, nothing is guessed and the save waits on *Replace
+  the whole section* or leaving it out. The result column says what will happen ("replaces page
+  3; adds page 3A · 5 → 6 pages"). Number and title can be corrected; the box drawn on the manual
+  upload is used if it reads more pages than the footers do.
+- **One issuance carries it all.** Sheets, manual sections, cover and register entry are filed
+  under the same issuance (`saveManual` takes an existing issuance id). A change document with
+  only manual pages saves without any sheets.
+
+`checks/changedoc.test.ts` (23 cases: kinds, roles, cover fields, dates, page places, actions,
+splices). `checks/t_changedoc.py` on `change_doc.pdf` (made by `make_change_doc.py`: AIA-style
+ASI cover and a second page, 09 91 00 pages 3 and 3A, new section 08 43 13 pages 1–2, D-size
+A-201) against a stand-in 09 91 00 of five pages: parts cover, cover, manual ×4, drawing; ASI /
+ASI-004 / 11/20/2026 / subject read; 09 91 00 saved as six pages in the order 1, 2, 3 (new),
+3A, 4, 5; 08 43 13 added; one issuance; register entry with the subject; cover filed.
+`t_repeats.py` rerun clean. **Test browser and made-up PDFs only** — not a real ASI or addendum
+from AMR or a consultant, whose covers and footers may print their labels differently.
+
+---
+
 # Checkpoint — 2026-11-23, 17:15 CST (UCA CW Loop App 5: a "CO 1" row, a wrapped name)
 
 Jacob's June application (Kinco, scanned, 83 lines over three continuation sheets) against the 13
