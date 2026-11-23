@@ -3592,7 +3592,6 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-703-cohead .pay-co-approved { margin-left: 12px; white-space: nowrap; color: var(--muted); }
 .pay-703-cohead .pay-co-date { padding: 2px 6px; font-size: 12px; }
 
-<<<<<<< Updated upstream
 /* Contracts: one pill per change order, opening to its lines and its proposal requests. */
 .co-pills { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 8px; }
 .co-pill { border: 1px solid var(--line, #e4e2dc); border-radius: 18px; background: #fff; overflow: hidden; }
@@ -3605,7 +3604,6 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .co-pill-prs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; }
 .co-pr { display: inline-flex; align-items: baseline; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 12px; background: var(--moss-soft); }
 .co-pill-prs select { max-width: 320px; }
-=======
 /* The note board by touch: a card or box is picked up by holding it still (src/components/NoteBoard.tsx),
    so until then the page scrolls under the finger; and holding it raises no text-selection or link menu. */
 @media (pointer: coarse) {
@@ -3636,4 +3634,3 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
   /* The tray stays a soft panel: what is not filed yet. */
   .nbd .nbd-tray .nbd-card { border-bottom: 1px solid #ece6d3; }
 }
->>>>>>> Stashed changes
