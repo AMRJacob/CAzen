@@ -83,11 +83,8 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
       // with ("CO 1" over the change order's lines); untick it if it is a line yet to be billed.
       const bare = (x: Extra) => !x.scheduled && !x.previous && !x.this_period && !x.stored
       setCos(new Set(more.map((x, i) => [x, i] as const).filter(([x]) => x.co).map(([, i]) => i)))
-      // Approved this month if the PDF's change order summary says so; otherwise left for you to say.
-      {
-        const g = 'g702' in out ? (out as MatchRead).g702 : undefined
-        setCoDate(g && (g.coThisAdditions || g.coThisDeductions) && periodTo ? periodTo : '')
-      }
+      // The approval date is left for you to give; the application's period is offered beside it.
+      setCoDate('')
       setHeads(new Set(more.map((x, i) => [x, i] as const)
         .filter(([x]) => bare(x) && (sov.length > 0 || /^(c\.?\s?o\.?|change\s*order)\s*#?\s*\d+$/i.test(x.name.trim())))
         .map(([, i]) => i)))
@@ -278,6 +275,9 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
               <p className="small pay-read-codate">
                 {[...cos].filter((i) => adds.has(i) && !heads.has(i)).length} change order lines, approved on{' '}
                 <input type="date" value={coDate} onChange={(e) => setCoDate(e.target.value)} aria-label="Change order approved on" />
+                {periodTo && coDate !== periodTo && (
+                  <button className="link small" onClick={() => setCoDate(periodTo)}>{` this period, ${periodTo.slice(5, 7)}/${periodTo.slice(8, 10)}/${periodTo.slice(0, 4)}`}</button>
+                )}
                 <span className="muted"> — the change order summary counts them in the month they were approved{coDate ? '' : '; with no date they count as approved before the applications'}.</span>
               </p>
             )}

@@ -2,7 +2,7 @@ import { ConfirmDelete } from '../components/ConfirmDelete'
 import { ContractSetup } from '../components/ContractSetup'
 import { PayRead } from '../components/PayRead'
 import { MoneyInput } from '../components/MoneyInput'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
@@ -653,6 +653,70 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     }
   }
 
+  /** One line of the G703. */
+  const row = (l: SovLine) => {
+                if (l.is_heading) {
+                  return (
+                    <tr key={l.id} className={`pay-703-heading${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)} onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}
+                      title="Right-click to make this a line item">
+                      <td className="mono pay-703-item">{l.item_no ?? ''}</td><td colSpan={9}>{l.description}</td>
+                    </tr>
+                  )
+                }
+                const f = figures.lines.find((x) => x.line.id === l.id)
+                if (!f) return null
+                const v = valueOf(l.id)
+                return (
+                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)}>
+                    <td className="mono pay-703-item">{l.item_no ?? ''}</td>
+                    <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
+                      {l.description}
+                    </td>
+                    <td {...roundCell(undefined, false, l.id, 'C')} data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
+                    <td {...roundCell(undefined, false, l.id, 'D')} data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
+                    <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
+                      {editable
+                        ? <MoneyInput className="cell mono right" value={v.this_period || ''}
+                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, this_period: Number(raw) || 0 } }))}
+                            onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`This period for ${l.description}`} />
+                        : <span className="mono"><Money n={f.thisPeriod} /></span>}
+                    </td>
+                    <td className="right pay-703-stored"
+                      data-label="Stored"
+                      data-nothing={editable || f.stored || f.storedBefore ? undefined : ''}>
+                      {editable
+                        ? <MoneyInput className="cell mono right" value={v.stored || ''}
+                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(raw) || 0 } }))}
+                            onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`Stored for ${l.description}`} />
+                        : <span className="mono"><Money n={f.stored} /></span>}
+                      {f.storedBefore > 0 && (
+                        <span className={`pay-703-was${f.storedUnaccounted ? ' pay-703-ask' : ''}`}
+                          title={f.storedUnaccounted
+                            ? `${money(f.released)} left storage this period but only ${money(f.thisPeriod)} of work was billed on this line.`
+                            : `${money(f.storedBefore)} was stored on the previous application.`}>
+                          {f.released > 0
+                            ? <>{money(f.released)} out of storage</>
+                            : <>was {money(f.storedBefore)}</>}
+                        </span>
+                      )}
+                    </td>
+                    <td {...roundCell(f.exact?.toDate, false, l.id, 'G')} data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
+                    <td {...roundCell(f.exact?.percent, true, l.id, 'pct')} data-label="Complete">{percent(f.percent)}</td>
+                    <td {...roundCell(f.exact?.balance, false, l.id, 'H')} data-label="Balance"><Money n={f.balance} /></td>
+                    <td {...roundCell(f.exact?.retainage, false, l.id, 'I')} data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
+                  </tr>
+                )
+  }
+
+  // Change order lines, grouped: a register change order by its entry, lines marked as change
+  // orders without one by their approval date.
+  const coKey = (x: SovLine) => (x.change_order_id === 'unlinked' ? `u:${x.approved_on ?? ''}` : x.change_order_id ?? '')
+  const coGroupOf = (l: SovLine) => {
+    const key = coKey(l)
+    const lines = data.lines.filter((x) => !x.is_heading && x.change_order_id && coKey(x) === key)
+    return { key, lines, first: lines[0]?.id }
+  }
+
   return (
     <>
       <div className="card pay-702">
@@ -847,58 +911,29 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             </thead>
             <tbody>
               {data.lines.map((l) => {
-                if (l.is_heading) {
+                // A change order's lines sit together under one heading row that carries its
+                // name, its total and when it was approved, at the place of its first line.
+                const group = l.change_order_id && !l.is_heading ? coGroupOf(l) : null
+                if (group && group.first !== l.id) return null
+                if (group) {
+                  const co = changeOrders.find((c) => c.id === l.change_order_id)
                   return (
-                    <tr key={l.id} className={`pay-703-heading${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)} onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}
-                      title="Right-click to make this a line item">
-                      <td className="mono pay-703-item">{l.item_no ?? ''}</td><td colSpan={9}>{l.description}</td>
-                    </tr>
+                    <Fragment key={`co:${group.key}`}>
+                      <tr className="pay-703-cohead">
+                        <td className="mono pay-703-item" />
+                        <td className="pay-703-name">
+                          <strong>{co ? [co.number ?? 'Change order', co.title].filter(Boolean).join(' — ') : 'Change order lines'}</strong>
+                          {!co && <span className="muted small"> not tied to an entry in the change register</span>}
+                          <CoApproved lines={group.lines} onChanged={onChanged} onTrouble={onTrouble} />
+                        </td>
+                        <td className="right mono"><Money n={group.lines.reduce((n, x) => n + x.scheduled_value, 0)} /></td>
+                        <td colSpan={7} />
+                      </tr>
+                      {group.lines.map((x) => row(x))}
+                    </Fragment>
                   )
                 }
-                const f = figures.lines.find((x) => x.line.id === l.id)
-                if (!f) return null
-                const v = valueOf(l.id)
-                return (
-                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)}>
-                    <td className="mono pay-703-item">{l.item_no ?? ''}</td>
-                    <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
-                      {l.description}
-                      {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
-                    </td>
-                    <td {...roundCell(undefined, false, l.id, 'C')} data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
-                    <td {...roundCell(undefined, false, l.id, 'D')} data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
-                    <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
-                      {editable
-                        ? <MoneyInput className="cell mono right" value={v.this_period || ''}
-                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, this_period: Number(raw) || 0 } }))}
-                            onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`This period for ${l.description}`} />
-                        : <span className="mono"><Money n={f.thisPeriod} /></span>}
-                    </td>
-                    <td className="right pay-703-stored"
-                      data-label="Stored"
-                      data-nothing={editable || f.stored || f.storedBefore ? undefined : ''}>
-                      {editable
-                        ? <MoneyInput className="cell mono right" value={v.stored || ''}
-                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(raw) || 0 } }))}
-                            onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`Stored for ${l.description}`} />
-                        : <span className="mono"><Money n={f.stored} /></span>}
-                      {f.storedBefore > 0 && (
-                        <span className={`pay-703-was${f.storedUnaccounted ? ' pay-703-ask' : ''}`}
-                          title={f.storedUnaccounted
-                            ? `${money(f.released)} left storage this period but only ${money(f.thisPeriod)} of work was billed on this line.`
-                            : `${money(f.storedBefore)} was stored on the previous application.`}>
-                          {f.released > 0
-                            ? <>{money(f.released)} out of storage</>
-                            : <>was {money(f.storedBefore)}</>}
-                        </span>
-                      )}
-                    </td>
-                    <td {...roundCell(f.exact?.toDate, false, l.id, 'G')} data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
-                    <td {...roundCell(f.exact?.percent, true, l.id, 'pct')} data-label="Complete">{percent(f.percent)}</td>
-                    <td {...roundCell(f.exact?.balance, false, l.id, 'H')} data-label="Balance"><Money n={f.balance} /></td>
-                    <td {...roundCell(f.exact?.retainage, false, l.id, 'I')} data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
-                  </tr>
-                )
+                return row(l)
               })}
               <tr className="pay-703-total">
                 <td className="pay-703-item" /><td className="pay-703-name"><strong>Total</strong></td>
@@ -925,12 +960,13 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           const patchAll = (patch: Record<string, unknown>) => async () => { for (const id of ids) await setSovLine(id, patch as never) }
           // The change orders it could be added to: the register's, and lines marked here without one.
           for (const co of changeOrders) {
-            const day = (co.issued_at ?? '').slice(0, 10)
-            const has = data.lines.filter((x) => x.change_order_id === co.id).length
+            const on = data.lines.filter((x) => x.change_order_id === co.id && !ids.includes(x.id))
+            // The change order's own approval date, as set on its heading row; none if it has none.
+            const day = on.find((x) => x.approved_on)?.approved_on ?? null
             actions.push({
               label: `Add ${these} to ${co.number ?? 'change order'}${co.title ? ` — ${co.title}` : ''}`,
-              note: `From the change register${day ? `, approved ${usDate(day)}` : ''}${has ? `; ${has} ${has === 1 ? 'line' : 'lines'} on it already` : ''}${changeCost(co) != null ? `; ${money(changeCost(co)!)}` : ''}.`,
-              run: patchAll({ change_order_id: co.id, is_change_order: true, approved_on: day || null }),
+              note: `From the change register${on.length ? `; ${on.length} ${on.length === 1 ? 'line' : 'lines'} on it already` : ''}${changeCost(co) != null ? `; ${money(changeCost(co)!)}` : ''}.${day ? ` Approved ${usDate(day)}.` : ' Its approval date is set on its heading row.'}`,
+              run: patchAll({ change_order_id: co.id, is_change_order: true, approved_on: day }),
             })
           }
           const groups = new Map<string, number>()
@@ -943,9 +979,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             })
           }
           actions.push({
-            label: `Mark ${these} as ${many ? 'change order lines' : 'a change order line'}, approved ${usDate(app.period_to)}`,
-            note: 'This application’s period: the change order summary counts them as approved this month.',
-            run: patchAll({ is_change_order: true, change_order_id: null, approved_on: app.period_to }),
+            label: `Mark ${these} as ${many ? 'change order lines' : 'a change order line'}`,
+            note: 'They go under a change order heading row, where the approval date is set.',
+            run: patchAll({ is_change_order: true, change_order_id: null, approved_on: null }),
           })
           if (ids.some((id) => data.lines.find((x) => x.id === id)?.change_order_id)) {
             actions.push({ label: `${many ? 'They are' : 'It is'} not a change order`, run: patchAll({ is_change_order: false, change_order_id: null }) })
@@ -1118,8 +1154,16 @@ function LineMenu({ at, title, items, onPick, onClose }: {
     window.addEventListener('pointerdown', off); window.addEventListener('keydown', key)
     return () => { window.removeEventListener('pointerdown', off); window.removeEventListener('keydown', key) }
   }, [onClose])
+  // Kept inside the window: opened low on the sheet, the menu rises above the pointer instead of
+  // running off the bottom, and scrolls inside itself if it is taller than the window.
+  const box = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState(at.y + 4)
+  useLayoutEffect(() => {
+    const h = box.current?.offsetHeight ?? 0
+    setTop(Math.max(8, Math.min(at.y + 4, window.innerHeight - h - 8)))
+  }, [at.y, items.length])
   return (
-    <div className="pay-round-menu pay-line-menu" role="menu" style={{ left: Math.min(at.x, window.innerWidth - 300), top: at.y + 4 }}>
+    <div ref={box} className="pay-round-menu pay-line-menu" role="menu" style={{ left: Math.min(at.x, window.innerWidth - 300), top, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}>
       <div className="muted small pay-round-title">{title}</div>
       {items.map((it, i) => (
         <button key={it.label} role="menuitem" onClick={() => onPick(i)}>
@@ -1162,38 +1206,34 @@ function RoundMenu({ at, way, onPick, onClose }: {
 }
 
 /**
- * When the owner approved a change order.
+ * When the owner approved a change order — once, on its heading row on the G703.
  *
- * It sits on the schedule of values rather than on any one application, because it is what
- * decides which application's change order summary the change order lands in — so it can be
- * set from any of them, certified or not.
+ * It is kept on each of the change order's lines (the change order summary reads it there), and
+ * set for all of them together here, so the lines can never disagree. Nothing is filled in until
+ * it is given.
  */
-function ApprovedOn({ line, onChanged, onTrouble }: {
-  line: SovLine
+function CoApproved({ lines, onChanged, onTrouble }: {
+  lines: SovLine[]
   onChanged: () => void
   onTrouble: (m: string) => void
 }) {
-  const [editing, setEditing] = useState(false)
-
+  const days = [...new Set(lines.map((l) => l.approved_on ?? ''))]
+  const day = days.length === 1 ? days[0] : ''
   async function set(value: string) {
+    if (days.length === 1 && value === day) return
     try {
-      await setSovLine(line.id, { approved_on: value || null })
-      setEditing(false)
+      for (const l of lines) await setSovLine(l.id, { approved_on: value || null })
       onChanged()
     } catch (e) { onTrouble(message(e)) }
   }
-
-  if (editing) {
-    return (
-      <input type="date" className="pay-co-date" autoFocus defaultValue={line.approved_on ?? ''}
-        aria-label={`Date ${line.description} was approved`}
-        onBlur={(e) => void set(e.target.value)} />
-    )
-  }
   return (
-    <button className="link pay-co-when" onClick={() => setEditing(true)}>
-      {line.approved_on ? `approved ${usDate(line.approved_on)}` : 'set approval date'}
-    </button>
+    <label className="pay-co-approved small">Approved{' '}
+      <input type="date" className="pay-co-date" key={day} defaultValue={day}
+        aria-label="Date the change order was approved"
+        onBlur={(e) => void set(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+      {days.length > 1 && <span className="muted"> (its lines have different dates; a date here sets them all)</span>}
+    </label>
   )
 }
 
