@@ -11,6 +11,15 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 18:20 CST (selecting lines like a file list)
+
+The Select lines mode, its checkboxes and its button bar are gone. Lines on the G703 are selected
+as in a file list: Ctrl- or ⌘-click adds or removes a line, Shift-click takes in everything from
+the last line clicked, a plain click (or Esc) clears. Selected lines are highlighted; a line under
+the sheet says how many and offers Clear. Right-clicking a selected line opens the menu for all of
+them (add to a change order, mark as change order lines, headings, line items). The approval date
+comes from the register change order, the group added to, or the application's period.
+
 # Checkpoint — 2026-11-23, 18:10 CST (adding missed lines to a change order; change order warnings)
 
 - **Selecting without a mode.** Shift-, ctrl- or ⌘-clicking a line on the G703 starts a selection

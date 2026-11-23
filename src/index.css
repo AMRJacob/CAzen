@@ -3580,6 +3580,9 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-pick-actions button { font-size: 13px; padding: 5px 10px; }
 .pay-pick-box { margin-right: 6px; vertical-align: middle; pointer-events: none; }
 .pay-703-wrap.picking .pay-703-item { white-space: nowrap; user-select: none; }
-.pay-703 tr.picked td { background: var(--moss-soft); }
+.pay-703 tr.picked td { background: #dfe9f5; }
+.pay-703 tr.picked td.pay-703-name { box-shadow: inset 3px 0 0 #2f6fb0; }
+.pay-703-wrap.picking { user-select: none; }
+.pay-pick-count { color: var(--ink); }
 .sheet-viewer.docked, .sheet-viewer.docked * { overscroll-behavior: contain; }
 .pay-co-warn { margin: 6px 0 10px; }

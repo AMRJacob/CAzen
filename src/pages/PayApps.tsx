@@ -606,45 +606,34 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     listRegister(projectOf, ['change_order']).then((r) => { if (live) setChangeOrders(r.filter((x) => x.kind === 'change_order')) }).catch(() => {})
     return () => { live = false }
   }, [projectOf])
-  // Selecting several lines at once: to say which are change order lines, or headings.
-  const [picking, setPicking] = useState(false)
+  // Selecting several lines at once, as in a file list: ctrl- or ⌘-click adds or takes away a line,
+  // shift-click takes in everything from the last one clicked, a plain click clears. Right-click acts on them.
   const [picked, setPicked] = useState<Set<string>>(new Set())
-  const [pickDate, setPickDate] = useState(app.period_to)
-  const [pickBusy, setPickBusy] = useState(false)
   const lastPick = useRef<string | null>(null)
-  const pick = (id: string, shift: boolean) => {
-    const order = data.lines.map((l) => l.id)
-    setPicked((cur) => {
-      const n = new Set(cur)
-      if (shift && lastPick.current) {
-        const a = order.indexOf(lastPick.current), b = order.indexOf(id)
-        const on = !cur.has(id)
-        for (let k = Math.min(a, b); k <= Math.max(a, b); k++) { if (on) n.add(order[k]); else n.delete(order[k]) }
-      } else if (n.has(id)) n.delete(id)
-      else n.add(id)
-      return n
-    })
-    lastPick.current = id
-  }
-  // In select mode a click selects; at any other time shift-, ctrl- or ⌘-click starts a selection.
+  useEffect(() => { setPicked(new Set()); lastPick.current = null }, [app.id])
+  useEffect(() => {
+    if (!picked.size) return
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setPicked(new Set()) }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [picked.size])
   const pickCell = (id: string) => ({
+    onMouseDown: (e: React.MouseEvent) => { if (e.shiftKey) e.preventDefault() },  // no text selected by the shift-click
     onClick: (e: React.MouseEvent) => {
-      if (picking || e.shiftKey || e.metaKey || e.ctrlKey) {
-        e.preventDefault()
-        if (!picking) { setPicking(true); setPicked(new Set()); lastPick.current = null }
-        pick(id, e.shiftKey)
-      }
+      const order = data.lines.map((l) => l.id)
+      if (e.shiftKey) {
+        const from = lastPick.current ?? id
+        const a = order.indexOf(from), b = order.indexOf(id)
+        setPicked((cur) => { const n = new Set(e.metaKey || e.ctrlKey ? cur : []); for (let k = Math.min(a, b); k <= Math.max(a, b); k++) n.add(order[k]); return n })
+        if (!lastPick.current) lastPick.current = id
+      } else if (e.metaKey || e.ctrlKey) {
+        setPicked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
+        lastPick.current = id
+      } else if (picked.size && !(e.target as Element).closest('input, button, select, a')) {
+        setPicked(new Set()); lastPick.current = id
+      } else lastPick.current = id
     },
-    ...(picking ? { style: { cursor: 'pointer' } } : {}),
   })
-  const pickBox = (id: string) => (picking ? <input type="checkbox" className="pay-pick-box" checked={picked.has(id)} readOnly tabIndex={-1} aria-label="Selected" /> : null)
-  async function bulk(patch: Record<string, unknown>) {
-    setPickBusy(true)
-    try {
-      for (const id of picked) await setSovLine(id, patch as never)
-      onChanged()
-    } catch (e) { onTrouble(message(e)) } finally { setPickBusy(false) }
-  }
   const [cellMenu, setCellMenu] = useState<{ lineId: string; col: RoundColumn; x: number; y: number } | null>(null)
   const roundCell = (exact: number | undefined, pct = false, lineId: string | null = null, col?: PdfCol) => {
     const d = col ? diffAt(lineId, col) : undefined
@@ -816,7 +805,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           return (
             <div className="notice warn">
               <span>{named.length} {named.length === 1 ? 'line is' : 'lines are'} named like change order lines ({named.slice(0, 3).map((l) => l.item_no ?? l.description).join(', ')}{named.length > 3 ? '…' : ''}) but {named.length === 1 ? 'isn’t' : 'aren’t'} marked as change orders, so line 2 of the cover sheet leaves {named.length === 1 ? 'it' : 'them'} out.</span>
-              <div className="notice-actions"><button onClick={() => { setPicking(true); setPicked(new Set(named.map((l) => l.id))) }}>Select {named.length === 1 ? 'it' : 'them'}</button></div>
+              <div className="notice-actions"><button onClick={() => { setPicked(new Set(named.map((l) => l.id))) }}>Select {named.length === 1 ? 'it' : 'them'}</button></div>
             </div>
           )
         })()}
@@ -833,26 +822,12 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             </div>
           )
         })}
-        <div className="pay-pick-bar">
-          {!picking
-            ? <span className="muted small"><button className="link small" onClick={() => { setPicking(true); setPicked(new Set()) }}>Select lines</button> — or shift-click lines, then right-click them</span>
-            : (
-              <div className="pay-pick-tools">
-                <strong>{picked.size} {picked.size === 1 ? 'line' : 'lines'} selected</strong>
-                <span className="muted small">Click to select; shift-click selects everything between; right-click a selected line for what to do with them.</span>
-                <span className="pay-pick-actions">
-                  <label className="small">approved on <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)} aria-label="Change order approved on" /></label>
-                  <button className="primary-lite" disabled={!picked.size || pickBusy} onClick={() => void bulk({ is_change_order: true, approved_on: pickDate || null })}>Mark as change order lines</button>
-                  <button disabled={!picked.size || pickBusy} onClick={() => void bulk({ is_change_order: false, change_order_id: null })}>Not change orders</button>
-                  <button disabled={!picked.size || pickBusy} onClick={() => void bulk({ is_heading: true })}>Make headings</button>
-                  <button disabled={!picked.size || pickBusy} onClick={() => void bulk({ is_heading: false })}>Make line items</button>
-                  <button className="link small" onClick={() => setPicked(new Set(data.lines.map((l) => l.id)))}>All</button>
-                  <button className="link small" onClick={() => { setPicking(false); setPicked(new Set()) }}>Done</button>
-                </span>
-              </div>
-            )}
-        </div>
-        <div className={`pay-703-wrap${picking ? ' picking' : ''}`}>
+        <p className="muted small pay-pick-bar">
+          {picked.size
+            ? <><strong className="pay-pick-count">{picked.size} {picked.size === 1 ? 'line' : 'lines'} selected</strong> — right-click one of them for what to do with them. <button className="link small" onClick={() => setPicked(new Set())}>Clear</button></>
+            : 'Shift- or Ctrl-click lines to select several; right-click for what to do with them.'}
+        </p>
+        <div className={`pay-703-wrap${picked.size ? ' picking' : ''}`}>
           <table className="pay-703">
             <thead>
               <tr>
@@ -874,9 +849,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               {data.lines.map((l) => {
                 if (l.is_heading) {
                   return (
-                    <tr key={l.id} className="pay-703-heading" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}
+                    <tr key={l.id} className={`pay-703-heading${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)} onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}
                       title="Right-click to make this a line item">
-                      <td className="mono pay-703-item" {...pickCell(l.id)}>{pickBox(l.id)}{l.item_no ?? ''}</td><td colSpan={9}>{l.description}</td>
+                      <td className="mono pay-703-item">{l.item_no ?? ''}</td><td colSpan={9}>{l.description}</td>
                     </tr>
                   )
                 }
@@ -884,9 +859,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 if (!f) return null
                 const v = valueOf(l.id)
                 return (
-                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`}>
-                    <td className="mono pay-703-item" {...pickCell(l.id)}>{pickBox(l.id)}{l.item_no ?? ''}</td>
-                    <td className="pay-703-name" {...pickCell(l.id)} onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
+                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)}>
+                    <td className="mono pay-703-item">{l.item_no ?? ''}</td>
+                    <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
                       {l.description}
                       {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
                     </td>
