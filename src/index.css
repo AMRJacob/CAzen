@@ -3495,3 +3495,5 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 @media (max-width: 640px) { .ov-marks a { grid-template-columns: 1fr max-content; } }
 .pay-new .drop-spot { min-height: 140px; }
 .pay-read-new.off td:not(:first-child) { opacity: .45; }
+.pay-read-open { margin: 6px 0 12px; }
+.pay-read-open .drop-spot { min-height: 130px; margin: 0 0 4px; }

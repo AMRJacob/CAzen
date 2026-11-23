@@ -32,6 +32,8 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   const [edits, setEdits] = useState<Record<string, { e: string; f: string }>>({})
   const [seen, setSeen] = useState<Set<string>>(new Set())
   const [over, setOver] = useState(false)
+  /** The full drop zone, opened by clicking the strip. */
+  const [open, setOpen] = useState(false)
   /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
   const [extra, setExtra] = useState<Extra[]>([])
   const [adds, setAdds] = useState<Set<number>>(new Set())
@@ -64,7 +66,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
       // A contract with no schedule of values yet takes the PDF's lines as its schedule of values.
       setExtra(onAddLines ? more : [])
       setAdds(new Set(sov.length ? [] : more.map((_, i) => i)))
-      setRows(out.rows); setEdits({}); setSeen(new Set())
+      setRows(out.rows); setEdits({}); setSeen(new Set()); setOpen(false)
     } catch (e) { setError(message(e)) } finally { setBusy(null); if (file.current) file.current.value = '' }
   }
 
@@ -108,15 +110,40 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
 
   return (
     <>
-      <div className={`drop-spot pay-read-drop${over ? ' over' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); void read(e.dataTransfer.files?.[0]) }}>
-        <button className="link" disabled={!!busy} onClick={() => file.current?.click()}>
-          {busy ?? 'Read this period from the contractor’s PDF'}
-        </button>
-        {!busy && <span className="muted small"> — or drop it here. Printed or scanned.</span>}
-        <input ref={file} type="file" accept="application/pdf" hidden onChange={(e) => void read(e.target.files?.[0])} />
-      </div>
+      {!open && (
+        <div className={`drop-spot pay-read-drop${over ? ' over' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+          onDrop={(e) => { e.preventDefault(); setOver(false); void read(e.dataTransfer.files?.[0]) }}>
+          <button className="link" disabled={!!busy} onClick={() => setOpen(true)}>
+            {busy ?? (known.some((k) => !k.heading) ? 'Read this period from the contractor’s PDF' : 'Read the schedule of values and this period from the contractor’s PDF')}
+          </button>
+          {!busy && <span className="muted small"> — or drop it here. Printed or scanned.</span>}
+        </div>
+      )}
+      {open && (
+        <div className="pay-read-open">
+          <div className={`drop-spot${over ? ' over' : ''}${busy ? ' busy' : ''}`}
+            role="button" tabIndex={0} aria-label="Drop the contractor’s application PDF here, or choose it"
+            onClick={() => { if (!busy) file.current?.click() }}
+            onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !busy) { e.preventDefault(); file.current?.click() } }}
+            onDragOver={(e) => { e.preventDefault(); if (!busy) setOver(true) }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault(); setOver(false)
+              if (busy) return
+              const f = Array.from(e.dataTransfer.files).find((x) => x.type === 'application/pdf' || /\.pdf$/i.test(x.name))
+              if (f) void read(f)
+              else setError('That isn’t a PDF. The application needs to be the PDF the contractor sent.')
+            }}>
+            {busy
+              ? <span role="status">{busy}</span>
+              : <><strong>Drop the contractor’s application PDF here</strong>
+                <span className="muted small">or click to choose it — printed or scanned.{known.some((k) => !k.heading) ? '' : ' With no schedule of values on record yet, its lines are offered as the schedule of values.'}</span></>}
+          </div>
+          {!busy && <button className="link small" onClick={() => setOpen(false)}>Close</button>}
+        </div>
+      )}
+      <input ref={file} className="pay-read-file" type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void read(e.target.files?.[0])} />
       {error && <div className="notice error" onClick={() => setError(null)}>{error}</div>}
 
       {rows && (

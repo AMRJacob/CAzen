@@ -10,7 +10,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_timeout(1500)
     pg.locator('.tabs button').filter(has_text=re.compile('2')).first.click(); pg.wait_for_timeout(600)
-    pg.set_input_files('.pay-read-drop input[type=file]','g703.pdf'); pg.wait_for_selector('.pay-read-card',timeout=60000)
+    pg.click('.pay-read-drop button'); pg.wait_for_selector('.pay-read-open .drop-spot'); print('opened:',pg.inner_text('.pay-read-open').replace(chr(10),' | ')); pg.screenshot(path='payread_open.png'); pg.set_input_files('input.pay-read-file','g703.pdf'); pg.wait_for_selector('.pay-read-card',timeout=60000)
     print('says:',pg.inner_text('.pay-read-card p')[:160])
     print('rows:',[[c for c in r.split('\t')][:3]+[i.input_value() for i in pg.locator('.pay-read-table tbody tr').nth(n).locator('input').all()] for n,r in enumerate(pg.locator('.pay-read-table tbody tr').all_inner_texts())])
     pg.screenshot(path='payread.png'); pg.click('.pay-read-card button.primary'); pg.wait_for_timeout(900)

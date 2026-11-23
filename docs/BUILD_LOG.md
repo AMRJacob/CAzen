@@ -11,6 +11,14 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 15:35 CST (the continuation sheet's read strip opens a drop zone)
+
+Clicking "Read this period from the contractor's PDF" on an application now opens a full drop
+zone (drop the PDF, or click to choose it) with a Close link, the same as New application and the
+schedule reader. The strip still takes a dropped PDF directly. On a contract with no schedule of
+values, the strip reads "Read the schedule of values and this period from the contractor's PDF",
+and the zone says the PDF's lines will be offered as the schedule of values.
+
 # Checkpoint — 2026-11-23, 15:25 CST (a pay app read onto a contract with no schedule of values)
 
 Jacob's UCA CW Loop Application 1 (Kinco, scanned) "couldn't be read". The scan read fine — all 13
