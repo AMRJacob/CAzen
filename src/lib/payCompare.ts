@@ -5,6 +5,8 @@ import type { G702Key, G702Read } from './payTable'
 /** What was read off the contractor's application, kept on the application (migration 0048). */
 export interface PdfRead {
   file?: string
+  /** Where the PDF itself is kept, to look at beside the figures. */
+  path?: string
   read_at: string
   application?: string
   g702?: G702Read

@@ -11,6 +11,17 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:40 CST (the contractor's PDF side by side with the figures)
+
+When figures are put in from a PDF, the PDF itself is now kept with the project's files (11 Pay
+Applications / Application N) and its place recorded in `pdf_read.path`. The "Against the
+contractor's PDF" card on the application has a "Show the PDF side by side" button: the PDF opens
+docked to the right (zoom, scroll through every page), and the application's page narrows to sit
+beside it, the G703 scrolling sideways if it has to. "Close the PDF" puts the page back. An
+application read before PDFs were kept offers "Add the PDF to see it side by side" instead, which
+opens it straight away and keeps it for next time. On a narrow screen the PDF takes the whole
+screen. `PdfPreview` has a `docked` mode. Browser check `checks/t_beside.py`.
+
 # Checkpoint — 2026-11-23, 16:20 CST (CAzen's arithmetic set against the contractor's PDF)
 
 Jacob asked to be sure the app does its own pay-app arithmetic rather than adding up what the PDF

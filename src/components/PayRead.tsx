@@ -25,7 +25,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   /** What the application holds now, so a row the PDF does not have is left as it is. */
   current: (id: string) => Billed
   /** The figures to put in, and everything the PDF said, kept to set the arithmetic against. */
-  onKeep: (rows: { id: string; value: Billed }[], pdf: PdfRead | null) => Promise<void>
+  onKeep: (rows: { id: string; value: Billed }[], pdf: PdfRead | null, bytes: Uint8Array | null) => Promise<void>
 }) {
   const file = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -36,6 +36,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   const [seen, setSeen] = useState<Set<string>>(new Set())
   const [over, setOver] = useState(false)
   const [fileName, setFileName] = useState<string | undefined>()
+  const pdfBytes = useRef<Uint8Array | null>(null)
   /** The full drop zone, opened by clicking the strip. */
   const [open, setOpen] = useState(false)
   /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
@@ -48,6 +49,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
     try {
       const sov = known.filter((k) => !k.heading)
       const bytes = new Uint8Array(await f.arrayBuffer())
+      pdfBytes.current = bytes.slice()
       const progress = (p: { page: number; pages: number; reading: boolean }) =>
         setBusy(p.reading ? `Reading page ${p.page} of ${p.pages} from the scan…` : `Reading page ${p.page} of ${p.pages}…`)
       // The continuation sheet as a table, by its columns, line numbers and grand total.
@@ -116,7 +118,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
           ...rows.filter((r) => r.found && r.pdf).map((r) => [r.id, r.pdf!] as const),
           ...chosen.map(([x], k) => [ids[k], x.pdf] as const),
         ]),
-      } : null)
+      } : null, pdfBytes.current)
       setRows(null); setChecks(null); setExtra([])
     } catch (e) { setError(message(e)) } finally { setBusy(null) }
   }

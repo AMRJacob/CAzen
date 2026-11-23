@@ -16,7 +16,9 @@ import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 /** The gap kept between a page's edge and the window's when reading through. */
 const EDGE = 10
 
-export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow }: {
+export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked }: {
+  /** Kept to the right of the page rather than over it, to read beside what is on the page. */
+  docked?: boolean
   /** Read straight through: every page of the document one under another, scrolled. The
    *  arrows stay and move a page at a time. For a section of the project manual. */
   flow?: boolean
@@ -172,7 +174,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
   }, [turnByWheel, number, pages, view])
 
   return (
-    <div className="sheet-viewer" role="dialog" aria-label={`Preview of ${title}`}>
+    <div className={`sheet-viewer${docked ? ' docked' : ''}`} role={docked ? 'complementary' : 'dialog'} aria-label={`Preview of ${title}`}>
       <div className="sv-bar">
         {/* Before the title, against the left edge: beside the tools these moved whenever a
             section had pages of its own to step through. */}

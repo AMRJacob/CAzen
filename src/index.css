@@ -3516,3 +3516,10 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .pay-against-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--line); }
 .pay-against-table th.right, .pay-against-table td.right { text-align: right; }
 .pay-against-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+
+/* The contractor's PDF docked to the right of a pay application, the page making room for it. */
+.sheet-viewer.docked { left: auto; width: min(46vw, 880px); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(43, 45, 44, 0.08); z-index: 40; }
+html.pdf-docked .content { width: auto; max-width: none; margin-right: min(46vw, 880px); padding-left: 32px; padding-right: 24px; }
+html.pdf-docked .pay-703-wrap { overflow-x: auto; }
+.pay-against-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 900px) { .sheet-viewer.docked { width: 100%; z-index: 50; } html.pdf-docked .content { margin-right: 0; } }

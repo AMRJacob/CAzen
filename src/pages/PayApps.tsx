@@ -11,6 +11,8 @@ import { today, usDate } from '../lib/dates'
 import { figure, standings, type Billed, type Figures, type RetainageStep, type RoundColumn, type RoundWay, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
+import { PdfPreview } from '../components/PdfPreview'
+import { putFile, readFile, safeName, SECTIONS } from '../lib/files'
 import { againstPdf, COL_SAYS, type Discrepancy, type PdfCol } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
@@ -561,6 +563,36 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   // Where CAzen's arithmetic and the contractor's PDF part company, worked out afresh each time,
   // so a correction or a rounding choice that brings them together clears it.
   const pdf = app.pdf_read ?? null
+  const { current: project } = useProject()
+  /** Keep the contractor's PDF with the application's files. */
+  const keepPdf = (bytes: Uint8Array, file?: string) => putFile(project!, bytes, `${project!.id}/payapps/${app.id}.pdf`, {
+    dirs: [SECTIONS.payApps, `Application ${app.number}`],
+    name: safeName(`${app.period_to} Application ${app.number} - contractor${file ? ` - ${file.replace(/\.pdf$/i, '')}` : ''}`) + '.pdf',
+  })
+  // The contractor's PDF docked beside the sheet, for checking one against the other.
+  const [beside, setBeside] = useState<Uint8Array | null>(null)
+  const [opening, setOpening] = useState(false)
+  async function showBeside() {
+    if (!pdf?.path || !project) return
+    setOpening(true)
+    try { setBeside(await readFile(project, pdf.path)) } catch (e) { onTrouble(message(e)) } finally { setOpening(false) }
+  }
+  useEffect(() => {
+    document.documentElement.classList.toggle('pdf-docked', !!beside)
+    return () => document.documentElement.classList.remove('pdf-docked')
+  }, [beside])
+  useEffect(() => { setBeside(null) }, [app.id])
+  async function attachPdf(f: File | undefined) {
+    if (!f || !pdf || !project) return
+    const bytes = new Uint8Array(await f.arrayBuffer())
+    // Shown straight away; kept so it is there next time, which is the part that can fail.
+    setBeside(bytes.slice())
+    try {
+      const path = await keepPdf(bytes, f.name)
+      await setApplication(app.id, { pdf_read: { ...pdf, path, file: pdf.file ?? f.name } } as never)
+      onChanged()
+    } catch (e) { onTrouble(`The PDF is open beside the figures but couldn’t be kept for next time: ${message(e)}`) }
+  }
   const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
@@ -677,7 +709,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         </table>
       </div>
 
-      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} onForget={async () => {
+      {beside && <PdfPreview bytes={beside} title={pdf?.file ?? `Application ${app.number} — contractor’s PDF`} flow docked onClose={() => setBeside(null)} />}
+      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening}
+        onBeside={() => (beside ? setBeside(null) : void showBeside())} onAttach={(f) => void attachPdf(f)} onForget={async () => {
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
       }} />}
 
@@ -708,9 +742,15 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               for (const [k, l] of lines.entries()) ids.push(await addSovLine(data.contract.id, { ...l, sort: nextSort + k }))
               return ids
             }}
-            onKeep={async (rows, pdf) => {
+            onKeep={async (rows, pdf, bytes) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
-              if (pdf) await setApplication(app.id, { pdf_read: pdf } as never)
+              if (pdf) {
+                // The PDF itself is kept too, to read beside the figures. Not keeping it costs only that.
+                if (bytes && project) {
+                  try { pdf.path = await keepPdf(bytes, pdf.file) } catch (e) { onTrouble(`The figures went in, but the PDF itself couldn’t be kept: ${message(e)}`) }
+                }
+                await setApplication(app.id, { pdf_read: pdf } as never)
+              }
               setEdits({}); onChanged()
             }} />
         )}
@@ -816,7 +856,16 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget }: { pdf: import('../lib/payCompare').PdfRead; diffs: Discrepancy[]; onForget: () => void }) {
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach }: {
+  pdf: import('../lib/payCompare').PdfRead
+  diffs: Discrepancy[]
+  onForget: () => void
+  beside: boolean
+  opening: boolean
+  onBeside: () => void
+  onAttach: (f: File | undefined) => void
+}) {
+  const attach = useRef<HTMLInputElement>(null)
   const say = (d: Discrepancy, n: number) => (d.col === 'pct' ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
   const g = diffs.filter((d) => d.where === 'g702')
   const rest = diffs.filter((d) => d.where !== 'g702')
@@ -829,7 +878,15 @@ function AgainstPdf({ pdf, diffs, onForget }: { pdf: import('../lib/payCompare')
     <div className={`card pay-against${diffs.length ? ' has-diffs' : ''}`}>
       <div className="pad-head">
         <h3>Against the contractor’s PDF</h3>
-        <button className="link small" onClick={onForget} title="Stop comparing with this PDF">Forget the PDF</button>
+        <span className="pay-against-tools">
+          {pdf.path
+            ? <button className={beside ? 'primary-lite on' : 'primary-lite'} onClick={onBeside} disabled={opening}>{opening ? 'Opening…' : beside ? 'Close the PDF' : 'Show the PDF side by side'}</button>
+            : <>
+              <button className="primary-lite" onClick={() => attach.current?.click()} title="This PDF was read before PDFs were kept; choose it again to keep it and look at it beside the figures">Add the PDF to see it side by side</button>
+              <input ref={attach} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { onAttach(e.target.files?.[0]); e.target.value = '' }} />
+            </>}
+          <button className="link small" onClick={onForget} title="Stop comparing with this PDF">Forget the PDF</button>
+        </span>
       </div>
       <p className="muted small">
         {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
