@@ -524,14 +524,14 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
   const [on, setOn] = useState<Map<string, Set<string>>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [said, setSaid] = useState<string | null>(null)
-  const [link, setLink] = useState<{ email: string; url: string } | null>(null)
-  const [copied, setCopied] = useState(false)
-  const mail = useRef<HTMLDivElement>(null)
+  // A link made from the invite box shows in the box; one made with New link shows under that person.
+  const [link, setLink] = useState<{ email: string; url: string; for: 'invite' | string } | null>(null)
   const [email, setEmail] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [role, setRole] = useState<ProjectRole>('architect')
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  const [making, setMaking] = useState<string | null>(null)
   const active = projects.filter((p) => p.status !== 'archived')
 
   const load = async () => {
@@ -555,8 +555,7 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
     try {
       const r = await invite(firmId, email.trim(), picked, role)
       const where = picked.length ? `${picked.length} ${picked.length === 1 ? 'project' : 'projects'}` : null
-      setLink(r.link ? { email: email.trim(), url: r.link } : null)
-      setCopied(false)
+      setLink(r.link ? { email: email.trim(), url: r.link, for: 'invite' } : null)
       setSaid(r.link
         ? `${email.trim()} ${r.invited ? 'has an account waiting' : 'has not signed in yet'}${where ? ` and is on ${where}` : ''}. No email was sent — this link is how they get in and choose a password:`
         : `${email.trim()} already signs in${where ? ` and has been added to ${where}` : ''}. No link is needed.`)
@@ -585,50 +584,7 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
           ))}
         </div>
         {said && <p className="small ok-text">{said}</p>}
-        {link && (
-          <div className="access-mail">
-            {/* The email itself, as it will paste: inline styles only, and the mark fetched from
-                the app's own address, because a mail program keeps neither a stylesheet nor a
-                picture that lives in this page. */}
-            <div className="access-mail-body" ref={mail}>
-              <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: '15px', lineHeight: 1.5, color: '#2b2d2c' }}>
-                <p style={{ margin: '0 0 14px' }}>You are invited to do CA the Zen way:</p>
-                <p style={{ margin: '0 0 14px' }}>
-                  <a href={link.url} style={{ textDecoration: 'none' }}>
-                    <img src={`${appUrl()}icon-192.png`} alt="Open CAzen" width={96} height={96} style={{ border: 0, borderRadius: '20px', display: 'block' }} />
-                  </a>
-                </p>
-                <p style={{ margin: '0 0 14px' }}>
-                  <a href={link.url} style={{ color: '#3f5a48', fontWeight: 600 }}>Open CAzen and choose your password</a>
-                </p>
-                <p style={{ margin: 0, fontSize: '13px', color: '#6b6f6a' }}>
-                  The link is for {link.email} only and works once. If it has run out, reply and I will send another.
-                </p>
-              </div>
-            </div>
-            <div className="access-link">
-              <button type="button" className="primary" onClick={async () => {
-                const html = mail.current?.innerHTML ?? ''
-                const text = `You are invited to do CA the Zen way:\n\n${link.url}\n\nThe link is for ${link.email} only and works once. If it has run out, reply and I will send another.`
-                try {
-                  // Both forms at once: a mail program takes the laid-out one, anything plainer the text.
-                  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
-                    await navigator.clipboard.write([new ClipboardItem({
-                      'text/html': new Blob([html], { type: 'text/html' }),
-                      'text/plain': new Blob([text], { type: 'text/plain' }),
-                    })])
-                  } else await navigator.clipboard.writeText(text)
-                  setCopied(true)
-                } catch { setError('This browser would not copy it. Select the email above and copy it by hand.') }
-              }}>{copied ? 'Copied — paste into your email' : 'Copy the email'}</button>
-              <button type="button" onClick={async () => {
-                try { await navigator.clipboard.writeText(link.url); setCopied(false) }
-                catch { setError('This browser would not copy it.') }
-              }}>Copy just the link</button>
-            </div>
-          </div>
-        )}
-        {link && <p className="muted small">The link works once and runs out after the time limit Supabase sets on email links. Entering the same email here again, or New link beside their name, makes a fresh one.</p>}
+        {link?.for === 'invite' && <InviteMail key={link.url} email={link.email} url={link.url} />}
       </form>
 
       {error && <div className="notice error">{error}</div>}
@@ -644,11 +600,14 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
                   <td><strong>{p.full_name || p.email}</strong>{p.full_name && <div className="muted small">{p.email}</div>}
                     {!p.last_seen && (
                       <div className="muted small">Has not signed in yet ·{' '}
-                        <button type="button" className="link" onClick={async () => {
-                          setError(null)
-                          try { const r = await invite(firmId, p.email, [], 'architect'); setLink(r.link ? { email: p.email, url: r.link } : null); setCopied(false); setSaid(r.link ? `A fresh link for ${p.email}:` : `${p.email} already signs in.`) }
-                          catch (err) { setError((err as Error).message) }
-                        }}>New link</button>
+                        <button type="button" className="link" disabled={making === p.user_id} onClick={async () => {
+                          setError(null); setSaid(null); setMaking(p.user_id)
+                          try {
+                            const r = await invite(firmId, p.email, [], 'architect')
+                            if (r.link) setLink({ email: p.email, url: r.link, for: p.user_id })
+                            else { setLink(null); setSaid(`${p.email} already signs in.`); await load() }
+                          } catch (err) { setError((err as Error).message) } finally { setMaking(null) }
+                        }}>{making === p.user_id ? 'Making…' : link?.for === p.user_id ? 'Another new link' : 'New link'}</button>
                       </div>
                     )}</td>
                   <td>
@@ -677,6 +636,15 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
                     )}
                   </td>
                 </tr>,
+                link?.for === p.user_id && (
+                  <tr key={p.user_id + '-link'} className="confirm-row access-relink"><td colSpan={4}>
+                    <div className="access-relink-head">
+                      <span className="small">A fresh link for <strong>{p.email}</strong>. No email was sent.</span>
+                      <button type="button" className="link" onClick={() => setLink(null)}>Close</button>
+                    </div>
+                    <InviteMail key={link.url} email={link.email} url={link.url} />
+                  </td></tr>
+                ),
                 open === p.user_id && !all && (
                   <tr key={p.user_id + '-projects'} className="confirm-row"><td colSpan={4}>
                     <div className="access-projects">
@@ -694,6 +662,61 @@ function Access({ firmId, me }: { firmId: string; me: string }) {
           </tbody>
         </table>
       )}
+    </div>
+  )
+}
+
+/**
+ * The invitation as it will paste into an email, with Copy buttons. Inline styles only, and the
+ * mark fetched from the app's own address, because a mail program keeps neither a stylesheet nor
+ * a picture that lives in this page. Keyed by the link, so each new link starts uncopied.
+ */
+function InviteMail({ email, url }: { email: string; url: string }) {
+  const mail = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState<'email' | 'link' | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const text = `You are invited to do CA the Zen way:\n\n${url}\n\nThe link is for ${email} only and works once. If it has run out, reply and I will send another.`
+  return (
+    <div className="access-mail">
+      <div className="access-mail-body" ref={mail}>
+        <div style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: '15px', lineHeight: 1.5, color: '#2b2d2c' }}>
+          <p style={{ margin: '0 0 14px' }}>You are invited to do CA the Zen way:</p>
+          <p style={{ margin: '0 0 14px' }}>
+            <a href={url} style={{ textDecoration: 'none' }}>
+              <img src={`${appUrl()}icon-192.png`} alt="Open CAzen" width={96} height={96} style={{ border: 0, borderRadius: '20px', display: 'block' }} />
+            </a>
+          </p>
+          <p style={{ margin: '0 0 14px' }}>
+            <a href={url} style={{ color: '#3f5a48', fontWeight: 600 }}>Open CAzen and choose your password</a>
+          </p>
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b6f6a' }}>
+            The link is for {email} only and works once. If it has run out, reply and I will send another.
+          </p>
+        </div>
+      </div>
+      <div className="access-link">
+        <button type="button" className="primary" onClick={async () => {
+          setFailed(null)
+          const html = mail.current?.innerHTML ?? ''
+          try {
+            // Both forms at once: a mail program takes the laid-out one, anything plainer the text.
+            if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+              await navigator.clipboard.write([new ClipboardItem({
+                'text/html': new Blob([html], { type: 'text/html' }),
+                'text/plain': new Blob([text], { type: 'text/plain' }),
+              })])
+            } else await navigator.clipboard.writeText(text)
+            setCopied('email')
+          } catch { setCopied(null); setFailed('Not copied — this browser refused. Select the email above and copy it by hand.') }
+        }}>{copied === 'email' ? `Copied for ${email}` : 'Copy the email'}</button>
+        <button type="button" onClick={async () => {
+          setFailed(null)
+          try { await navigator.clipboard.writeText(url); setCopied('link') }
+          catch { setCopied(null); setFailed('Not copied — this browser refused.') }
+        }}>{copied === 'link' ? 'Link copied' : 'Copy just the link'}</button>
+      </div>
+      {failed && <p className="small error-text">{failed}</p>}
+      <p className="muted small">The link works once and runs out after the time limit Supabase sets on email links.</p>
     </div>
   )
 }

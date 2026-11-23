@@ -20,6 +20,7 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_pr.py            # price a proposal request, decide it, roll it into a change order
     python3 t_tag.py           # issue tags by trade, and tagging an observation to a drawing
     python3 t_access.py        # people and access: list, per-project access, invite
+    python3 t_relink.py        # a fresh link for someone listed opens under their row; each copy names only them
     python3 t_sched.py         # read a scanned schedule (scan.pdf), tie it to pay lines, keep it
     node --experimental-strip-types notes.test.ts      # where a typed note is filed
     node --experimental-strip-types schedule.test.ts   # the schedule reader and the tie suggestions

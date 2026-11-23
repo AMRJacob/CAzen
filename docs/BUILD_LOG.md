@@ -11,6 +11,34 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 13:30 CST (a fresh invitation link opens under the person)
+
+**New link opens under that person's row** (Jacob, 13:24: it was odd for the link and email to
+appear at the top of the dialog when remaking a link for an existing account). In Settings →
+People and access, *New link* beside someone who has not signed in now opens the email to paste
+in a row directly under that person — "A fresh link for …", the email, Copy, and Close — and the
+invite box at the top stays as it was. Pressing it again reads *Another new link*. Inviting from
+the box still shows the email in the box. Only one link is open at a time.
+
+The email preview is now one piece (`InviteMail`) used in both places, keyed by the link so every
+new link starts uncopied. **Copy the email** now reads *Copied for name@…* once it has copied, and a
+copy the browser refuses is said right under the buttons (it was a notice lower on the page that
+the next New link cleared).
+
+Looked into first (Jacob, 13:20: the second person's email came out with the first person's
+details): the server's records show every link made in that session was for the second person
+(one invite, then four fresh links, 1:15:20–1:15:50), and nothing for the first after 11:55. So
+what was pasted most likely came from the clipboard, left there by the first person's email, with
+the second copy not taking. **Not confirmed** — nothing records what was on the screen or the
+clipboard.
+
+`checks/t_relink.py`: invite from the box (copied email names only that person); New link for
+one person, then another — one row open, under the right person, the box empty, each copy naming
+only that person and carrying that person's link; Close. Test browser only. `t_access.py` stops at
+its first line (it screenshots a sidebar the home page no longer has, since 11/20).
+
+---
+
 # Checkpoint — 2026-11-23, 13:25 CST (no scroll bars inside blocks)
 
 **Blocks grow with what is in them instead of scrolling** (Jacob, 13:19: the layout tools work,
