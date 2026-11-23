@@ -75,6 +75,47 @@ what the column does and the exact figure on hover. Kept per application and lin
 additive: `pay_apps.rounding jsonb`, applied to production); totals and the G702 follow, and a later
 application's line 7 reads the earlier one with its own cells. Tests in `checks/rounding.test.ts`;
 browser check `checks/t_round.py`.
+---
+
+# Checkpoint — 2026-11-23, 17:20 CST (Addendum 1 read properly: scanned spec pages, an addendum bound as 00 91 11)
+
+**UCA District Loop & Chiller Plant, Addendum 1** (Jacob, 16:49: the spec sections were read
+badly; is a project manual template needed, or can headers, footers and END OF SECTION be read?).
+No template was needed. His 49-page PDF had three faults the reader didn't handle:
+
+- **24 of its 27 manual pages are scans** (23 09 23 and 23 64 16, printed and scanned). With no
+  text, they had no number and were taken for drawings. Letter- and legal-size pages with no
+  text are now read from their picture with the same in-browser Tesseract the schedule reader
+  uses (`src/lib/pdf/scanText.ts`, 160 dpi, the reader's own page layout, one run of text per
+  line so "236416 - 6" and "SECTION 230923" stay in one piece). Done in the change-document
+  upload (`splitDrawingSet` with `scans`) and, at Jacob's 16:52 ask, **in the project manual
+  upload too** (`readManual` with `scans`), and when reading a current section to splice into.
+  Drawings are never OCR'd. The progress line says which page is a scan. About a minute for
+  this file's 24 scans in the test browser. `PageText.scanned` marks such a page.
+- **The addendum is itself section 00 91 11**, numbered in its running footer, and its third page
+  names no kind of document. A page whose running footer or header carries a 00 91 number is now
+  the cover. Any other section number at the edge still makes a page manual, even when its
+  footer also says "Addendum 1".
+- **Its footers have three columns** — project name (two lines), number and page, section name.
+  A band of the page is now read line by line (`bandText`); the title is taken from the right of
+  the page number when there is text there, else from the left. Before, the project name was
+  taken for the title.
+
+Also: zero-width spaces are stripped from PDF text (the cover's "DATE: 04/21/2026" had them);
+END OF SECTION counts anywhere on the page when it starts its own line (on 23 64 16's last page it
+is a third of the way down); a page number read from a scan that breaks a clean run between its
+neighbours (10, *14*, 12) is put right (`mendScannedPlaces`), and the upload's Footer pages
+column uses the mended number.
+
+Result on his file, in the built app against the stand-in (with 23 64 16 already in the manual):
+pages 1–3 cover, 4–30 manual, 31–49 drawings; Addendum / "Addendum 1" / 04/21/2026; 32 31 13
+pages 1–3 and 23 09 23 pages 1–6 new sections; 23 64 16 pages 1–18 replaces the whole
+section; no trouble flagged on any. The scanned pages alone through the manual upload: two
+sections, 6 and 18 pages. `checks/changedoc.test.ts` +7 cases from this file (it is a client
+document and is not in the repository). Not saved to the real project from here.
+
+---
+
 # Checkpoint — 2026-11-23, 16:25 CST (a change document as one PDF: cover, manual pages, drawings)
 
 **Uploading a change document sorts its pages** (Jacob, 16:11: ASIs, addenda and the like arrive

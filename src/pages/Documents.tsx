@@ -953,7 +953,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       let bytesTotal = 0
       for (const [i, file] of files.entries()) {
         const label = files.length > 1 ? `${file.name} (${i + 1} of ${files.length}): ` : ''
-        const split = await splitDrawingSet(await file.arrayBuffer(), (done, total) => setProgress(`${label}${done} of ${total}`))
+        const split = await splitDrawingSet(await file.arrayBuffer(), (done, total) => setProgress(`${label}${done} of ${total}`),
+          { onPage: (page, total) => setProgress(`${label}page ${page} of ${total} is a scan — reading it`) })
         for (const p of split) pages.push({ ...p, pageIndex: pages.length })
         bytesTotal += file.size
       }

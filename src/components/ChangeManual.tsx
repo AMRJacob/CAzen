@@ -91,7 +91,12 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: 
     const e = edits[key] ?? {}
     const number = (e.number ?? (s.number === FRONT ? '' : s.number)).trim()
     const cur = current?.find((c) => c.number === number) ?? null
-    const places = s.pages.map((i) => placeOnPage(cut.pages[i].text))
+    // A plain page number as the section reader settled it (a misread scan mended by its
+    // neighbours); a lettered one as printed.
+    const places = s.pages.map((i) => {
+      const p = placeOnPage(cut.pages[i].text), at = cut.pages[i].at
+      return p?.suffix ? p : at != null ? { n: at, suffix: '' } : p
+    })
     const ends = s.pages.some((i) => cut.pages[i].ends)
     const of = s.pages.map((i) => cut.pages[i].of).find((n): n is number => n != null) ?? null
     const suggested = suggestAction({ places, ends, of }, !!cur)
@@ -110,7 +115,8 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: 
       setOlds((o) => ({ ...o, [cur.revision_id]: { status: 'loading' } }))
       readFile(project, cur.file_path)
         .then(async (bytes) => {
-          const read = await readManual(bytes.slice().buffer)
+          // A current section that was scanned is read from its picture too, so its pages have numbers.
+          const read = await readManual(bytes.slice().buffer, undefined, {})
           setOlds((o) => ({ ...o, [cur.revision_id]: { status: 'ready', bytes, places: read.map((p) => placeOnPage(p.text)), bodies: read.map((p) => pageBody(p.text)) } }))
         })
         .catch((e) => setOlds((o) => ({ ...o, [cur.revision_id]: { status: 'failed', error: message(e) } })))

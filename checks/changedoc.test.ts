@@ -1,5 +1,5 @@
 import { classifyPages, readCover, dateIn, kindOnPage, suggestAction, splicePages, countOf } from '../src/lib/pdf/changeDoc.ts'
-import { readPlace } from '../src/lib/pdf/specRead.ts'
+import { readPlace, readFooter, endsSection, detectSections } from '../src/lib/pdf/specRead.ts'
 import type { PageText } from '../src/lib/pdf/pageText.ts'
 let bad = 0
 const eq = (n: string, g: unknown, w: unknown) => { const ok = JSON.stringify(g) === JSON.stringify(w); if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${n}${ok ? '' : ` got ${JSON.stringify(g)} want ${JSON.stringify(w)}`}`) }
@@ -73,4 +73,18 @@ eq('splice order', sp.order.map((o) => `${o.from}${o.i}`), ['old0', 'old1', 'new
 eq('splice says what it did', [sp.replaced, sp.inserted], [['3'], ['3A', '3B', '6']])
 eq('a page with no number: no splice', splicePages(old, [P('3'), null]), null)
 eq('replacing a page already lettered', splicePages(['1', '1A', '2'].map(P), ['1A'].map(P))!.order.map((o) => `${o.from}${o.i}`), ['old0', 'new0', 'old2'])
+
+// From UCA District Loop & Chiller Plant Addendum 1: the addendum is section 00 91 11, with that
+// number in its running footer, and its third page names no kind of document at all.
+const addPage = (body: string, k: number) => letter([body, 0.1], ['UCA Campus District Loop &', 0.93, 0.011], [`Chiller Plant 009111 - ${k} Addendum Number 1`, 0.95, 0.011])
+eq('an addendum bound as 00 91 11 is the cover, all three pages', classifyPages([1, 2, 3].map((k) => ({ text: addPage(k === 1 ? 'ADDENDUM NUMBER 1' : 'DRAWING E103 - ATTACHED', k), readByTemplate: false }))), ['cover', 'cover', 'cover'])
+eq('a reissued section whose footer says Addendum 1 is still manual', classifyPages([{ text: letter(['PART 2', 0.1], ['PAINTING 09 91 00 - 3 Addendum Number 1', 0.95, 0.011]), readByTemplate: false }]), ['spec'])
+eq('three-column footer: the name right of the page number, not the project on the line below',
+  readFooter('UCA Campus District Loop & 236416 - 6 Water Cooled, Centrifugal Chiller\nChiller Plant'), { number: '23 64 16', at: 6, of: null, title: 'WATER COOLED, CENTRIFUGAL CHILLER' })
+eq('footer with the name on the left still reads it', readFooter('PAINTING 09 91 00 - 3').title, 'PAINTING')
+eq('END OF SECTION on its own line a third of the way down', endsSection(letter(['END OF SECTION 236416', 0.33], ['236416 - 18', 0.95, 0.011])), true)
+eq('END OF SECTION inside a sentence high on the page is not', endsSection(letter(['Coordinate with the work specified at the end of section 3.2.', 0.2])), false)
+const scan = (k: number) => ({ ...letter(['PART 2', 0.2], [`Chiller Plant 236416 - ${k} Water Cooled, Centrifugal Chiller`, 0.95, 0.011]), scanned: true })
+const cut = detectSections([10, 14, 12].map((k, index) => ({ index, text: scan(k), found: null, declares: false, at: null, of: null, ends: false })), null)
+eq('a misread scanned page number is put right by its neighbours', cut.pages.map((p) => p.at), [10, 11, 12])
 if (bad) { console.log(`${bad} failed`); process.exit(1) }

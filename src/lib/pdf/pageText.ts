@@ -20,6 +20,8 @@ export interface PageText {
   width: number
   height: number
   words: PageWord[]
+  /** The words were read from a picture of the page (OCR), not from the PDF's own text. */
+  scanned?: boolean
 }
 
 export async function readPageText(page: PDFPageProxy): Promise<PageText> {
@@ -27,13 +29,17 @@ export async function readPageText(page: PDFPageProxy): Promise<PageText> {
   const content = await page.getTextContent()
   const words: PageWord[] = []
   for (const item of content.items) {
-    if (!('str' in item) || !item.str.trim()) continue
+    if (!('str' in item)) continue
+    // Word processors leave zero-width spaces in exported text ("DATE: \u200b04/21/2026"); they
+    // are invisible on the page and only get between a label and its value.
+    const str = item.str.replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
+    if (!str.trim()) continue
     const [a, b, c, d, e, f] = item.transform as number[]
     const along = Math.hypot(a, b) || 1
     const up = Math.hypot(c, d) || 1
     const dx = a / along, dy = b / along          // baseline direction
     const ux = c / up, uy = d / up                // glyph "up" direction
-    const width = item.width || along * item.str.length * 0.5
+    const width = item.width || along * str.length * 0.5
     const height = item.height || up
     // The run's four corners in PDF space, mapped to the displayed page.
     const corners = [
@@ -48,7 +54,7 @@ export async function readPageText(page: PDFPageProxy): Promise<PageText> {
     const [sx0, sy0] = vp.convertToViewportPoint(e, f)
     const [sx1, sy1] = vp.convertToViewportPoint(e + dx, f + dy)
     const vertical = Math.abs(sy1 - sy0) > Math.abs(sx1 - sx0)
-    words.push({ str: item.str, x: x0 / vp.width, y: y0 / vp.height, w: (x1 - x0) / vp.width, h: (y1 - y0) / vp.height, vertical })
+    words.push({ str, x: x0 / vp.width, y: y0 / vp.height, w: (x1 - x0) / vp.width, h: (y1 - y0) / vp.height, vertical })
   }
   return { width: vp.width, height: vp.height, words }
 }

@@ -340,7 +340,8 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     setError(null)
     try {
       const buf = await pdf.arrayBuffer()
-      const read = await readManual(buf, (done, total) => setProgress(`${done} of ${total} pages`))
+      const read = await readManual(buf, (done, total) => setProgress(`${done} of ${total} pages`),
+        { onPage: (page, total) => setProgress(`page ${page} of ${total} is a scan — reading it`) })
       const cut = detectSections(read, box)
       setFile(buf)
       setPages(cut.pages)

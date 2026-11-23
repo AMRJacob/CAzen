@@ -119,7 +119,13 @@ export function classifyPages(pages: PageFacts[]): PageRole[] {
   const roles: (PageRole | null)[] = pages.map((p) => {
     if (p.readByTemplate || !smallPage(p.text)) return 'sheet'
     // The cover is judged before the manual: its narrative can open with "SECTION 09 91 00".
-    if (kindOnPage(p.text) && !footerOn(p.text).number) return 'cover'
+    // An addendum is often bound as a section of the manual itself — 00 91 13 Addenda, or the
+    // office's own 00 91 xx — with that number in its running footer on every page, and is
+    // still the cover. Any other section number at the edge means a reissued manual page, even
+    // one whose footer says "Addendum 1", which is common.
+    const edge = footerOn(p.text).number
+    if (edge?.startsWith('00 91')) return 'cover'
+    if (kindOnPage(p.text) && !edge) return 'cover'
     if (specLike(p)) return 'spec'
     return null
   })

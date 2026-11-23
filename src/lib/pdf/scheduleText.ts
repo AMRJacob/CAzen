@@ -33,7 +33,7 @@ export type Reader = {
   terminate: () => Promise<unknown>
 }
 
-export async function reader(): Promise<Reader> {
+export async function reader(pageMode = '6'): Promise<Reader> {
   const { createWorker } = await import('tesseract.js')
   // The built app serves the reader's own files; a development server falls back to the
   // library's defaults.
@@ -42,7 +42,8 @@ export async function reader(): Promise<Reader> {
     : {}
   const worker = await createWorker('eng', 1, own)
   // A schedule is a table: rows of sparse text with wide gaps, not paragraphs.
-  await worker.setParameters({ tessedit_pageseg_mode: '6' as never, preserve_interword_spaces: '1' })
+  // (Ordinary pages — a scanned spec — are read with '3', the reader's own page layout.)
+  await worker.setParameters({ tessedit_pageseg_mode: pageMode as never, preserve_interword_spaces: '1' })
   return worker as unknown as Reader
 }
 

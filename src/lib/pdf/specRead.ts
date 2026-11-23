@@ -1,4 +1,4 @@
-import { textInRegion, wordsInRegion, type PageText, type Region } from './pageText.ts'
+import { pageBody, textInRegion, wordsInRegion, type PageText, type Region } from './pageText.ts'
 
 /**
  * Cutting a project manual into its sections.
@@ -73,7 +73,22 @@ const tidy = (a: string, b: string, c: string) => `${a} ${b} ${c}`
  * thing in the file that says whether a section arrived whole, because a page dropped out of the
  * middle leaves no other trace.
  */
-export function readFooter(line: string): { number: string | null; at: number | null; of: number | null; title: string | null } {
+export function readFooter(band: string): { number: string | null; at: number | null; of: number | null; title: string | null } {
+  // A band read line by line: the line carrying the number is the footer proper, and its title
+  // and page are looked for there first — a two-line project name beside it is not the title.
+  const lines = band.split('\n')
+  if (lines.length > 1) {
+    const own = lines.find((l) => readFooterLine(l).number)
+    if (!own) return { number: null, at: null, of: null, title: null }
+    const here = readFooterLine(own)
+    if (here.at != null) return here
+    const all = readFooterLine(lines.join(' '))
+    return { ...all, title: here.title ?? all.title }
+  }
+  return readFooterLine(band)
+}
+
+function readFooterLine(line: string): { number: string | null; at: number | null; of: number | null; title: string | null } {
   const text = line.toUpperCase().replace(/\s+/g, ' ').trim()
   SECTION.lastIndex = 0
   let m: RegExpExecArray | null
@@ -89,7 +104,11 @@ export function readFooter(line: string): { number: string | null; at: number | 
   // twice: as a title when the heading page gives none, and as a check that a run of pages
   // really is one section rather than two that happen to be numbered alike.
   const head = text.slice(0, found.end - found.value.length)
-  const title = clean(head.replace(/[\s\-–—:.]+$/, '')) || null
+  // A footer in three columns — project, number and page, section name — has the name to the
+  // right of the page number, and the project's name to the left; where there is something on
+  // the right, that is the name.
+  const tail = clean(text.slice(found.end).replace(/^[\s\-–—:.]*(?:PAGE\s*)?\d{1,3}[A-Z]{0,2}(?:\s*(?:OF|\/)\s*\d{1,3})?/, ''))
+  const title = tail || clean(head.replace(/[\s\-–—:.]+$/, '')) || null
 
   /**
    * The page number, wherever the office put it.
@@ -155,15 +174,21 @@ const END_OF_SECTION = /\bEND\s+OF\s+(?:THIS\s+)?SECTION\b/i
 
 export const endsSection = (text: PageText): boolean =>
   END_OF_SECTION.test(textInRegion(text, { x: 0, y: 0.45, w: 1, h: 0.55 }))
+  // A last page with little on it can carry END OF SECTION a third of the way down. On its own
+  // line it is the terminator wherever it sits; inside a sentence it would be something else.
+  || text.words.some((w) => /^\s*END\s+OF\s+(?:THIS\s+)?SECTION\b/i.test(w.str))
+
+/** The words in a band of the page, one line of text to a line. */
+export const bandText = (text: PageText, r: Region) => pageBody({ ...text, words: wordsInRegion(text, r) })
 
 export const TOP: Region = { x: 0, y: 0, w: 1, h: 0.14 }
 export const BOTTOM: Region = { x: 0, y: 0.86, w: 1, h: 0.14 }
 
 /** The running footer of a page, or its header where the office puts it there instead. */
 export function footerOn(text: PageText): { number: string | null; at: number | null; of: number | null } {
-  const bottom = readFooter(textInRegion(text, BOTTOM))
+  const bottom = readFooter(bandText(text, BOTTOM))
   if (bottom.number) return bottom
-  return readFooter(textInRegion(text, TOP))
+  return readFooter(bandText(text, TOP))
 }
 
 /**
@@ -299,8 +324,26 @@ export function detectSections(pages: ManualPage[], box?: Region | null): { page
       : heading.declares ? heading.found : footer.number ?? heading.found
     return { ...p, found, declares: !box && heading.declares, at: footer.at, of: footer.of, ends: endsSection(p.text) }
   })
+  mendScannedPlaces(read)
   const sections = sectionsFrom(read)
   return { pages: read, sections: check(sections, read) }
+}
+
+/**
+ * A page number misread from a scan, put right by the pages either side of it.
+ *
+ * OCR reads "11" as "14" now and then. Where the page before is n−1 and the page after is n+1 in
+ * the same section, the page between is n, and saying "page 11 missing, page 14 twice" about a
+ * section that arrived whole would be wrong. Only pages read from a picture are changed, and only
+ * when both neighbours agree.
+ */
+function mendScannedPlaces(pages: ManualPage[]) {
+  for (let i = 1; i < pages.length - 1; i++) {
+    const [a, p, b] = [pages[i - 1], pages[i], pages[i + 1]]
+    if (!p.text.scanned || a.at == null || b.at == null || b.at !== a.at + 2) continue
+    if (!p.found || a.found !== p.found || b.found !== p.found || p.at === a.at + 1) continue
+    pages[i] = { ...p, at: a.at + 1 }
+  }
 }
 
 /**
@@ -441,7 +484,7 @@ export function sectionsFrom(pages: ManualPage[]): ManualSection[] {
       current = {
         number: p.found!,
         // The heading page names it; failing that, the name printed beside the number in the footer.
-        title: titleOnPage(p.text, p.found!) || readFooter(textInRegion(p.text, BOTTOM)).title || '',
+        title: titleOnPage(p.text, p.found!) || readFooter(bandText(p.text, BOTTOM)).title || '',
         pages: [p.index], guessed: false, trouble: [],
       }
       out.push(current)
@@ -501,5 +544,5 @@ export function readPlace(line: string): PagePlace | null {
 
 /** A page's place in its section, from its running footer or, failing that, its header. */
 export function placeOnPage(text: PageText): PagePlace | null {
-  return readPlace(textInRegion(text, BOTTOM)) ?? readPlace(textInRegion(text, TOP))
+  return readPlace(bandText(text, BOTTOM)) ?? readPlace(bandText(text, TOP))
 }
