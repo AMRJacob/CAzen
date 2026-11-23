@@ -11,6 +11,40 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:25 CST (change order dates on one heading row; change order pills on Contracts)
+
+**No date is assumed for a change order** (Jacob, 17:02, 17:05: don't have the change order
+selection assume a date; no approval note on each pay application line — keep it in the change
+order's heading). Asked which: one heading row on the G703 per change order.
+
+- **G703: a change order's lines sit together under a heading row** at the place of its first
+  line — its number and subject (or "Change order lines, not tied to an entry in the change
+  register"), its total, and **Approved [date]**, typed there once and written to every line of
+  the change order (the change order summary still reads it from the lines). Lines whose dates
+  differ say so, and a date typed there sets them all. The per-line "approved …" note
+  (`ApprovedOn`) is gone; `CoApproved` replaces it.
+- **The right-click menu writes no date of its own.** Adding lines to a register change order
+  gives them that change order's date as set on its heading (none if it has none) — not the
+  register's issue date, which it used before. "Mark as change order lines" leaves the date blank
+  — it used to write this application's period. Reading the contractor's PDF no longer fills the
+  date with the period either; the period is offered beside the box as a pick.
+- The menu now stays inside the window (it ran off the bottom when opened low on the sheet).
+- `checks/t_cohead.py` (heading row, total, date set on both lines, no per-line notes);
+  `t_heading.py` updated.
+
+**Contracts: a pill per change order** (17:04). Under *What the contract is worth*, the table of
+change order lines is replaced by one pill per change order — number, subject, amount, approval
+date, how many lines and proposal requests — that opens to its lines on the schedule of values
+and its proposal requests. A PR opens from the pill (when it has a file), comes off with ×, and
+another is linked with *Link a proposal request…* (one marked "now in CO-00x" moves). Change
+order lines with no register entry make one pill per approval date, with no PR linking. Register
+change orders with no lines yet get a pill too, with the register's amount. The date is shown on
+the pill and set on the G703's heading row. `checks/t_copills.py`.
+
+Test browser only, against the stand-in.
+
+---
+
 # Checkpoint — 2026-11-23, 18:20 CST (selecting lines like a file list)
 
 The Select lines mode, its checkboxes and its button bar are gone. Lines on the G703 are selected

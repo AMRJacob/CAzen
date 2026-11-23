@@ -12,6 +12,8 @@ import {
   setContractDocument, type ContractDocument, type ContractKind,
 } from '../lib/contracts'
 import { listContracts, loadContract, type LoadedContract } from '../lib/payappsDb'
+import { changeCost, coverWith, listRegister, prPrice, uncover, type RegisterRow } from '../lib/issued'
+import type { SovLine } from '../lib/payapps'
 
 /**
  * The contract library.
@@ -75,7 +77,7 @@ export default function Contracts() {
         ))}
       </div>
 
-      {tab === 'owner_contractor' && <ContractSum data={money} />}
+      {tab === 'owner_contractor' && <ContractSum data={money} project={current} onTrouble={setError} />}
 
       <div className="card">
         <h3>{about.label}</h3>
@@ -110,7 +112,7 @@ export default function Contracts() {
  * the schedule of values rather than from anything typed here, so this figure and the one on
  * the applications for payment cannot disagree.
  */
-function ContractSum({ data }: { data: LoadedContract | null }) {
+function ContractSum({ data, project, onTrouble }: { data: LoadedContract | null; project: { id: string; name: string } | null; onTrouble: (m: string) => void }) {
   if (!data) {
     return (
       <div className="card muted">
@@ -146,24 +148,125 @@ function ContractSum({ data }: { data: LoadedContract | null }) {
           </span>
         </div>
       </div>
-      {orders.length > 0 && (
-        <table className="pay-trades">
-          <thead><tr><th>Change order</th><th>Approved</th><th className="right">Amount</th></tr></thead>
-          <tbody>
-            {orders.map((l) => (
-              <tr key={l.id}>
-                <td>{l.description}</td>
-                <td className="muted small">{l.approved_on ? usDate(l.approved_on) : 'date not set'}</td>
-                <td className="right mono"><Money n={l.scheduled_value} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {project && <ChangeOrderPills project={project} lines={data.lines} onTrouble={onTrouble} />}
       <p className="muted small">
         Read from the schedule of values, so this and{' '}
         <Link to="/pay">the applications for payment</Link> cannot disagree.
       </p>
+    </div>
+  )
+}
+
+/**
+ * The change orders, one pill each: number, subject, amount, approval date and how many lines and
+ * proposal requests it has. A pill opens to its lines on the schedule of values and the proposal
+ * requests it takes up, which open from here and can be linked or unlinked.
+ *
+ * A register change order is the pill; change order lines marked on the pay application with no
+ * register entry make one pill per approval date. The date itself is set on the change order's
+ * heading row on the G703, so it is shown here and not edited.
+ */
+function ChangeOrderPills({ project, lines, onTrouble }: {
+  project: { id: string; name: string }
+  lines: SovLine[]
+  onTrouble: (m: string) => void
+}) {
+  const [register, setRegister] = useState<RegisterRow[]>([])
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const load = useCallback(() => {
+    listRegister(project.id, ['change_order', 'pr']).then(setRegister).catch((e) => onTrouble(message(e)))
+  }, [project.id, onTrouble])
+  useEffect(() => { load() }, [load])
+
+  const orders = register.filter((r) => r.kind === 'change_order').sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true }))
+  const prs = register.filter((r) => r.kind === 'pr').sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true }))
+  const coLines = lines.filter((l) => l.change_order_id && !l.is_heading)
+  const loose = new Map<string, SovLine[]>()
+  for (const l of coLines) if (l.change_order_id === 'unlinked') loose.set(l.approved_on ?? '', [...(loose.get(l.approved_on ?? '') ?? []), l])
+
+  type Pill = { key: string; label: string; subject: string | null; lines: SovLine[]; co: RegisterRow | null; amount: number | null }
+  const pills: Pill[] = [
+    ...orders.map((co) => {
+      const ls = coLines.filter((l) => l.change_order_id === co.id)
+      return { key: co.id, label: co.number ?? 'Change order', subject: co.title, lines: ls, co, amount: ls.length ? ls.reduce((n, l) => n + l.scheduled_value, 0) : changeCost(co) }
+    }),
+    ...[...loose.entries()].map(([day, ls]) => ({ key: `u:${day}`, label: 'Change order lines', subject: 'not in the change register', lines: ls, co: null, amount: ls.reduce((n, l) => n + l.scheduled_value, 0) })),
+  ]
+  if (!pills.length) return null
+  const dayOf = (ls: SovLine[]) => { const d = [...new Set(ls.map((l) => l.approved_on ?? ''))]; return d.length === 1 ? d[0] : d.length ? 'several' : '' }
+  const toggle = (k: string) => setOpen((o) => { const n = new Set(o); if (n.has(k)) n.delete(k); else n.add(k); return n })
+  const act = (p: Promise<unknown>) => p.then(load).catch((e) => onTrouble(message(e)))
+
+  return (
+    <div className="co-pills">
+      {pills.map((p) => {
+        const day = dayOf(p.lines)
+        const linked = p.co?.covers ?? []
+        const isOpen = open.has(p.key)
+        return (
+          <div key={p.key} className={`co-pill${isOpen ? ' open' : ''}`}>
+            <button className="co-pill-head" onClick={() => toggle(p.key)} aria-expanded={isOpen}>
+              <strong>{p.label}</strong>
+              {p.subject && <span className="co-pill-subject">{p.subject}</span>}
+              <span className="mono">{p.amount != null ? <Money n={p.amount} /> : '—'}</span>
+              <span className="muted small">
+                {[day === 'several' ? 'approval dates differ' : day ? `approved ${usDate(day)}` : 'no approval date',
+                  `${p.lines.length} ${p.lines.length === 1 ? 'line' : 'lines'}`,
+                  p.co ? `${linked.length} PR${linked.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}
+              </span>
+              <span className="co-pill-caret" aria-hidden="true">{isOpen ? '▴' : '▾'}</span>
+            </button>
+            {isOpen && (
+              <div className="co-pill-body">
+                {p.lines.length ? (
+                  <table className="pay-trades">
+                    <thead><tr><th>Item</th><th>Line on the schedule of values</th><th className="right">Amount</th></tr></thead>
+                    <tbody>
+                      {p.lines.map((l) => (
+                        <tr key={l.id}><td className="mono">{l.item_no ?? ''}</td><td>{l.description}</td><td className="right mono"><Money n={l.scheduled_value} /></td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : <p className="muted small">No lines on the schedule of values yet. They are added from the pay application (right-click a line).</p>}
+                {p.co && (
+                  <div className="co-pill-prs">
+                    <span className="small"><strong>Proposal requests</strong></span>
+                    {linked.map((pr) => {
+                      const full = prs.find((x) => x.id === pr.id) ?? pr
+                      const price = prPrice(full as RegisterRow)
+                      return (
+                        <span key={pr.id} className="co-pr">
+                          {full.file_path
+                            ? <button className="link" onClick={() => openFile(project, full.file_path!).catch((e) => onTrouble(message(e)))}>{full.number ?? 'PR'}</button>
+                            : <span>{full.number ?? 'PR'}</span>}
+                          {full.title && <span className="muted"> {full.title}</span>}
+                          {price != null && <span className="mono"> <Money n={price} /></span>}
+                          <button className="link small" title={`Unlink ${full.number ?? 'this PR'} from ${p.label}`} onClick={() => act(uncover([pr.id]))}>×</button>
+                        </span>
+                      )
+                    })}
+                    {(() => {
+                      const others = prs.filter((x) => !linked.some((y) => y.id === x.id))
+                      if (!others.length) return linked.length ? null : <span className="muted small">No proposal requests in the change register.</span>
+                      return (
+                        <select className="cell" value="" aria-label={`Link a proposal request to ${p.label}`}
+                          onChange={(e) => { if (e.target.value) act(coverWith(project.id, p.co!.id, [e.target.value])) }}>
+                          <option value="">Link a proposal request…</option>
+                          {others.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {[x.number, x.title].filter(Boolean).join(' — ')}{x.rolledInto ? ` (now in ${x.rolledInto.number ?? 'another change order'})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
