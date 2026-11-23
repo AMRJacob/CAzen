@@ -8,7 +8,7 @@ import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import { today, usDate } from '../lib/dates'
-import { figure, standings, type Billed, type Figures, type RetainageStep, type SovLine } from '../lib/payapps'
+import { figure, standings, type Billed, type Figures, type RetainageStep, type RoundColumn, type RoundWay, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
@@ -535,6 +535,32 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     } catch (e) { onTrouble(message(e)) }
   }
 
+  // Taking a certificate back, to put right a mistake found later. The application goes back to
+  // draft so its figures can be changed; the applications after it work their line 7 out from
+  // it, so they follow whatever it is corrected to.
+  const [uncertifying, setUncertifying] = useState(false)
+  async function uncertify() {
+    try {
+      await setApplication(app.id, { status: 'draft', certified_sum: null } as never)
+      setUncertifying(false)
+      onChanged()
+    } catch (e) { onTrouble(message(e)) }
+  }
+  const later = data.applications.slice(index + 1)
+
+  // Columns the contractor rounds: right-click a heading to choose. Rounded figures are blue, with
+  // the exact figure on hover.
+  const rounding = data.contract.rounding ?? {}
+  const [roundMenu, setRoundMenu] = useState<{ col: RoundColumn; x: number; y: number } | null>(null)
+  const roundHead = (col: RoundColumn) => ({
+    className: `right pay-round-head${rounding[col] ? ' on' : ''}`,
+    title: `${ROUND_SAYS[rounding[col] ?? 'exact']} — right-click to change`,
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); setRoundMenu({ col, x: e.clientX, y: e.clientY }) },
+  })
+  const roundCell = (exact: number | undefined, pct = false) => exact == null
+    ? { className: 'right mono' }
+    : { className: 'right mono pay-rounded', title: `Rounded. Exact: ${pct ? `${exact.toFixed(2)}%` : exact.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}` }
+
   return (
     <>
       <div className="card pay-702">
@@ -542,9 +568,24 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           <h3>Application {app.number}</h3>
           <span className="muted small">Period to {usDate(app.period_to)} · {app.status}</span>
           {editable && <button className="primary-lite" onClick={() => void certify()}>Certify</button>}
+          {app.status === 'certified' && <button className="link" onClick={() => setUncertifying(true)}>Uncertify</button>}
           <button className="link danger-link pay-delete" disabled={!last} onClick={() => setDeleting(true)}
             title={last ? 'Delete this application' : 'Only the last application can be deleted — delete the later ones first'}>Delete</button>
         </div>
+        {uncertifying && (
+          <div className="notice warn pay-uncertify">
+            <span>
+              <strong>Take back the certificate for Application {app.number}?</strong>{' '}
+              It goes back to draft so its figures can be corrected, and is certified again afterwards.
+              {app.certified_sum != null && <> It was certified at {money(app.certified_sum)}.</>}
+              {later.length > 0 && <> {later.length === 1 ? `Application ${later[0].number} works` : `Applications ${later.map((a) => a.number).join(', ')} work`} its line 7 and “from previous” out from this one, so {later.length === 1 ? 'it follows' : 'they follow'} any correction.</>}
+            </span>
+            <div className="notice-actions">
+              <button className="primary" onClick={() => void uncertify()}>Uncertify</button>
+              <button className="link" onClick={() => setUncertifying(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
         {deleting && (
           <ConfirmDelete what={`Application ${app.number}`}
             detail={`Period to ${usDate(app.period_to)}${app.status === 'certified' ? ' — certified' : ''}. Everything entered on it for this period goes with it. The schedule of values and the other applications are not touched.`}
@@ -657,14 +698,17 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             <thead>
               <tr>
                 <th>A</th><th>B</th><th className="right">C</th><th className="right">D</th>
-                <th className="right">E</th><th className="right">F</th><th className="right">G</th>
-                <th className="right">%</th><th className="right">H</th><th className="right">I</th>
+                <th className="right">E</th><th className="right">F</th>
+                {(['G', 'pct', 'H', 'I'] as const).map((c) => (
+                  <th key={c} {...roundHead(c)}>{c === 'pct' ? '%' : c}{rounding[c] && <span className="pay-round-mark" title={ROUND_SAYS[rounding[c]!]}>{ROUND_MARK[rounding[c]!]}</span>}</th>
+                ))}
               </tr>
               <tr className="pay-703-sub">
                 <th>Item</th><th>Description of work</th><th className="right">Scheduled value</th>
                 <th className="right">From previous</th><th className="right">This period</th>
-                <th className="right">Stored</th><th className="right">Completed and stored</th>
-                <th className="right">%</th><th className="right">Balance</th><th className="right">Retainage</th>
+                <th className="right">Stored</th>
+                <th {...roundHead('G')}>Completed and stored</th>
+                <th {...roundHead('pct')}>%</th><th {...roundHead('H')}>Balance</th><th {...roundHead('I')}>Retainage</th>
               </tr>
             </thead>
             <tbody>
@@ -710,10 +754,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                         </span>
                       )}
                     </td>
-                    <td className="right mono" data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
-                    <td className="right mono" data-label="Complete">{percent(f.percent)}</td>
-                    <td className="right mono" data-label="Balance"><Money n={f.balance} /></td>
-                    <td className="right mono" data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
+                    <td {...roundCell(f.exact?.toDate)} data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
+                    <td {...roundCell(f.exact?.percent, true)} data-label="Complete">{percent(f.percent)}</td>
+                    <td {...roundCell(f.exact?.balance)} data-label="Balance"><Money n={f.balance} /></td>
+                    <td {...roundCell(f.exact?.retainage)} data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
                   </tr>
                 )
               })}
@@ -723,17 +767,62 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 <td className="right mono" data-label="From previous"><Money n={figures.totals.previous} strong /></td>
                 <td className="right mono" data-label="This period"><Money n={figures.totals.thisPeriod} strong /></td>
                 <td className="right mono" data-label="Stored"><Money n={figures.totals.stored} strong /></td>
-                <td className="right mono" data-label="Completed and stored"><Money n={figures.totals.toDate} strong /></td>
-                <td className="right mono" data-label="Complete"><strong>{percent(figures.totals.percent)}</strong></td>
-                <td className="right mono" data-label="Balance"><Money n={figures.totals.balance} strong /></td>
-                <td className="right mono" data-label="Retainage"><Money n={figures.totals.retainage} strong /></td>
+                <td {...roundCell(figures.totals.exact?.toDate)} data-label="Completed and stored"><Money n={figures.totals.toDate} strong /></td>
+                <td {...roundCell(figures.totals.exact?.percent, true)} data-label="Complete"><strong>{percent(figures.totals.percent)}</strong></td>
+                <td {...roundCell(figures.totals.exact?.balance)} data-label="Balance"><Money n={figures.totals.balance} strong /></td>
+                <td {...roundCell(figures.totals.exact?.retainage)} data-label="Retainage"><Money n={figures.totals.retainage} strong /></td>
               </tr>
             </tbody>
           </table>
         </div>
+        {roundMenu && (
+          <RoundMenu at={roundMenu} way={rounding[roundMenu.col]} onClose={() => setRoundMenu(null)}
+            onPick={async (w) => {
+              setRoundMenu(null)
+              const next = { ...rounding }
+              if (w) next[roundMenu.col] = w; else delete next[roundMenu.col]
+              try { await setContract(data.contract.id, { rounding: next }); onChanged() } catch (e) { onTrouble(message(e)) }
+            }} />
+        )}
         {editable && <AddLine contractId={data.contract.id} projectId={(data.contract as unknown as { project_id: string }).project_id} lines={data.lines} nextSort={nextSort} onAdded={onChanged} onTrouble={onTrouble} />}
       </div>
     </>
+  )
+}
+
+const ROUND_SAYS: Record<RoundWay | 'exact', string> = {
+  exact: 'Exact, to the cent', nearest: 'Rounded to the nearest whole dollar', up: 'Rounded up to a whole dollar', down: 'Rounded down to a whole dollar',
+}
+const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: '↓' }
+
+/** Right-click on a column heading: how the contractor rounds that column. */
+function RoundMenu({ at, way, onPick, onClose }: {
+  at: { col: RoundColumn; x: number; y: number }
+  way: RoundWay | undefined
+  onPick: (w: RoundWay | null) => void
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const off = (e: Event) => { if (!(e.target as Element)?.closest?.('.pay-round-menu')) onClose() }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('pointerdown', off); window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('pointerdown', off); window.removeEventListener('keydown', key) }
+  }, [onClose])
+  const unit = at.col === 'pct' ? 'percent' : 'dollar'
+  const name = at.col === 'pct' ? '%' : `Column ${at.col}`
+  const items: [RoundWay | null, string][] = [
+    [null, at.col === 'pct' ? 'Exact, to two places' : 'Exact, to the cent'],
+    ['nearest', `Round to the nearest whole ${unit}`],
+    ['up', `Round up`],
+    ['down', `Round down`],
+  ]
+  return (
+    <div className="pay-round-menu" role="menu" style={{ left: Math.min(at.x, window.innerWidth - 240), top: at.y + 4 }}>
+      <div className="muted small pay-round-title">{name} — as the contractor rounds it</div>
+      {items.map(([w, label]) => (
+        <button key={label} role="menuitemradio" aria-checked={(way ?? null) === w} className={(way ?? null) === w ? 'on' : ''} onClick={() => onPick(w)}>{label}</button>
+      ))}
+    </div>
   )
 }
 

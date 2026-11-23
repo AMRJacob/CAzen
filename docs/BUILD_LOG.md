@@ -11,6 +11,26 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:00 CST (rounded columns on the G703; uncertify)
+
+**Rounding.** Right-clicking a heading of column G (completed and stored), %, H (balance) or I
+(retainage) on an application opens a menu: exact, round to the nearest whole dollar (or percent),
+round up, round down. The choice is kept on the contract (migration 0047, additive:
+`pay_contracts.rounding jsonb`, applied to production) and applies to every application on it.
+Rounding is line by line, as contractors do it, and the totals and the G702 follow: on Kinco's
+UCA CW Loop Application 1, retainage at 5% rounded to the nearest dollar comes to $11,209 as
+printed, where the arithmetic gives $11,207.45. Line 7 on later applications is worked out with
+the same rounding. Rounded figures that differ from the exact ones are blue, with the exact figure
+on hover; a rounded column's heading is blue with ≈, ↑ or ↓. `roundAs` and the rounding in
+`figure()` are in `lib/payapps.ts`; tests in `checks/rounding.test.ts`, browser check
+`checks/t_round.py`.
+
+**Uncertify.** A certified application has an Uncertify link. It asks first, says what it was
+certified at and that later applications work their line 7 and "from previous" out from it, then
+sets it back to draft (certified amount cleared) so it can be corrected and certified again.
+
+The G703's this-period and stored boxes are wider, to fit "$100,000.00".
+
 # Checkpoint — 2026-11-23, 15:45 CST (dollar figures typed the same way everywhere)
 
 Every box that takes a dollar figure now puts in the dollar sign and commas while typing

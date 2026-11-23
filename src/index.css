@@ -1460,7 +1460,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
 .pay-703-heading td { background: var(--wash); font-weight: 500; }
 .pay-703-co td { background: #fbf6ea; }
 .pay-703-total td { background: var(--panel); border-top: 2px solid var(--ink); }
-.pay-703 input.cell { width: 96px; padding: 3px 6px; font-size: 14px; }
+.pay-703 input.cell { width: 124px; padding: 3px 6px; font-size: 14px; }
 .pay-703 input.cell.right { text-align: right; }
 
 /* What was in storage a month ago, under the figure for what is in storage now. The sheet
@@ -1507,7 +1507,7 @@ body.col-resizing .col-grip::after { background: var(--moss); width: 2px; }
   }
   .pay-703-heading td { border-radius: 6px; padding: 6px 10px; }
   .pay-703-total { border-width: 2px; border-color: var(--ink); }
-  .pay-703 input.cell { width: 110px; }
+  .pay-703 input.cell { width: 132px; }
   /* The padded cents are only there to hold a column in line, and there is no column here. */
   .money-pad { display: none; }
 }
@@ -3497,3 +3497,14 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .pay-read-new.off td:not(:first-child) { opacity: .45; }
 .pay-read-open { margin: 6px 0 12px; }
 .pay-read-open .drop-spot { min-height: 130px; margin: 0 0 4px; }
+
+.pay-round-head { cursor: context-menu; }
+.pay-round-head.on { color: #2f6fb0; }
+.pay-round-mark { margin-left: 3px; color: #2f6fb0; font-weight: 600; }
+.pay-703 td.pay-rounded { color: #2f6fb0; background: rgba(47, 111, 176, 0.07); cursor: help; }
+.pay-round-menu { position: fixed; z-index: 60; min-width: 220px; background: var(--panel, #fff); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(43, 45, 44, 0.14); padding: 4px; display: flex; flex-direction: column; }
+.pay-round-menu button { font: inherit; font-size: 13px; text-align: left; background: none; border: none; border-radius: 6px; padding: 7px 10px; color: var(--ink); cursor: pointer; }
+.pay-round-menu button:hover { background: var(--wash); }
+.pay-round-menu button.on { background: var(--moss-soft); }
+.pay-round-title { padding: 6px 10px 4px; }
+.pay-uncertify { display: flex; flex-direction: column; gap: 8px; }
