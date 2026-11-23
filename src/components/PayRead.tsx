@@ -13,9 +13,11 @@ import type { PdfRead } from '../lib/payCompare'
  * line of the schedule of values. What its arithmetic bears out is filled in plainly; what it
  * does not is filled in red with the reason, and nothing is kept until it has been looked over.
  */
-export function PayRead({ known, current, onKeep, onAddLines, number, start, onStarted }: {
+export function PayRead({ known, current, onKeep, onAddLines, number, start, onStarted, periodTo }: {
   /** Add lines the PDF has to the schedule of values; returns their ids, in the same order. */
-  onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number; is_heading?: boolean }[]) => Promise<string[]>
+  onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number; is_heading?: boolean; is_change_order?: boolean; approved_on?: string | null }[]) => Promise<string[]>
+  /** The application's period, the default approval date of change order lines added from it. */
+  periodTo?: string
   known: (Known & { heading?: boolean })[]
   /** A PDF chosen while starting the application, to be read as soon as the application is open. */
   start?: File | null
@@ -44,6 +46,9 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   const [adds, setAdds] = useState<Set<number>>(new Set())
   /** Lines to be added that are headings, though the PDF prints them like any other line. */
   const [heads, setHeads] = useState<Set<number>>(new Set())
+  /** Lines to be added that are change order lines, and when the change order was approved. */
+  const [cos, setCos] = useState<Set<number>>(new Set())
+  const [coDate, setCoDate] = useState('')
 
   async function read(f: File | undefined | null) {
     if (!f) return
@@ -77,6 +82,12 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
       // A row with no figures at all, among lines that have them, is taken for a heading to begin
       // with ("CO 1" over the change order's lines); untick it if it is a line yet to be billed.
       const bare = (x: Extra) => !x.scheduled && !x.previous && !x.this_period && !x.stored
+      setCos(new Set(more.map((x, i) => [x, i] as const).filter(([x]) => x.co).map(([, i]) => i)))
+      // Approved this month if the PDF's change order summary says so; otherwise left for you to say.
+      {
+        const g = 'g702' in out ? (out as MatchRead).g702 : undefined
+        setCoDate(g && (g.coThisAdditions || g.coThisDeductions) && periodTo ? periodTo : '')
+      }
       setHeads(new Set(more.map((x, i) => [x, i] as const)
         .filter(([x]) => bare(x) && (sov.length > 0 || /^(c\.?\s?o\.?|change\s*order)\s*#?\s*\d+$/i.test(x.name.trim())))
         .map(([, i]) => i)))
@@ -109,7 +120,8 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
     try {
       const chosen = extra.map((x, i) => [x, i] as const).filter(([, i]) => adds.has(i))
       const ids = chosen.length && onAddLines
-        ? await onAddLines(chosen.map(([x, i]) => ({ item_no: x.item, description: x.name, scheduled_value: heads.has(i) ? 0 : x.scheduled, ...(heads.has(i) ? { is_heading: true } : {}) })))
+        ? await onAddLines(chosen.map(([x, i]) => ({ item_no: x.item, description: x.name, scheduled_value: heads.has(i) ? 0 : x.scheduled, ...(heads.has(i) ? { is_heading: true } : {}),
+          ...(cos.has(i) && !heads.has(i) ? { is_change_order: true, approved_on: coDate || null } : {}) })))
         : []
       await onKeep([
         ...rows.filter((r) => r.found).map((r) => {
@@ -195,6 +207,15 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                       {' '}Add
                     </label>
                   </th>
+                )}{extra.length > 0 && (
+                  <th title="A line of a change order: counted in the change order summary">
+                    <label className="pay-read-all">
+                      <input type="checkbox" checked={extra.every((_, i) => !adds.has(i) || heads.has(i) || cos.has(i)) && cos.size > 0}
+                        aria-label="Every line to be added is a change order line"
+                        onChange={(e) => setCos(e.target.checked ? new Set(extra.map((_, i) => i).filter((i) => adds.has(i) && !heads.has(i))) : new Set())} />
+                      {' '}CO
+                    </label>
+                  </th>
                 )}<th>Item</th><th>Description</th><th className="right">From previous</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
                 <tbody>
                   {lines.map((k) => {
@@ -203,7 +224,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                       const c = current(k.id)
                       return (
                         <tr key={k.id} className="pay-read-missing">
-                          {extra.length > 0 && <td />}<td className="mono">{k.item_no ?? ''}</td><td>{k.description}<div className="muted small">not found on the PDF — left as it is</div></td>
+                          {extra.length > 0 && <><td /><td /></>}<td className="mono">{k.item_no ?? ''}</td><td>{k.description}<div className="muted small">not found on the PDF — left as it is</div></td>
                           <td className="right mono">{money(k.previous)}</td><td className="right mono">{money(c.this_period)}</td><td className="right mono">{money(c.stored)}</td>
                         </tr>
                       )
@@ -212,7 +233,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                     const touch = () => setSeen((s) => new Set(s).add(r.id))
                     return (
                       <tr key={k.id} className={bad ? 'pay-read-unsure' : ''}>
-                        {extra.length > 0 && <td />}<td className="mono">{k.item_no ?? ''}</td>
+                        {extra.length > 0 && <><td /><td /></>}<td className="mono">{k.item_no ?? ''}</td>
                         <td>{k.description}{r.unsure && <div className={`small ${bad ? 'pay-read-warn' : 'muted'}`}>{r.unsure}</div>}{r.note && <div className="small muted">{r.note}</div>}{bad && r.from && <div className="muted small pay-read-from">PDF: {r.from}</div>}</td>
                         <td className="right mono">{money(k.previous)}</td>
                         <td className="right"><MoneyInput className="cell mono right" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
@@ -229,8 +250,10 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                       <tr key={`x${i}`} className={`pay-read-new${on ? '' : ' off'}${head ? ' heading' : ''}`}>
                         <td><input type="checkbox" checked={on} aria-label={`Add ${x.name} to the schedule of values`}
                           onChange={(e) => setAdds((a) => { const n = new Set(a); if (e.target.checked) n.add(i); else n.delete(i); return n })} /></td>
+                        <td><input type="checkbox" checked={cos.has(i) && !head} disabled={!on || head} aria-label={`${x.name} is a change order line`}
+                          onChange={(e) => setCos((c) => { const n = new Set(c); if (e.target.checked) n.add(i); else n.delete(i); return n })} /></td>
                         <td className="mono">{x.item ?? ''}</td>
-                        <td>{head ? <strong>{x.name}</strong> : x.name}
+                        <td>{head ? <strong>{x.name}</strong> : x.name}{cos.has(i) && !head && x.co ? <span className="tag pay-read-co">{x.co}</span> : null}
                           <label className="pay-read-head small">
                             <input type="checkbox" checked={head} disabled={!on}
                               onChange={(e) => setHeads((h) => { const n = new Set(h); if (e.target.checked) n.add(i); else n.delete(i); return n })} />
@@ -251,6 +274,13 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                 </tbody>
               </table>
             </div>
+            {[...cos].some((i) => adds.has(i) && !heads.has(i)) && (
+              <p className="small pay-read-codate">
+                {[...cos].filter((i) => adds.has(i) && !heads.has(i)).length} change order lines, approved on{' '}
+                <input type="date" value={coDate} onChange={(e) => setCoDate(e.target.value)} aria-label="Change order approved on" />
+                <span className="muted"> — the change order summary counts them in the month they were approved{coDate ? '' : '; with no date they count as approved before the applications'}.</span>
+              </p>
+            )}
             <div className="actions">
               <button className="primary" disabled={!!busy} onClick={() => void keep()}>{busy ?? (adds.size ? `Add ${adds.size} ${adds.size === 1 ? 'line' : 'lines'} and put the figures in the application` : 'Put these in the application')}</button>
               <button className="link" onClick={() => { setRows(null); setChecks(null); setExtra([]) }}>Cancel</button>

@@ -142,7 +142,10 @@ export function readPayLines(lines: string[], known: Known[]): { rows: ReadRow[]
 // ── from a table read off the page ──────────────────────────────────────────────────────────────
 
 
-export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number; pdf: PdfLine }
+export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number; pdf: PdfLine
+  /** The change order this line looks to belong to: under a "CO 1" row, or named "CO 1 …". */
+  co?: string
+}
 export interface MatchRead {
   rows: ReadRow[]
   found: number
@@ -266,12 +269,28 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     }
   })
 
+  // Change orders as the sheet sets them out: a row with no figures named "CO 1" or "Change Order 2"
+  // heads the lines under it, until a row with no figures that isn't one; a line can also say so itself.
+  const CO = /^(?:c\.?\s?o\.?|change\s*order)\s*#?\s*(\d+)\b/i
+  const coOf = new Map<TableRow, string>()
+  {
+    let under: string | null = null
+    for (const r of lines) {
+      const n = (names.get(r) ?? r.name).trim()
+      const bare = !r.value.C && !r.value.D && !r.value.E && !r.value.F
+      const m = CO.exec(n)
+      if (bare && m && n.length <= 24) { under = `CO ${Number(m[1])}`; coOf.set(r, under); continue }
+      if (bare && !m) { under = null; continue }
+      if (m) coOf.set(r, `CO ${Number(m[1])}`)
+      else if (under) coOf.set(r, under)
+    }
+  }
   const extra: Extra[] = lines
     // With nothing on record, every line is the schedule of values to be — a $0 line included.
     // A row with no figures at all is offered too: on a sheet with a schedule of values it is most
     // likely a heading ("CO 1" over the change order's lines), and is offered as one.
     .filter((r) => !taken.has(r))
-    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value) }))
+    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value), ...(coOf.has(r) ? { co: coOf.get(r) } : {}) }))
 
   // A column total that disagrees with its lines, where one row accounts for the difference.
   const totalNotes: string[] = []

@@ -12,6 +12,10 @@ with sync_playwright() as p:
     pg.locator('.pay-703-name', has_text='Building').click(button='right'); pg.wait_for_selector('.pay-line-menu')
     print('sheet menu:',pg.inner_text('.pay-line-menu').replace('\n',' | '))
     pg.click('.pay-line-menu button'); pg.wait_for_timeout(600); print('saved:',patched)
+    patched.clear(); pg.click('button:has-text("Select lines")')
+    items=pg.locator('.pay-703 tbody td.pay-703-item'); items.nth(0).click(); items.nth(1).click(modifiers=['Shift'])
+    print('selected:',pg.inner_text('.pay-pick-tools strong'))
+    pg.click('button:has-text("Mark as change order lines")'); pg.wait_for_timeout(800); print('bulk saved:',patched)
     b.close()
 
 # Pasting a schedule: a row that reads like a line is ticked as a heading.

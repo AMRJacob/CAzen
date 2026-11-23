@@ -1,6 +1,6 @@
 import type { Figures } from './payapps'
 import type { PdfLine } from './payRead'
-import type { G702Key, G702Read } from './payTable'
+import type { CoKey, G702Key, G702Read } from './payTable'
 
 /** What was read off the contractor's application, kept on the application (migration 0048). */
 export interface PdfRead {
@@ -19,7 +19,7 @@ export interface Discrepancy {
   where: 'g702' | 'line' | 'total'
   lineId?: string
   label: string
-  col: PdfCol | G702Key
+  col: PdfCol | G702Key | CoKey
   pdf: number
   app: number
 }
@@ -27,6 +27,10 @@ export interface Discrepancy {
 export const COL_SAYS: Record<PdfCol, string> = {
   C: 'scheduled value', D: 'from previous', E: 'this period', F: 'stored', G: 'completed and stored',
   pct: '% complete', H: 'balance to finish', I: 'retainage',
+}
+export const CO_SAYS: Record<CoKey, string> = {
+  coPreviousAdditions: 'Change orders approved before this month — additions', coPreviousDeductions: 'Change orders approved before this month — deductions',
+  coThisAdditions: 'Change orders approved this month — additions', coThisDeductions: 'Change orders approved this month — deductions',
 }
 export const G702_SAYS: Record<G702Key, string> = {
   originalSum: '1. Original contract sum', changeOrders: '2. Net change by change orders', contractSum: '3. Contract sum to date',
@@ -48,8 +52,17 @@ export function againstPdf(figures: Figures, pdf: PdfRead): Discrepancy[] {
     C: f.line ? f.line.scheduled_value : f.scheduled ?? 0, D: f.previous, E: f.thisPeriod, F: f.stored, G: f.toDate, pct: f.percent, H: f.balance, I: f.retainage,
   })
   const g = figures.g702
-  for (const [k, v] of Object.entries(pdf.g702 ?? {}) as [G702Key, number][]) {
-    if (v != null && !agrees(k, v, g[k])) out.push({ where: 'g702', label: G702_SAYS[k], col: k, pdf: v, app: g[k] })
+  const co = figures.changeOrderSummary
+  const coOf: Record<CoKey, number> = {
+    coPreviousAdditions: co.previousAdditions, coPreviousDeductions: co.previousDeductions,
+    coThisAdditions: co.thisAdditions, coThisDeductions: co.thisDeductions,
+  }
+  for (const [k, v] of Object.entries(pdf.g702 ?? {}) as [G702Key | CoKey, number][]) {
+    if (v == null) continue
+    if (k in coOf) {
+      const ours = coOf[k as CoKey]
+      if (!agrees(k, v, ours)) out.push({ where: 'g702', label: CO_SAYS[k as CoKey], col: k, pdf: v, app: ours })
+    } else if (!agrees(k, v, g[k as G702Key])) out.push({ where: 'g702', label: G702_SAYS[k as G702Key], col: k, pdf: v, app: g[k as G702Key] })
   }
   for (const f of figures.lines) {
     const p = pdf.lines[f.line.id]

@@ -71,7 +71,9 @@ export interface TableRead {
 
 export type G702Key = 'originalSum' | 'changeOrders' | 'contractSum' | 'completedAndStored' | 'retainageTotal'
   | 'earnedLessRetainage' | 'previousCertificates' | 'due' | 'balanceToFinish'
-export type G702Read = Partial<Record<G702Key, number>>
+/** The change order summary at the foot of the G702: additions and deductions, before and this month. */
+export type CoKey = 'coPreviousAdditions' | 'coPreviousDeductions' | 'coThisAdditions' | 'coThisDeductions'
+export type G702Read = Partial<Record<G702Key | CoKey, number>>
 
 /** The G702's lines by their printed labels, in the order they come; a scan runs words together. */
 const G702_LABELS: [G702Key, RegExp][] = [
@@ -93,7 +95,27 @@ const G702_LABELS: [G702Key, RegExp][] = [
  */
 export function g702From(lines: string[]): G702Read {
   const out: G702Read = {}
+  // The change order summary's two rows, each an addition and a deduction.
+  const pairs: [RegExp, CoKey, CoKey][] = [
+    [/previous\s*months/i, 'coPreviousAdditions', 'coPreviousDeductions'],
+    [/approved\s*this\s*month/i, 'coThisAdditions', 'coThisDeductions'],
+  ]
   for (const line of lines) {
+    for (const [label, add, take] of pairs) {
+      if (out[add] != null) continue
+      const m = label.exec(line)
+      if (!m) continue
+      const got: number[] = []
+      for (const tok of line.slice(m.index + m[0].length).split(/\s+/)) {
+        const t = tok.replace(/^[.:,]+|[.:,]+$/g, '').replace(/[Oo]/g, '0')
+        if (!t || /%/.test(t) || !/\d/.test(t)) continue
+        if (!/\$/.test(t) && !/^\(?-?[\d,]+[.,]\d\d\)?$/.test(t)) continue
+        const f = figure(t)
+        if (f && !f.pct) got.push(f.n)
+        if (got.length === 2) break
+      }
+      if (got.length === 2) { out[add] = got[0]; out[take] = Math.abs(got[1]) }
+    }
     for (const [key, label] of G702_LABELS) {
       if (out[key] != null) continue
       const m = label.exec(line)

@@ -57,7 +57,7 @@ export interface Contract {
 export type RoundWay = 'nearest' | 'up' | 'down'
 export type RoundColumn = 'G' | 'pct' | 'H' | 'I'
 export type Rounding = Partial<Record<RoundColumn, RoundWay>>
-/** One cell set apart from its column: rounded another way, or left exact (migration 0049). */
+/** One cell set apart from its column: rounded another way, or left exact (migration 0050). */
 export type CellWay = RoundWay | 'exact'
 export type CellRounding = Record<string, Partial<Record<RoundColumn, CellWay>>>
 
@@ -85,7 +85,7 @@ export interface Application {
   retainage_stored: number | null
   status: string
   certified_sum: number | null
-  /** Cells of this application rounded differently from their column (migration 0049). */
+  /** Cells of this application rounded differently from their column (migration 0050). */
   rounding?: CellRounding | null
   /** What was read off the contractor's PDF, to set the arithmetic against (migration 0048). */
   pdf_read?: import('./payCompare').PdfRead | null

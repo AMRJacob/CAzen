@@ -3571,3 +3571,13 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .ag-x:hover { background: #f1e3de; color: #a2452f; }
 /* A cell rounded its own way, not its column's: burnt orange, to tell it from the column's blue. */
 .pay-703 td.pay-round-own { color: #b5531c; background: rgba(204, 85, 0, 0.09); cursor: help; font-weight: 500; }
+.pay-read-co { margin-left: 6px; font-size: 11px; }
+.pay-read-codate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.pay-pick-bar { margin: 4px 0 8px; }
+.pay-pick-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 10px; background: var(--wash); border: 1px solid var(--line); border-radius: 8px; position: sticky; top: 0; z-index: 5; }
+.pay-pick-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+.pay-pick-actions button { font-size: 13px; padding: 5px 10px; }
+.pay-pick-box { margin-right: 6px; vertical-align: middle; pointer-events: none; }
+.pay-703-wrap.picking .pay-703-item { white-space: nowrap; user-select: none; }
+.pay-703 tr.picked td { background: var(--moss-soft); }

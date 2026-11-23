@@ -11,11 +11,33 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:50 CST (change orders off the PDF; selecting several lines)
+
+- **The cover sheet's change orders.** The G702 reader now also reads the change order summary
+  (additions and deductions approved in previous months and this month), and the comparison card
+  sets it, and line 2, against CAzen's. Line 2 was already read.
+- **Change order lines from the sheet.** A row with no figures named "CO 1" (or "Change Order 2")
+  heads the lines under it, until the next row with no figures; a line named "CO 1 …" says so
+  itself. Those lines come into the review window with the new CO box ticked and a "CO 1" tag
+  (a check-all box heads the column). They are added as change order lines, approved on the date
+  shown — the application's period when the PDF's summary has change orders approved this month,
+  otherwise blank for you to fill in (blank counts as approved before the applications).
+- **Selecting lines on the sheet.** "Select lines" above the G703: click item numbers to select,
+  shift-click for everything between, or All. Then mark them as change order lines (with an
+  approval date, defaulting to the application's period), not change orders, headings, or line
+  items.
+
+On Jacob's June application against the 13 lines on record: the 33 lines under "CO 1" (51–83) are
+picked out, total $1,682,671 — the cover sheet's line 2 and "approved this month" — and line 2,
+line 3 and the change order summary agree with the PDF. Browser checks `checks/t_heading.py`,
+`checks/t_paynew.py`. Migration 0049_pay_cell_rounding renumbered 0050 (another session's 0049
+landed first; both are applied).
+
 # Checkpoint — 2026-11-23, 17:30 CST (rounding a single cell its own way)
 
 On a draft application, right-clicking a cell in G, %, H or I opens "this cell only": as the column,
 exact, nearest, up, down. A cell set apart from its column is burnt orange, with what it is set to,
-what the column does and the exact figure on hover. Kept per application and line (migration 0049,
+what the column does and the exact figure on hover. Kept per application and line (migration 0050,
 additive: `pay_apps.rounding jsonb`, applied to production); totals and the G702 follow, and a later
 application's line 7 reads the earlier one with its own cells. Tests in `checks/rounding.test.ts`;
 browser check `checks/t_round.py`.
