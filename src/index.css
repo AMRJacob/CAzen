@@ -3406,8 +3406,12 @@ a.trb-open:hover { box-shadow: 0 1px 1px rgba(40, 35, 25, 0.08), 0 10px 18px -8p
 .nb-grid:not(.nb-grid-phone) .nb-cell:not(.at-top) > .nb-cell-in > .nb-z { border-top: 1px solid var(--hair); }
 .nb-grid:not(.nb-grid-phone) .nb-cell.at-left > .nb-cell-in > .nb-z { padding-left: 0; }
 .nb-laid .nb-cell-head > .nb-cell-in > .nb-z { padding-bottom: 14px; }
-.nb-laid .nb-cell-head > .nb-cell-in > .nb-z, .nb-laid .nb-cell-names > .nb-cell-in > .nb-z,
-.nb-laid .nb-cell-text > .nb-cell-in > .nb-z, .nb-laid .nb-cell-check > .nb-cell-in > .nb-z { overflow-y: auto; }
+/* Nothing scrolls inside a block (Jacob, 11/23): a block is at least the cells it was given and
+   grows with what is in it, its row with it, and the page scrolls instead. So the chain from cell
+   to contents keeps its contents' height, and the lists that used to scroll in place run on. */
+.nb-grid:not(.nb-grid-phone) .nb-cell, .nb-grid:not(.nb-grid-phone) .nb-cell-in, .nb-laid .nb-cell-in > .nb-z { min-height: auto; overflow: visible; }
+.nb-laid .nb-cell-in .nb-names, .nb-laid .nb-cell-in .nb-gallery, .nb-laid .nb-cell-in .nb-seen { overflow: visible; flex: 1 0 auto; min-height: auto; }
+.nb-laid .nb-cell-in .nb-free { flex: 1 0 auto; overflow: hidden; }
 
 /* A text box: the page's ruling, typed on. */
 .nb-paper .nb-free { flex: 1; min-height: 0; width: 100%; resize: none; border: none; outline: none; font: inherit; font-size: 16px; color: inherit; }

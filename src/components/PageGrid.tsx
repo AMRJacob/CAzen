@@ -84,6 +84,8 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
     const el = grid.current
     if (!el || screen === 'phone') return
     // Twelve rows fill what the paper leaves; never so short that a block has no room to say what it is.
+    // A row is that tall at least — taller when what is in a block needs it, so no block scrolls
+    // inside itself: the page grows and scrolls instead.
     const see = () => {
       const paper = el.parentElement
       if (!paper) return
@@ -144,7 +146,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
   const order = phone ? blocks : [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
   return (
     <div ref={grid} className={`nb-grid${phone ? ' nb-grid-phone' : ''}${arranging ? ' nb-arranging' : ''}`}
-      style={phone ? undefined : { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: `${row}px`, ['--rows' as string]: depth(blocks) }}>
+      style={phone ? undefined : { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: `minmax(${row}px, auto)`, ['--rows' as string]: depth(blocks) }}>
       {order.map((b, i) => (
         <div key={b.id} data-block={b.id}
           className={`nb-cell nb-cell-${b.kind}${b.x === 0 ? ' at-left' : ''}${b.y === 0 ? ' at-top' : ''}${lifted === b.id ? ' lifted' : ''}`}
@@ -255,10 +257,19 @@ function useSoon<T>(value: T, save: (v: T) => void, ms = 600) {
 /** A plain box to type in, on the page's ruling, under a heading of the writer's choosing. */
 export function TextBlock({ title, widget, onSave }: { title: string; widget: Widget | undefined; onSave: (w: Widget) => void }) {
   const [text, setText, flush] = useSoon(textOf(widget), (t) => onSave({ title, text: t }))
+  // As tall as what is typed, at least the block's height: the box grows rather than scroll.
+  const box = useRef<HTMLTextAreaElement | null>(null)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.flex = 'none'; el.style.height = '0px'
+    const h = el.scrollHeight
+    el.style.height = `${h}px`; el.style.flex = ''
+  }, [text])
   return (
     <section className="nb-z nb-z-text">
       <div className="nb-z-top"><h2>{title}</h2></div>
-      <textarea className="nb-write nb-ruled nb-free" value={text} placeholder="Type here"
+      <textarea ref={box} className="nb-write nb-ruled nb-free" value={text} placeholder="Type here"
         onChange={(e) => setText(e.target.value)} onBlur={flush} aria-label={title} />
     </section>
   )

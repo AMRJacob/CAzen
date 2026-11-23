@@ -11,6 +11,24 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 13:25 CST (no scroll bars inside blocks)
+
+**Blocks grow with what is in them instead of scrolling** (Jacob, 13:19: the layout tools work,
+but some blocks have scroll bars). Found with a full page — 9 attendees, 14 photos, 9 previous
+observations, 5 categories of notes — at 1500 × 950, 1366 × 768, 1024 × 768 and 820 × 1180:
+attendees, photographs and observations scrolled inside their blocks, the head did on the two
+shorter screens, and the notes board ran out past the bottom of its block over what was below.
+
+- A grid row is now *at least* a twelfth of the screen and taller when a block in it needs it
+  (`minmax(row, auto)`); the chain from cell to contents keeps its contents' height, and the
+  attendee list, gallery and observation list run on rather than scroll. The page scrolls.
+- A block's set size is therefore its least size. Blocks beside a grown one grow with the row
+  (the sketch stretches with long notes, for instance).
+- A text box grows with what is typed in it.
+- The phone was not affected (its blocks already took their contents' height).
+- `checks/t_noscroll.py` lists every element in the grid with a scroll bar: four before at each
+  size, none after. `t_arrange.py` rerun clean.
+
 # Checkpoint — 2026-11-23 (notebook pages arranged by their writer)
 
 **A notebook page's blocks can be moved, sized, hidden and added to** (Jacob, 12:02: let users
