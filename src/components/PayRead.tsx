@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { message } from '../lib/errors'
 import { money } from '../lib/money'
 import { matchTable, readPayLines, type Known, type MatchRead, type ReadRow } from '../lib/payRead'
@@ -11,8 +11,11 @@ import type { Billed } from '../lib/payapps'
  * line of the schedule of values. What its arithmetic bears out is filled in plainly; what it
  * does not is filled in red with the reason, and nothing is kept until it has been looked over.
  */
-export function PayRead({ known, current, onKeep, number }: {
+export function PayRead({ known, current, onKeep, number, start, onStarted }: {
   known: (Known & { heading?: boolean })[]
+  /** A PDF chosen while starting the application, to be read as soon as the application is open. */
+  start?: File | null
+  onStarted?: () => void
   /** This application's number, to say so if the PDF is a different one. */
   number?: number
   /** What the application holds now, so a row the PDF does not have is left as it is. */
@@ -55,6 +58,16 @@ export function PayRead({ known, current, onKeep, number }: {
       setRows(out.rows); setEdits({}); setSeen(new Set())
     } catch (e) { setError(message(e)) } finally { setBusy(null); if (file.current) file.current.value = '' }
   }
+
+  // Read once per file, however often the effect runs.
+  const started = useRef<File | null>(null)
+  useEffect(() => {
+    if (!start || started.current === start) return
+    started.current = start
+    onStarted?.()
+    void read(start)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start])
 
   const byId = new Map(rows?.map((r) => [r.id, r]))
   const val = (r: ReadRow) => edits[r.id] ?? { e: r.this_period ? String(r.this_period) : '', f: r.stored ? String(r.stored) : '' }

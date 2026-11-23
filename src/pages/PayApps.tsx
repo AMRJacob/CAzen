@@ -1,7 +1,7 @@
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import { ContractSetup } from '../components/ContractSetup'
 import { PayRead } from '../components/PayRead'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
@@ -39,6 +39,9 @@ export default function PayApps() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
+  /** The New application panel: a PDF to read it from, or a blank one. */
+  const [starting, setStarting] = useState(false)
+  const [startFile, setStartFile] = useState<{ appId: string; file: File } | null>(null)
 
   const projectId = current?.id
   useEffect(() => {
@@ -64,12 +67,14 @@ export default function PayApps() {
 
   const latest = figured.length ? figured[figured.length - 1] : null
 
-  async function addApplication() {
+  async function addApplication(file?: File) {
     if (!data || busy) return
     setBusy(true)
     try {
       const next = (data.applications[data.applications.length - 1]?.number ?? 0) + 1
       const id = await newApplication(data.contract.id, next, today())
+      if (file) setStartFile({ appId: id, file })
+      setStarting(false)
       load()
       setTab(id)
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
@@ -95,10 +100,20 @@ export default function PayApps() {
             {data ? ` · ${data.applications.length} ${data.applications.length === 1 ? 'application' : 'applications'}` : ''}
           </p>
         </div>
-        {data && <button className="primary desk-only" onClick={() => void addApplication()} disabled={busy}>New application</button>}
+        {data && !starting && <button className="primary desk-only" onClick={() => setStarting(true)} disabled={busy}>New application</button>}
       </div>
 
       {error && <div className="notice error">{error}</div>}
+
+      {data && starting && (
+        <NewApplication
+          number={(data.applications[data.applications.length - 1]?.number ?? 0) + 1}
+          busy={busy}
+          onFile={(f) => void addApplication(f)}
+          onBlank={() => void addApplication()}
+          onCancel={() => setStarting(false)}
+          onTrouble={setError} />
+      )}
 
       {contracts?.length === 0 && (
         <ContractSetup project={current} onCreated={(id) => {
@@ -153,12 +168,62 @@ export default function PayApps() {
                 onChanged={load}
                 onRemoved={() => { setTab('summary'); load() }}
                 onTrouble={setError}
+                start={startFile?.appId === data.applications[i].id ? startFile.file : null}
+                onStarted={() => setStartFile(null)}
               />
             )
           })()}
         </>
       )}
     </section>
+  )
+}
+
+// ---------- Starting an application ----------
+
+/**
+ * New application: the contractor's PDF dropped or chosen here opens the application and reads
+ * this period from it straight away; without one, the application starts blank.
+ */
+function NewApplication({ number, busy, onFile, onBlank, onCancel, onTrouble }: {
+  number: number
+  busy: boolean
+  onFile: (f: File) => void
+  onBlank: () => void
+  onCancel: () => void
+  onTrouble: (m: string) => void
+}) {
+  const file = useRef<HTMLInputElement>(null)
+  const [over, setOver] = useState(false)
+  const take = (f: File | undefined | null) => {
+    if (!f) return
+    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) onFile(f)
+    else onTrouble('That isn’t a PDF. The application needs to be the PDF the contractor sent.')
+  }
+  return (
+    <div className="card pay-new">
+      <div className="pad-head">
+        <h3>Application {number}</h3>
+        <button className="link" onClick={onCancel} disabled={busy}>Cancel</button>
+      </div>
+      <div className={`drop-spot${over ? ' over' : ''}${busy ? ' busy' : ''}`}
+        role="button" tabIndex={0} aria-label="Drop the contractor’s application PDF here, or choose it"
+        onClick={() => { if (!busy) file.current?.click() }}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !busy) { e.preventDefault(); file.current?.click() } }}
+        onDragOver={(e) => { e.preventDefault(); if (!busy) setOver(true) }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault(); setOver(false)
+          if (busy) return
+          take(Array.from(e.dataTransfer.files).find((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) ?? e.dataTransfer.files?.[0])
+        }}>
+        {busy
+          ? <span role="status">Opening the application…</span>
+          : <><strong>Drop the contractor’s application PDF here</strong><span className="muted small">or click to choose it — printed or scanned. This period is read from it and shown before anything is kept.</span></>}
+      </div>
+      <input ref={file} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { take(e.target.files?.[0]); e.target.value = '' }} />
+      <button className="link" onClick={onBlank} disabled={busy}>Start it without a PDF</button>
+    </div>
   )
 }
 
@@ -426,8 +491,10 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
 
 // ---------- One application ----------
 
-function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble }: {
+function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble, start, onStarted }: {
   onRemoved: () => void
+  start?: File | null
+  onStarted?: () => void
   data: LoadedContract
   index: number
   figures: Figures
@@ -572,6 +639,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble 
               previous: figures.lines.find((x) => x.line.id === l.id)?.previous ?? 0, heading: l.is_heading }))}
             current={valueOf}
             number={app.number}
+            start={start}
+            onStarted={onStarted}
             onKeep={async (rows) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
               setEdits({}); onChanged()

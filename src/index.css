@@ -3493,3 +3493,4 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .ov-marks .ov-when { white-space: nowrap; }
 .ov-marks a { grid-template-columns: 184px 1fr max-content; }
 @media (max-width: 640px) { .ov-marks a { grid-template-columns: 1fr max-content; } }
+.pay-new .drop-spot { min-height: 140px; }

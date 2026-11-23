@@ -11,6 +11,14 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 15:10 CST (New application starts from the contractor's PDF)
+
+"New application" now opens a panel with a drop zone, like the schedule reader's: drop the
+contractor's PDF on it (or click to choose it), and the application is opened and this period is
+read from the PDF straight away, into the same review dialog as before. "Start it without a PDF"
+makes a blank one as the button used to. The in-application "Read this period" strip still
+takes drops too. Checked in a test browser (`checks/t_paynew.py`) with a real drag-and-drop event.
+
 # Checkpoint — 2026-11-23, 14:52 CST (outlined schedules, folding levels, handwriting, benchmarks)
 
 Prompted by a scanned Kinco schedule for a UCA project: six levels of outline, IDs that skip, a
