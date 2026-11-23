@@ -11,6 +11,28 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:20 CST (CAzen's arithmetic set against the contractor's PDF)
+
+Jacob asked to be sure the app does its own pay-app arithmetic rather than adding up what the PDF
+says, and to have it point out where the PDF disagrees. It does its own: only columns E and F are
+taken from the PDF; D, G, %, H, I and the whole G702 are worked out from the schedule of values and
+earlier applications.
+
+New: when figures are put in from a PDF, everything the PDF said is kept on the application
+(migration 0048, additive: `pay_apps.pdf_read jsonb`, applied to production) — every column of each
+line it read (C–H settled by the row's own arithmetic, I and % as printed), the grand total row,
+and now the G702 page's nine numbered lines, read by their labels (`g702From` in `payTable.ts`).
+An "Against the contractor's PDF" card on the application lists every figure CAzen works out
+differently (PDF, CAzen, difference), G702 lines first; the cells on the G703 are marked red with
+both figures on hover. It is worked out again on every change, so a correction or a rounding choice
+that brings them together clears it. When one column differs by under a dollar on several lines it
+says the contractor may be rounding that column. "Forget the PDF" stops comparing. New
+`lib/payCompare.ts`; tests added to `checks/rounding.test.ts`.
+
+On Jacob's UCA CW Loop Application 1, against an empty contract: all nine G702 lines read; ten
+figures differ (retainage on five lines, its total, and G702 lines 5, 6, 8, 9, each by $1.55 or
+less) — Kinco rounds retainage per line. Rounding column I to the nearest dollar clears all ten.
+
 # Checkpoint — 2026-11-23, 16:00 CST (rounded columns on the G703; uncertify)
 
 **Rounding.** Right-clicking a heading of column G (completed and stored), %, H (balance) or I

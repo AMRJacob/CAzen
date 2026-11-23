@@ -61,8 +61,54 @@ export interface TableRead {
   totals: { col: Fig; printed: number; added: number; agree: boolean }[]
   /** "Application No." as printed, where it could be read. */
   application?: string
+  /** The G702's numbered lines as printed, where they could be read. */
+  g702?: G702Read
   /** Lines of a description with no figures on them — a name run onto a second line — with the rows above and below. */
   wraps: { text: string; above: number | null; below: number | null }[]
+}
+
+// ── the G702 page ──
+
+export type G702Key = 'originalSum' | 'changeOrders' | 'contractSum' | 'completedAndStored' | 'retainageTotal'
+  | 'earnedLessRetainage' | 'previousCertificates' | 'due' | 'balanceToFinish'
+export type G702Read = Partial<Record<G702Key, number>>
+
+/** The G702's lines by their printed labels, in the order they come; a scan runs words together. */
+const G702_LABELS: [G702Key, RegExp][] = [
+  ['originalSum', /original\s*contract\s*sum/i],
+  ['changeOrders', /net\s*change\s*by\s*change\s*orders?/i],
+  ['contractSum', /contract\s*sum\s*to\s*date/i],
+  ['completedAndStored', /total\s*completed\s*(?:and|&)\s*stored/i],
+  ['retainageTotal', /total\s*retainage/i],
+  ['earnedLessRetainage', /total\s*earned\s*less\s*retainage/i],
+  ['previousCertificates', /less\s*previous\s*certificates?/i],
+  ['due', /current\s*payment\s*due/i],
+  ['balanceToFinish', /balance\s*to\s*finish/i],
+]
+
+/**
+ * The G702's figures, from the lines of text on its page: each label, and the first dollar figure
+ * after it on the same line. The right half of the page (the certifications) shares those lines,
+ * which is why it is the first figure after the label and not the last on the line.
+ */
+export function g702From(lines: string[]): G702Read {
+  const out: G702Read = {}
+  for (const line of lines) {
+    for (const [key, label] of G702_LABELS) {
+      if (out[key] != null) continue
+      const m = label.exec(line)
+      if (!m) continue
+      for (const tok of line.slice(m.index + m[0].length).split(/\s+/)) {
+        const t = tok.replace(/^[.:,]+|[.:,]+$/g, '')
+        if (!t || /%/.test(t)) continue
+        const asDigits = t.replace(/[Oo]/g, '0')
+        if (!/\$/.test(t) && !/^\(?-?[\d,]+[.,]\d\d\)?$/.test(asDigits)) continue
+        const f = figure(t.startsWith('$') ? '$' + asDigits.slice(1) : asDigits)
+        if (f && !f.pct) { out[key] = f.n; break }
+      }
+    }
+  }
+  return out
 }
 
 // ── words to figures ────────────────────────────────────────────────────────────────────────────
@@ -293,12 +339,16 @@ function rolesOf(cols: Column[], rows: (number | null)[][]): Roles | null {
 export function readTable(pages: PlacedWord[][]): TableRead {
   const rows: TableRow[] = []
   const wraps: TableRead['wraps'] = []
-  let tablePages = 0, application: string | undefined
+  let tablePages = 0, application: string | undefined, g702: G702Read | undefined
   pages.forEach((all, pi) => {
     const words = all.filter((w) => w.text.trim() && !JUNK.test(w.text.trim()))
     if (!words.length) return
     const h = median(words.map((w) => w.h)) || 1
     const lines = linesOf(words)
+    {
+      const found = g702From(lines.map((l) => l.words.map((w) => w.text).join(' ')))
+      if (Object.keys(found).length >= 3) g702 = { ...found, ...g702 }
+    }
     if (!application) {
       for (const l of lines) {
         const s = l.words.map((w) => w.text).join(' ')
@@ -431,7 +481,7 @@ export function readTable(pages: PlacedWord[][]): TableRead {
       totals.push({ col, printed, added, agree: near(printed, added) })
     }
   }
-  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}) }
+  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}), ...(g702 ? { g702 } : {}) }
 }
 
 /** A row with no number whose first word is junk the reader made of one. */

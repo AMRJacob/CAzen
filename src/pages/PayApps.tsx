@@ -11,6 +11,7 @@ import { today, usDate } from '../lib/dates'
 import { figure, standings, type Billed, type Figures, type RetainageStep, type RoundColumn, type RoundWay, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
+import { againstPdf, COL_SAYS, type Discrepancy, type PdfCol } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
@@ -557,9 +558,24 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     title: `${ROUND_SAYS[rounding[col] ?? 'exact']} — right-click to change`,
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); setRoundMenu({ col, x: e.clientX, y: e.clientY }) },
   })
-  const roundCell = (exact: number | undefined, pct = false) => exact == null
-    ? { className: 'right mono' }
-    : { className: 'right mono pay-rounded', title: `Rounded. Exact: ${pct ? `${exact.toFixed(2)}%` : exact.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}` }
+  // Where CAzen's arithmetic and the contractor's PDF part company, worked out afresh each time,
+  // so a correction or a rounding choice that brings them together clears it.
+  const pdf = app.pdf_read ?? null
+  const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
+  const diffAt = (lineId: string | null, col: PdfCol) =>
+    diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
+  const roundCell = (exact: number | undefined, pct = false, lineId: string | null = null, col?: PdfCol) => {
+    const d = col ? diffAt(lineId, col) : undefined
+    const say = (n: number) => (pct ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
+    const notes = [
+      exact != null ? `Rounded. Exact: ${say(exact)}` : '',
+      d ? `The contractor’s PDF has ${say(d.pdf)}; CAzen works it out as ${say(d.app)}.` : '',
+    ].filter(Boolean)
+    return {
+      className: `right mono${exact != null ? ' pay-rounded' : ''}${d ? ' pay-pdf-diff' : ''}`,
+      ...(notes.length ? { title: notes.join('\n') } : {}),
+    }
+  }
 
   return (
     <>
@@ -661,6 +677,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         </table>
       </div>
 
+      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} onForget={async () => {
+        try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
+      }} />}
+
       <div className="card">
         <h3>Continuation sheet</h3>
         {askAbout.length > 0 && (
@@ -688,8 +708,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               for (const [k, l] of lines.entries()) ids.push(await addSovLine(data.contract.id, { ...l, sort: nextSort + k }))
               return ids
             }}
-            onKeep={async (rows) => {
+            onKeep={async (rows, pdf) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
+              if (pdf) await setApplication(app.id, { pdf_read: pdf } as never)
               setEdits({}); onChanged()
             }} />
         )}
@@ -726,8 +747,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                       {l.description}
                       {l.change_order_id && <ApprovedOn line={l} onChanged={onChanged} onTrouble={onTrouble} />}
                     </td>
-                    <td className="right mono" data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
-                    <td className="right mono" data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
+                    <td {...roundCell(undefined, false, l.id, 'C')} data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
+                    <td {...roundCell(undefined, false, l.id, 'D')} data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
                     <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
                       {editable
                         ? <MoneyInput className="cell mono right" value={v.this_period || ''}
@@ -754,10 +775,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                         </span>
                       )}
                     </td>
-                    <td {...roundCell(f.exact?.toDate)} data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
-                    <td {...roundCell(f.exact?.percent, true)} data-label="Complete">{percent(f.percent)}</td>
-                    <td {...roundCell(f.exact?.balance)} data-label="Balance"><Money n={f.balance} /></td>
-                    <td {...roundCell(f.exact?.retainage)} data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
+                    <td {...roundCell(f.exact?.toDate, false, l.id, 'G')} data-label="Completed and stored" data-nothing={f.toDate ? undefined : ''}><Money n={f.toDate} /></td>
+                    <td {...roundCell(f.exact?.percent, true, l.id, 'pct')} data-label="Complete">{percent(f.percent)}</td>
+                    <td {...roundCell(f.exact?.balance, false, l.id, 'H')} data-label="Balance"><Money n={f.balance} /></td>
+                    <td {...roundCell(f.exact?.retainage, false, l.id, 'I')} data-label="Retainage" data-nothing={f.retainage ? undefined : ''}><Money n={f.retainage} /></td>
                   </tr>
                 )
               })}
@@ -767,10 +788,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 <td className="right mono" data-label="From previous"><Money n={figures.totals.previous} strong /></td>
                 <td className="right mono" data-label="This period"><Money n={figures.totals.thisPeriod} strong /></td>
                 <td className="right mono" data-label="Stored"><Money n={figures.totals.stored} strong /></td>
-                <td {...roundCell(figures.totals.exact?.toDate)} data-label="Completed and stored"><Money n={figures.totals.toDate} strong /></td>
-                <td {...roundCell(figures.totals.exact?.percent, true)} data-label="Complete"><strong>{percent(figures.totals.percent)}</strong></td>
-                <td {...roundCell(figures.totals.exact?.balance)} data-label="Balance"><Money n={figures.totals.balance} strong /></td>
-                <td {...roundCell(figures.totals.exact?.retainage)} data-label="Retainage"><Money n={figures.totals.retainage} strong /></td>
+                <td {...roundCell(figures.totals.exact?.toDate, false, null, 'G')} data-label="Completed and stored"><Money n={figures.totals.toDate} strong /></td>
+                <td {...roundCell(figures.totals.exact?.percent, true, null, 'pct')} data-label="Complete"><strong>{percent(figures.totals.percent)}</strong></td>
+                <td {...roundCell(figures.totals.exact?.balance, false, null, 'H')} data-label="Balance"><Money n={figures.totals.balance} strong /></td>
+                <td {...roundCell(figures.totals.exact?.retainage, false, null, 'I')} data-label="Retainage"><Money n={figures.totals.retainage} strong /></td>
               </tr>
             </tbody>
           </table>
@@ -787,6 +808,61 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         {editable && <AddLine contractId={data.contract.id} projectId={(data.contract as unknown as { project_id: string }).project_id} lines={data.lines} nextSort={nextSort} onAdded={onChanged} onTrouble={onTrouble} />}
       </div>
     </>
+  )
+}
+
+/**
+ * CAzen's arithmetic set against the contractor's own application: every figure the PDF had that
+ * CAzen works out differently. It is worked out again on every change, so a figure put right, or
+ * a column rounded as the contractor rounds it, drops off the list.
+ */
+function AgainstPdf({ pdf, diffs, onForget }: { pdf: import('../lib/payCompare').PdfRead; diffs: Discrepancy[]; onForget: () => void }) {
+  const say = (d: Discrepancy, n: number) => (d.col === 'pct' ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
+  const g = diffs.filter((d) => d.where === 'g702')
+  const rest = diffs.filter((d) => d.where !== 'g702')
+  // Small differences all in one column, line after line, are usually the contractor rounding it.
+  const byCol = new Map<string, Discrepancy[]>()
+  for (const d of rest) if (d.where === 'line') byCol.set(String(d.col), [...(byCol.get(String(d.col)) ?? []), d])
+  const rounds = [...byCol.entries()].filter(([c, ds]) => ['G', 'H', 'I', 'pct'].includes(c) && ds.length >= 2 && ds.every((d) => Math.abs(d.pdf - d.app) < 1))
+  const read = new Date(pdf.read_at)
+  return (
+    <div className={`card pay-against${diffs.length ? ' has-diffs' : ''}`}>
+      <div className="pad-head">
+        <h3>Against the contractor’s PDF</h3>
+        <button className="link small" onClick={onForget} title="Stop comparing with this PDF">Forget the PDF</button>
+      </div>
+      <p className="muted small">
+        {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
+        applications; only this period and stored were taken from the PDF.
+      </p>
+      {!diffs.length
+        ? <p className="pay-read-ok">Every figure on the contractor’s PDF agrees with CAzen’s arithmetic.</p>
+        : (
+          <>
+            <p><strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong> from CAzen’s arithmetic. They are marked red on the sheet below, with both figures on hover.</p>
+            <table className="pay-against-table">
+              <thead><tr><th>Where</th><th>Column</th><th className="right">Contractor’s PDF</th><th className="right">CAzen</th><th className="right">Difference</th></tr></thead>
+              <tbody>
+                {[...g, ...rest].map((d, i) => (
+                  <tr key={i}>
+                    <td>{d.where === 'g702' ? 'G702' : d.label}</td>
+                    <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
+                    <td className="right mono">{say(d, d.pdf)}</td>
+                    <td className="right mono">{say(d, d.app)}</td>
+                    <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rounds.map(([c, ds]) => (
+              <p key={c} className="muted small">
+                {COL_SAYS[c as PdfCol][0].toUpperCase() + COL_SAYS[c as PdfCol].slice(1)} differs by less than a dollar on {ds.length} lines — the contractor may be rounding that column.
+                Right-clicking its heading on the sheet sets how it is rounded.
+              </p>
+            ))}
+          </>
+        )}
+    </div>
   )
 }
 

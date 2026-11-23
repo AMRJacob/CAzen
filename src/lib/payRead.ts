@@ -11,7 +11,7 @@
  *
  * Dependency-free (`checks/payread.test.ts`).
  */
-import { settle, COLUMN_NAME, type TableRead, type TableRow, type Fig } from './payTable.ts'
+import { settle, COLUMN_NAME, type TableRead, type TableRow, type Fig, type G702Read } from './payTable.ts'
 
 export interface Known { id: string; item_no: string | null; description: string; scheduled: number; previous: number }
 export interface ReadRow {
@@ -25,6 +25,17 @@ export interface ReadRow {
   note?: string
   /** The line of the PDF it was read from. */
   from?: string
+  /** Every column as the PDF has it, after the row's own arithmetic has settled the misreads. */
+  pdf?: PdfLine
+}
+
+/** One line of the contractor's continuation sheet: C to H settled, I and % as printed. */
+export type PdfLine = Partial<Record<'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'pct', number>>
+const pdfLine = (r: TableRow, settled: Record<Fig, number>): PdfLine => {
+  const out: PdfLine = { ...settled }
+  if (r.read.I != null) out.I = r.read.I
+  if (r.read.pct != null) out.pct = r.read.pct
+  return out
 }
 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.015
@@ -131,7 +142,7 @@ export function readPayLines(lines: string[], known: Known[]): { rows: ReadRow[]
 // ── from a table read off the page ──────────────────────────────────────────────────────────────
 
 
-export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number }
+export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number; pdf: PdfLine }
 export interface MatchRead {
   rows: ReadRow[]
   found: number
@@ -144,6 +155,9 @@ export interface MatchRead {
   /** Where a column's total and its lines disagree, and which row accounts for it. */
   totalNotes: string[]
   application?: string
+  g702?: G702Read
+  /** The grand total row as printed. */
+  total?: PdfLine
 }
 
 const sameItem = (a: string | null, b: string | null) =>
@@ -229,6 +243,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       id: k.id, found: true, this_period: s.value.E, stored: s.value.F,
       ...(red.length ? { unsure: red.join('; ') } : {}),
       ...(grey.length ? { note: grey.join('; ') } : {}),
+      pdf: pdfLine(r, s.value),
       from: `${r.item ?? ''} ${names.get(r) ?? ''} · ${['C', 'D', 'E', 'F', 'G', 'H'].map((c) => r.read[c as Fig] == null ? '—' : fmt(r.read[c as Fig]!)).join(' · ')}`.trim(),
     }
   })
@@ -236,7 +251,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
   const extra: Extra[] = lines
     // With nothing on record, every line is the schedule of values to be — a $0 line included.
     .filter((r) => !taken.has(r) && (!known.length || r.value.C || r.value.D || r.value.E || r.value.F))
-    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F }))
+    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value) }))
 
   // A column total that disagrees with its lines, where one row accounts for the difference.
   const totalNotes: string[] = []
@@ -254,5 +269,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     rows, found: rows.filter((r) => r.found).length, unsure: rows.filter((r) => r.unsure).length,
     extra, missing: table.missing.filter((n) => !known.some((k) => sameItem(k.item_no, n) && pick.has(k.id))),
     totals: table.totals, totalNotes, ...(table.application ? { application: table.application } : {}),
+    ...(table.g702 ? { g702: table.g702 } : {}),
+    ...(() => { const t = table.rows.find((x) => x.kind === 'total'); return t ? { total: Object.fromEntries(Object.entries(t.read).filter(([, v]) => v != null)) as PdfLine } : {} })(),
   }
 }

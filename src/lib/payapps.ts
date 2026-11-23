@@ -81,6 +81,8 @@ export interface Application {
   retainage_stored: number | null
   status: string
   certified_sum: number | null
+  /** What was read off the contractor's PDF, to set the arithmetic against (migration 0048). */
+  pdf_read?: import('./payCompare').PdfRead | null
 }
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100

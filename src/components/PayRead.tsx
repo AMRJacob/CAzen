@@ -4,6 +4,7 @@ import { money } from '../lib/money'
 import { MoneyInput } from './MoneyInput'
 import { matchTable, readPayLines, type Extra, type Known, type MatchRead, type ReadRow } from '../lib/payRead'
 import type { Billed } from '../lib/payapps'
+import type { PdfRead } from '../lib/payCompare'
 
 /**
  * This period's figures, read from the contractor's own application.
@@ -23,7 +24,8 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   number?: number
   /** What the application holds now, so a row the PDF does not have is left as it is. */
   current: (id: string) => Billed
-  onKeep: (rows: { id: string; value: Billed }[]) => Promise<void>
+  /** The figures to put in, and everything the PDF said, kept to set the arithmetic against. */
+  onKeep: (rows: { id: string; value: Billed }[], pdf: PdfRead | null) => Promise<void>
 }) {
   const file = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -33,6 +35,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
   const [edits, setEdits] = useState<Record<string, { e: string; f: string }>>({})
   const [seen, setSeen] = useState<Set<string>>(new Set())
   const [over, setOver] = useState(false)
+  const [fileName, setFileName] = useState<string | undefined>()
   /** The full drop zone, opened by clicking the strip. */
   const [open, setOpen] = useState(false)
   /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
@@ -41,7 +44,7 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
 
   async function read(f: File | undefined | null) {
     if (!f) return
-    setError(null); setBusy('Opening…')
+    setError(null); setBusy('Opening…'); setFileName(f.name)
     try {
       const sov = known.filter((k) => !k.heading)
       const bytes = new Uint8Array(await f.arrayBuffer())
@@ -104,7 +107,16 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
           return { id: r.id, value: { this_period: num(v.e), stored: num(v.f) } }
         }),
         ...chosen.map(([x, i], k) => ({ id: ids[k], value: { this_period: num(xval(x, i).e), stored: num(xval(x, i).f) } })),
-      ])
+      ], checks ? {
+        file: fileName, read_at: new Date().toISOString(),
+        ...(checks.application ? { application: checks.application } : {}),
+        ...(checks.g702 ? { g702: checks.g702 } : {}),
+        ...(checks.total ? { total: checks.total } : {}),
+        lines: Object.fromEntries([
+          ...rows.filter((r) => r.found && r.pdf).map((r) => [r.id, r.pdf!] as const),
+          ...chosen.map(([x], k) => [ids[k], x.pdf] as const),
+        ]),
+      } : null)
       setRows(null); setChecks(null); setExtra([])
     } catch (e) { setError(message(e)) } finally { setBusy(null) }
   }
