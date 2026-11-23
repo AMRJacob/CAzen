@@ -1,6 +1,7 @@
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import { ContractSetup } from '../components/ContractSetup'
 import { PayRead } from '../components/PayRead'
+import { MoneyInput } from '../components/MoneyInput'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../components/PageTitle'
@@ -685,8 +686,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                     <td className="right mono" data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
                     <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
                       {editable
-                        ? <input className="cell mono right" inputMode="decimal" value={v.this_period || ''}
-                            onChange={(e) => setEdits((x) => ({ ...x, [l.id]: { ...v, this_period: Number(e.target.value) || 0 } }))}
+                        ? <MoneyInput className="cell mono right" value={v.this_period || ''}
+                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, this_period: Number(raw) || 0 } }))}
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`This period for ${l.description}`} />
                         : <span className="mono"><Money n={f.thisPeriod} /></span>}
                     </td>
@@ -694,8 +695,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                       data-label="Stored"
                       data-nothing={editable || f.stored || f.storedBefore ? undefined : ''}>
                       {editable
-                        ? <input className="cell mono right" inputMode="decimal" value={v.stored || ''}
-                            onChange={(e) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(e.target.value) || 0 } }))}
+                        ? <MoneyInput className="cell mono right" value={v.stored || ''}
+                            onChange={(raw) => setEdits((x) => ({ ...x, [l.id]: { ...v, stored: Number(raw) || 0 } }))}
                             onBlur={() => void save(l.id, valueOf(l.id))} aria-label={`Stored for ${l.description}`} />
                         : <span className="mono"><Money n={f.stored} /></span>}
                       {f.storedBefore > 0 && (
@@ -869,8 +870,8 @@ function AddLine({ contractId, projectId, lines, nextSort, onAdded, onTrouble }:
         </label>
         {kind !== 'heading' && (
           <label className="stack">Scheduled value
-            <input className="mono" inputMode="decimal" value={value}
-              onChange={(e) => setValue(e.target.value)} placeholder="0.00" />
+            <MoneyInput className="mono" value={value}
+              onChange={setValue} placeholder="$0.00" />
           </label>
         )}
         {kind === 'change_order' && (

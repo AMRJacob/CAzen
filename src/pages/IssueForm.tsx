@@ -1,5 +1,6 @@
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MoneyInput } from '../components/MoneyInput'
 import { OutlineTools } from '../components/OutlineTools'
 import { outlineKey } from '../lib/outline'
 import { Link } from 'react-router-dom'
@@ -351,6 +352,13 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
         <select value={value} onChange={(e) => onChange(e.target.value)} className={state}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      </label>
+    )
+  }
+  if (f.money) {
+    return (
+      <label>{label}
+        <MoneyInput value={value} shown onChange={onChange} className={state} />
       </label>
     )
   }

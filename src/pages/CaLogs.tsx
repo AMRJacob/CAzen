@@ -5,6 +5,7 @@ import { FORM_LABELS, usDate } from '../lib/templates/fields'
 import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
 import { money as asMoney, NOTHING } from '../lib/money'
 import { money as readMoney } from '../lib/sovPaste'
+import { MoneyInput } from '../components/MoneyInput'
 import { openFile, type ProjectStore } from '../lib/files'
 import { listIssuanceSheets } from '../lib/sheets'
 import type { BundleSheet } from '../lib/pdf/bundle'
@@ -258,7 +259,7 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
           <td className="nowrap">{FORM_LABELS[row.kind]}</td>
           <td className="col-title"><input autoFocus value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} onKeyDown={keys} aria-label="Subject" /></td>
           <td className="col-date"><input type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} onKeyDown={keys} aria-label="Issued" /></td>
-          <td className="col-chg"><input className="right" inputMode="decimal" value={edit.cost} placeholder="$" onChange={(e) => setEdit({ ...edit, cost: e.target.value })} onKeyDown={keys} aria-label="Change to contract cost" /></td>
+          <td className="col-chg"><MoneyInput className="right" value={edit.cost} placeholder="$0.00" onChange={(raw) => setEdit((x) => (x ? { ...x, cost: raw } : x))} onKeyDown={keys} aria-label="Change to contract cost" /></td>
           <td className="col-chg"><input className="right" inputMode="numeric" value={edit.days} placeholder="days" onChange={(e) => setEdit({ ...edit, days: e.target.value })} onKeyDown={keys} aria-label="Change to contract time, in days" /></td>
           <td className="right nowrap">
             <button className="primary" disabled={saving} onClick={() => void saveEdit()}>{saving ? 'Saving…' : 'Save'}</button>{' '}
@@ -435,9 +436,9 @@ function PrResponse({ row, orders, onValues, onChanged, onError }: {
   return (
     <div className="pr-answer">
       <label>Price
-        <input className="cell" inputMode="decimal" value={typed} placeholder="when it comes back"
+        <MoneyInput className="cell" value={typed} placeholder="when it comes back"
           aria-label={`Price for ${row.number ?? 'this proposal request'}`}
-          onChange={(e) => setTyped(e.target.value)} onBlur={priceDone}
+          onChange={setTyped} onBlur={priceDone}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
       </label>
       <div className="pr-decide" role="radiogroup" aria-label="The owner’s decision">

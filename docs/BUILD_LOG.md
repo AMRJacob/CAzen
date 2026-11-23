@@ -11,6 +11,18 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 15:45 CST (dollar figures typed the same way everywhere)
+
+Every box that takes a dollar figure now puts in the dollar sign and commas while typing
+("$1,234,567.8") and fills the cents out to two places when it is left ("$1,234,567.80"); a
+leading minus or bracket is a deduction ("-$2,500.00"). The caret stays after the digit it was
+after. The pages still receive the bare number, so nothing about saving changed. Covered: this
+period and stored on the G703, the pay-read review window, a new schedule-of-values line, the
+original contract sum in contract setup, cost in the change register, a PR's price, and the dollar
+fields on CCDs and change orders (`money: true` in `fields.ts`; those are kept as printed text,
+"$12,400.00"). Percent, day and storage-size boxes are unchanged. New `components/MoneyInput.tsx`,
+`lib/moneyTyping.ts`, unit tests in `checks/moneyinput.test.ts`, browser check `checks/t_money.py`.
+
 # Checkpoint — 2026-11-23, 15:35 CST (the continuation sheet's read strip opens a drop zone)
 
 Clicking "Read this period from the contractor's PDF" on an application now opens a full drop

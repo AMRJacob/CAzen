@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Money } from './Money'
+import { MoneyInput } from './MoneyInput'
 import { money as asMoney } from '../lib/money'
 import { money as readMoney, readSov, sovTotal } from '../lib/sovPaste'
 import { createContract } from '../lib/payappsDb'
@@ -80,8 +81,8 @@ export function ContractSetup({ project, onCreated, another, onCancel }: {
           <input value={contractor} onChange={(e) => setContractor(e.target.value)} />
         </label>
         <label>Original contract sum
-          <input inputMode="decimal" value={sum} onChange={(e) => setSum(e.target.value)}
-            placeholder={counted ? asMoney(total) : '$0'} />
+          <MoneyInput value={sum} onChange={setSum}
+            placeholder={counted ? asMoney(total) : '$0.00'} />
         </label>
         <label>Retainage, %
           <input inputMode="decimal" value={work} onChange={(e) => setWork(e.target.value)} />

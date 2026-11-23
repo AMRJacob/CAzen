@@ -20,6 +20,8 @@ export interface FieldDef {
   csi?: 'division' | 'section'
   /** Choice fields: the value is one of these keys. Labels are editable per template. */
   choices?: { value: string; label: string }[]
+  /** A dollar figure: typed with the dollar sign, commas and cents put in. */
+  money?: boolean
 }
 
 export const FORM_LABELS: Record<TemplateKind, string> = {
@@ -126,7 +128,7 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
       { value: 'cost_plus', label: 'Cost plus fee' },
       { value: 'tbd', label: 'To be determined' },
     ] },
-    { key: 'ccd.amount', label: 'Proposed amount', sample: '$12,400' },
+    { key: 'ccd.amount', money: true, label: 'Proposed amount', sample: '$12,400' },
     { key: 'ccd.time', label: 'Change in contract time', sample: '3 days' },
     { key: 'ccd.issued_by', auto: 'user', label: 'Issued by', sample: 'J. Smith, AIA' },
   ],
@@ -139,11 +141,11 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
       hint: 'Usually the proposal requests this change order covers, one per line.',
       sample: 'PR-001 - Site lighting relocation\nPR-003 - Storefront head detail',
       starter: '' },
-    { key: 'co.original_sum', label: 'Original contract sum', sample: '$4,218,000.00' },
-    { key: 'co.previous_sum', label: 'Net change by previous change orders', sample: '$36,420.00' },
-    { key: 'co.before_sum', auto: 'carry', label: 'Contract sum before this change order', sample: '$4,254,420.00' },
-    { key: 'co.this_sum', label: 'Amount of this change order', sample: '$18,750.00' },
-    { key: 'co.new_sum', label: 'New contract sum', sample: '$4,273,170.00' },
+    { key: 'co.original_sum', money: true, label: 'Original contract sum', sample: '$4,218,000.00' },
+    { key: 'co.previous_sum', money: true, label: 'Net change by previous change orders', sample: '$36,420.00' },
+    { key: 'co.before_sum', money: true, auto: 'carry', label: 'Contract sum before this change order', sample: '$4,254,420.00' },
+    { key: 'co.this_sum', money: true, label: 'Amount of this change order', sample: '$18,750.00' },
+    { key: 'co.new_sum', money: true, label: 'New contract sum', sample: '$4,273,170.00' },
     { key: 'co.time_change', label: 'Change in contract time', sample: '7 days' },
     { key: 'co.completion', auto: 'carry', label: 'Substantial completion date', sample: '04/16/2027' },
     { key: 'co.architect', auto: 'user', label: 'Architect', sample: 'J. Smith, AIA' },

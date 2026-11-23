@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { message } from '../lib/errors'
 import { money } from '../lib/money'
+import { MoneyInput } from './MoneyInput'
 import { matchTable, readPayLines, type Extra, type Known, type MatchRead, type ReadRow } from '../lib/payRead'
 import type { Billed } from '../lib/payapps'
 
@@ -182,10 +183,10 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                         {extra.length > 0 && <td />}<td className="mono">{k.item_no ?? ''}</td>
                         <td>{k.description}{r.unsure && <div className={`small ${bad ? 'pay-read-warn' : 'muted'}`}>{r.unsure}</div>}{r.note && <div className="small muted">{r.note}</div>}{bad && r.from && <div className="muted small pay-read-from">PDF: {r.from}</div>}</td>
                         <td className="right mono">{money(k.previous)}</td>
-                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
-                          onChange={(e) => setEdits((x) => ({ ...x, [r.id]: { ...v, e: e.target.value } }))} /></td>
-                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.f} onFocus={touch} aria-label={`Stored for ${k.description}`}
-                          onChange={(e) => setEdits((x) => ({ ...x, [r.id]: { ...v, f: e.target.value } }))} /></td>
+                        <td className="right"><MoneyInput className="cell mono right" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
+                          onChange={(raw) => setEdits((x) => ({ ...x, [r.id]: { ...v, e: raw } }))} /></td>
+                        <td className="right"><MoneyInput className="cell mono right" value={v.f} onFocus={touch} aria-label={`Stored for ${k.description}`}
+                          onChange={(raw) => setEdits((x) => ({ ...x, [r.id]: { ...v, f: raw } }))} /></td>
                       </tr>
                     )
                   })}
@@ -201,10 +202,10 @@ export function PayRead({ known, current, onKeep, onAddLines, number, start, onS
                           {on && x.previous !== 0 && <div className="small pay-read-warn">“From previous” on the PDF is {money(x.previous)}; added here, the line starts with nothing billed before this application.</div>}
                         </td>
                         <td className="right mono">{money(x.previous)}</td>
-                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.e} disabled={!on} aria-label={`This period for ${x.name}`}
-                          onChange={(e) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, e: e.target.value } }))} /></td>
-                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.f} disabled={!on} aria-label={`Stored for ${x.name}`}
-                          onChange={(e) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, f: e.target.value } }))} /></td>
+                        <td className="right"><MoneyInput className="cell mono right" value={v.e} disabled={!on} aria-label={`This period for ${x.name}`}
+                          onChange={(raw) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, e: raw } }))} /></td>
+                        <td className="right"><MoneyInput className="cell mono right" value={v.f} disabled={!on} aria-label={`Stored for ${x.name}`}
+                          onChange={(raw) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, f: raw } }))} /></td>
                       </tr>
                     )
                   })}
