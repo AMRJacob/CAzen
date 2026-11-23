@@ -58,10 +58,11 @@ export type RoundWay = 'nearest' | 'up' | 'down'
 export type RoundColumn = 'G' | 'pct' | 'H' | 'I'
 export type Rounding = Partial<Record<RoundColumn, RoundWay>>
 
-/** A figure rounded to a whole unit the way the column says; cents are noise below a thousandth. */
+/** A figure rounded to a whole unit the way the column says: nearest takes under .5 down and .5 or more up. */
 export function roundAs(n: number, way: RoundWay | undefined): number {
   if (!way) return n
-  const t = Math.round(n * 1000) / 1000
+  // Only floating-point dust is cleared first (1.4999999999 is 1.5); a real 0.4995 stays under a half.
+  const t = Math.round(n * 1e6) / 1e6
   const w = way === 'up' ? Math.ceil(t) : way === 'down' ? Math.floor(t) : Math.round(t)
   return w === 0 ? 0 : w
 }

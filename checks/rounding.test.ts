@@ -23,6 +23,7 @@ eq(r.lines[4].exact?.percent, undefined, 'no % rounding unless asked')
 const p = figure({ ...base, rounding: { pct: 'nearest' } }, lines, app, billed, [])
 eq([p.lines[4].percent, Math.round(p.lines[4].exact!.percent! * 100) / 100], [35, 35.01], '% to a whole percent')
 eq([roundAs(2.5, 'nearest'), roundAs(2.0000001, 'up'), roundAs(-1.5, 'down')], [3, 2, -2], 'roundAs edges')
+eq([roundAs(1488.49, 'nearest'), roundAs(1488.4995, 'nearest'), roundAs(1488.5, 'nearest'), roundAs(0.4995, 'nearest'), roundAs(0.1 + 0.2 + 1.2, 'nearest')], [1488, 1488, 1489, 0, 2], 'nearest: under .5 down, .5 and over up')
 console.log(bad ? `rounding: ${bad} of ${n} failed` : `rounding: ${n} checks pass`)
 { // The contractor's figures set against CAzen's, and the G702 page read by its labels (made-up lines).
   const { againstPdf } = await import('../src/lib/payCompare.ts')
