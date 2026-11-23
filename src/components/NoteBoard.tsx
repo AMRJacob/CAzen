@@ -26,7 +26,7 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
   const [fresh, setFresh] = useState<string[]>([])
   /** The card or box in the hand: where it came from, and where the pointer is. */
   const [held, setHeld] = useState<{ path: Path; text: string; x: number; y: number; over: string | null } | null>(null)
-  const press = useRef<{ path: Path; text: string; x: number; y: number; id: number } | null>(null)
+  const press = useRef<{ path: Path; text: string; x: number; y: number; id: number; touch?: boolean } | null>(null)
   const root = useRef<HTMLDivElement>(null)
 
   const loose = looseAt(board)
@@ -52,20 +52,48 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
     return null
   }
 
+  // By touch a card or box is picked up only when held still (Jacob, 11/23: scrolling over the
+  // board on a phone kept picking things up). A finger that moves first is scrolling, and is let
+  // go. A mouse or pen still picks up by dragging, as before.
+  const HOLD_MS = 380, STILL_PX = 8
+  const holdTimer = useRef<number | null>(null)
+  const stopHold = () => { if (holdTimer.current !== null) { window.clearTimeout(holdTimer.current); holdTimer.current = null } }
+  useEffect(() => stopHold, [])
   const grab = (path: Path, label: string) => ({
     onPointerDown: (e: React.PointerEvent) => {
       if ((e.target as HTMLElement).closest('button, input, textarea') || e.button > 0) return
       e.stopPropagation()
-      press.current = { path, text: label, x: e.clientX, y: e.clientY, id: e.pointerId }
+      press.current = { path, text: label, x: e.clientX, y: e.clientY, id: e.pointerId, touch: e.pointerType === 'touch' }
       try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* drag anyway */ }
+      if (e.pointerType === 'touch') {
+        stopHold()
+        const { clientX: x, clientY: y } = e
+        holdTimer.current = window.setTimeout(() => {
+          holdTimer.current = null
+          const p = press.current
+          if (!p) return
+          // Picked up where the finger is; a short buzz where the phone allows it.
+          try { navigator.vibrate?.(12) } catch { /* no buzz */ }
+          setHeld({ path: p.path, text: p.text, x, y, over: boxUnder(x, y, p.path) })
+        }, HOLD_MS)
+      }
     },
     onPointerMove: (e: React.PointerEvent) => {
       const p = press.current
       if (!p || p.id !== e.pointerId) return
-      if (!held && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 7) return
+      const moved = Math.hypot(e.clientX - p.x, e.clientY - p.y)
+      if (p.touch && !held) {
+        // Moving before the hold is up: a scroll, not a pick-up.
+        if (moved > STILL_PX) { stopHold(); press.current = null }
+        return
+      }
+      if (!held && moved < 7) return
+      hand.current = { x: e.clientX, y: e.clientY }
       setHeld({ path: p.path, text: p.text, x: e.clientX, y: e.clientY, over: boxUnder(e.clientX, e.clientY, p.path) })
     },
     onPointerUp: (e: React.PointerEvent) => {
+      stopHold()
+      hand.current = null
       const p = press.current
       press.current = null
       if (!p || !held) { setHeld(null); return }
@@ -80,8 +108,32 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       }
       set(move(board, p.path, pathOf(over)!))
     },
-    onPointerCancel: () => { press.current = null; setHeld(null) },
+    onPointerCancel: () => { stopHold(); press.current = null; setHeld(null) },
   })
+
+  // Held near the top or bottom of the screen, the page scrolls under the card — on a phone the
+  // topics are rows down the page, so one may be well out of reach when a card is picked up.
+  const hand = useRef<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!held) return
+    let raf = 0
+    const scroller = (root.current?.closest('.nb-page') as HTMLElement | null) ?? (document.scrollingElement as HTMLElement | null)
+    const tick = () => {
+      const h = hand.current
+      if (h && scroller) {
+        const r = scroller === document.scrollingElement ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect()
+        const zone = 70
+        const by = h.y > r.bottom - zone ? 10 : h.y < r.top + zone ? -10 : 0
+        if (by) {
+          scroller.scrollTop += by
+          setHeld((x) => (x ? { ...x, over: boxUnder(h.x, h.y, x.path) } : x))
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [held !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // A drag must not scroll the page under it.
   useEffect(() => {
@@ -151,10 +203,8 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
           : <span className="nbd-empty">{held ? 'Drop here to take it back out' : 'What you type lands here'}</span>}
       </div>
 
-      {/* On a phone: every topic as a small bubble, close to hand. A card is dropped on a
-          bubble to file it — a short drag to a big target — and the notes themselves are
-          listed below at full width, where they can be read. While a card is in the hand the
-          bubbles stay at the top of the screen however far the page has been scrolled. */}
+      {/* At one time, on a phone, every topic as a small bubble to drop onto. Jacob, 11/23:
+          not on the phone — there the topics are rows down the list (index.css hides these). */}
       <div className="nbd-bubbles" aria-label="Topics">
         {board.flatMap((n, i) => (i === loose ? [] : [
           <button key={key([i])} type="button" className={`nbd-bubble${held?.over === key([i]) ? ' over' : ''}`} data-drop={key([i])}

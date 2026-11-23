@@ -11,6 +11,28 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:25 CST (the notes board on a phone: hold to pick up, rows not boxes)
+
+**By touch a note or category is picked up by holding it still** (Jacob, 17:14: scrolling over the
+board kept selecting and dragging things). A finger that moves more than 8 px within 0.38 s is a
+scroll and lets go; held still that long, the note lifts where the finger is (with a short buzz on
+phones that allow it) and then drags as before. A mouse or pen still picks up by dragging. On touch
+screens cards and category headings let the page scroll (`touch-action: pan-y`) and raise no
+text-selection or link menu. **The 0.38 s and 8 px are my figures.**
+
+**On a phone the categories are rows, not bubbles and boxes** (17:15). Under 620 px the bubble
+strip is gone; each category is a heading row with its notes as rows under it (subcategories set
+in), divided by hairlines; **+** (subcategory), **×** (remove) and **+ Category** are kept. A note is
+filed by holding it and dropping it on a category's heading or rows, which highlight. With no
+bubbles pinned at the top, a held note within 70 px of the top or bottom of the page scrolls it. The
+desk keeps its grid of boxes.
+
+`checks/t_board.py`: by touch, a quick swipe over a card scrolls the page 132 px and saves nothing;
+held, two notes filed under Structure and Envelope from their rows; a category added and removed by
+touch; desk unchanged. The edge scrolling was not driven. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-23, 17:25 CST (change order dates on one heading row; change order pills on Contracts)
 
 **No date is assumed for a change order** (Jacob, 17:02, 17:05: don't have the change order

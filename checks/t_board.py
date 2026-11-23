@@ -16,11 +16,12 @@ def run(name,kw,touch):
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); (pg.tap if touch else pg.click)('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc-title'); (pg.tap if touch else pg.click)('.nb-toc-title'); pg.wait_for_selector('.nbd-type input'); pg.wait_for_timeout(400)
     cdp=ctx.new_cdp_session(pg)
     def centre(sel): bb=pg.locator(sel).first.bounding_box(); return bb['x']+bb['width']/2, bb['y']+min(bb['height']/2,16)
+    HOLD=520  # by touch a card is picked up by holding it still (11/23)
     def drag(src,dst):
         pg.locator(src).first.scroll_into_view_if_needed(); x0,y0=centre(src); x1,y1=centre(dst)
         if touch:
             T=lambda k,x,y: cdp.send('Input.dispatchTouchEvent',{'type':k,'touchPoints':[] if k=='touchEnd' else [{'x':x,'y':y,'id':1,'radiusX':10,'radiusY':10}]})
-            T('touchStart',x0,y0)
+            T('touchStart',x0,y0); pg.wait_for_timeout(HOLD)
             for i in range(1,9): T('touchMove',x0+(x1-x0)*i/8,y0+(y1-y0)*i/8); pg.wait_for_timeout(20)
             T('touchEnd',0,0)
         else:
@@ -30,9 +31,17 @@ def run(name,kw,touch):
     for t in ('Anchor bolts out of plumb at grid C','Sealant missing at storefront'): pg.fill('.nbd-type input',t); pg.keyboard.press('Enter'); pg.wait_for_timeout(250)
     print('  typed, in the tray:',pg.locator('.nbd-tray .nbd-card-text').all_inner_texts())
     if touch:
-        print('  bubbles:',[t.replace('\n',' ') for t in pg.locator('.nbd-bubble').all_inner_texts()],'| card is',round(pg.locator('.nbd-tray .nbd-card').first.bounding_box()['width']),'px wide of 402')
-        drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-bubble:has-text("Structure")'); drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-bubble:has-text("Envelope")')
-        print('  after: bubbles',[t.replace('\n',' ') for t in pg.locator('.nbd-bubble').all_inner_texts()],'| filed card width',round(pg.locator('.nbd-board .nbd-card').first.bounding_box()['width']))
+        print('  bubbles shown:',pg.locator('.nbd-bubbles').is_visible(),'| card is',round(pg.locator('.nbd-tray .nbd-card').first.bounding_box()['width']),'px wide of 402')
+        # A quick swipe up over a card scrolls the page and picks nothing up.
+        T=lambda k,x,y: cdp.send('Input.dispatchTouchEvent',{'type':k,'touchPoints':[] if k=='touchEnd' else [{'x':x,'y':y,'id':1,'radiusX':10,'radiusY':10}]})
+        card=pg.locator('.nbd-tray .nbd-card').first; card.scroll_into_view_if_needed(); bb=card.bounding_box(); x,y=bb['x']+bb['width']/2,bb['y']+bb['height']/2
+        top0=pg.evaluate("document.querySelector('.nb-page').scrollTop"); n0=len(saved)
+        T('touchStart',x,y)
+        for i in range(1,11): T('touchMove',x,y-12*i); pg.wait_for_timeout(16)
+        T('touchEnd',0,0); pg.wait_for_timeout(500)
+        print('  swipe over a card: page scrolled',pg.evaluate("document.querySelector('.nb-page').scrollTop")-top0,'px | anything saved:',len(saved)>n0,'| still in the tray:',pg.locator('.nbd-tray .nbd-card').count())
+        drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-box.d0:has(> .nbd-box-head :text("Structure")) > .nbd-box-head'); drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-box.d0:has(> .nbd-box-head :text("Envelope")) > .nbd-box-head')
+        print('  after:','| filed card width',round(pg.locator('.nbd-board .nbd-card').first.bounding_box()['width']))
     else:
         drag('.nbd-tray .nbd-card:has-text("Anchor")','.nbd-box.d0:has(> .nbd-box-head :text("Structure")) .nbd-box-in')
         drag('.nbd-tray .nbd-card:has-text("Sealant")','.nbd-box.d0:has(> .nbd-box-head :text("Envelope")) .nbd-box-in')
@@ -44,6 +53,11 @@ def run(name,kw,touch):
         print('  subcategory made, card dragged into it:',repr(saved[-1].split('\n')[3:]))
         drag('.nbd-box.d1:has(> .nbd-box-head :text("Storefront")) > .nbd-box-head','.nbd-box.d0:has(> .nbd-box-head :text("Interior")) .nbd-box-in'); print('  the subcategory dragged to Interior, with its card:',repr(saved[-1].split('\n')[3:]))
         drag('.nbd-card:has-text("Anchor")','.nbd-tray'); print('  a card dragged back to the tray:',repr(saved[-1].split('\n')[-2:]))
+    if touch:
+        pg.locator('.nbd-new').tap(); pg.wait_for_timeout(200); pg.keyboard.type('Punch walk'); pg.keyboard.press('Enter'); pg.wait_for_timeout(400)
+        print('  + Category by touch:', pg.locator('.nbd-box.d0 > .nbd-box-head .nbd-box-name').all_inner_texts())
+        pg.locator('.nbd-box.d0:has(> .nbd-box-head :text("Punch walk")) > .nbd-box-head button[aria-label^="Remove"]').tap(); pg.wait_for_timeout(400)
+        print('  × removes it:', pg.locator('.nbd-box.d0 > .nbd-box-head .nbd-box-name').all_inner_texts(), '| saved:', repr(saved[-1]))
     print('  errors:',errs[:2]); ctx.close()
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); run('desk',dict(viewport={'width':1440,'height':900}),False); saved.clear(); run('phone',PHONE,True); b.close()
