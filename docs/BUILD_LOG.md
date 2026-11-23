@@ -11,6 +11,44 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:50 CST (reading a pay application: the PDF beside it, one decision for changed scheduled values)
+
+**UCA CW Loop, Pay App 6** (Jacob, 17:23, with the PDF and a screenshot: hard to make sense of;
+the screen should fit, say less, give clear options for lining things up, and show the PDF beside
+it). His PDF is a 4-page scan, 83 lines; the record has the same 83. What made it read badly:
+
+- **14 lines' scheduled values had changed** — Testing & Inspection 5,000 → 0, Tie-in Contingency
+  11,234 → 0, Mechanical 3,665,398 → 3,747,426, Kinco Contingency 197,085 → 143,672.57, CO 1
+  Contingency 45,081 → 70,081 and so on: **net $0**, money moved between lines. Each was a red
+  row saying "the scheduled value on the PDF is …", as if misread. They now come out of the rows
+  (`ReadRow.pdfScheduled`) into **one decision** at the top: how many lines, the net (or that it
+  changes the contract sum), *show them* (record → PDF, each opens its page), and two choices —
+  **Use the PDF's scheduled values** (written to the schedule of values; CAzen keeps one scheduled
+  value per line, so earlier applications show the new values too, which the option says) or
+  **Keep CAzen's**. Nothing is chosen for you: *Put these in* waits until one is. A line whose
+  value differs and is kept carries a small *SV* tag.
+- **The record's two headings (13 Balance of Work, 50 CO 1) were offered as lines to add.**
+  Headings on record are now recognised by number or name and not offered.
+- **"The PDF's total for scheduled value is 9,682,671; its lines add up to 9,683,471"** was false:
+  the 800 was one scanned figure before its row's arithmetic settled it. Column totals are now
+  checked again with the settled rows; with them every column agrees.
+
+**The screen** (`PayRead.tsx`): nearly the whole window, **the contractor's PDF on the left**
+(the continuous page strip, zoom with Ctrl + wheel or pinch) and the figures on the right.
+Clicking a line, or into its figures, brings its page up and highlights the row. The list is
+four columns — item, description, this period, stored; *from previous* and each row's raw PDF
+text are gone from view (the raw text shows on the row in hand). Lines on the PDF and not in
+CAzen get one **Add as** choice each — a line, a change order line, a heading, or not added — and
+an *All of them as* row, replacing the three tick-box columns. A change order line's approval
+date is left blank, with this period offered. Below 900 px the PDF sits above the list.
+
+Checked in the test browser with his PDF against UCA's 83 lines as on record (with the earlier
+applications' billing as one certified application): read in about 20 s; 81 of 81 lines found;
+every column adds up; nothing in red; one decision, 14 lines, net $0; *Use the PDF's* writes the
+14 values. Not saved to the real project from here.
+
+---
+
 # Checkpoint — 2026-11-23, 17:25 CST (the notes board on a phone: hold to pick up, rows not boxes)
 
 **By touch a note or category is picked up by holding it still** (Jacob, 17:14: scrolling over the

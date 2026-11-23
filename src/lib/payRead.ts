@@ -27,6 +27,14 @@ export interface ReadRow {
   from?: string
   /** Every column as the PDF has it, after the row's own arithmetic has settled the misreads. */
   pdf?: PdfLine
+  /**
+   * The PDF's scheduled value, where it differs from the one on record. Not a misreading: the
+   * contractor moved money between lines (or a change order was spread over them), and whether
+   * the schedule of values follows is one decision for all such lines, not a red row each.
+   */
+  pdfScheduled?: number
+  /** Which page of the PDF the row is on (1-based). */
+  page?: number
 }
 
 /** One line of the contractor's continuation sheet: C to H settled, I and % as printed. */
@@ -143,6 +151,7 @@ export function readPayLines(lines: string[], known: Known[]): { rows: ReadRow[]
 
 
 export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number; pdf: PdfLine
+  page?: number
   /** The change order this line looks to belong to: under a "CO 1" row, or named "CO 1 …". */
   co?: string
 }
@@ -255,7 +264,6 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       if ((col === 'E' || col === 'F') && doubtful(col)) red.push(msg)
       else grey.push(msg)
     }
-    if (!near(s.value.C, k.scheduled)) red.push(`the scheduled value on the PDF is ${fmt(s.value.C)}; on record it is ${fmt(k.scheduled)}`)
     if (!near(s.value.D, k.previous)) red.push(`“from previous” on the PDF is ${fmt(s.value.D)}; earlier applications add up to ${fmt(k.previous)}`)
     if (k.item_no && r.item && sameItem(r.item, k.item_no) && alike(names.get(r) ?? '', k.description) < 0.2 && !near(s.value.C, k.scheduled))
       red.unshift(`line ${r.item} on the PDF is “${names.get(r)}” — is the numbering the same as the schedule of values?`)
@@ -265,6 +273,8 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       ...(red.length ? { unsure: red.join('; ') } : {}),
       ...(grey.length ? { note: grey.join('; ') } : {}),
       pdf: pdfLine(r, s.value),
+      page: r.page,
+      ...(!near(s.value.C, k.scheduled) ? { pdfScheduled: s.value.C } : {}),
       from: `${r.item ?? ''} ${names.get(r) ?? ''} · ${['C', 'D', 'E', 'F', 'G', 'H'].map((c) => r.read[c as Fig] == null ? '—' : fmt(r.read[c as Fig]!)).join(' · ')}`.trim(),
     }
   })
@@ -290,11 +300,19 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     // A row with no figures at all is offered too: on a sheet with a schedule of values it is most
     // likely a heading ("CO 1" over the change order's lines), and is offered as one.
     .filter((r) => !taken.has(r))
-    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value), ...(coOf.has(r) ? { co: coOf.get(r) } : {}) }))
+    .map((r) => ({ item: r.item, page: r.page, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F, pdf: pdfLine(r, r.value), ...(coOf.has(r) ? { co: coOf.get(r) } : {}) }))
 
+  // The grand totals checked again with each row as its own arithmetic settled it: a figure
+  // misread on a scan and put right from the rest of its row no longer makes a column "not add up".
+  const totals = table.totals.map((t) => {
+    if (t.agree) return t
+    const added = Math.round((rows.reduce((n, r) => n + (r.found ? r.pdf?.[t.col] ?? 0 : 0), 0)
+      + extra.reduce((n, x) => n + (x.pdf?.[t.col] ?? 0), 0)) * 100) / 100
+    return near(added, t.printed) ? { ...t, added, agree: true } : t
+  })
   // A column total that disagrees with its lines, where one row accounts for the difference.
   const totalNotes: string[] = []
-  const bad = table.totals.filter((t) => !t.agree)
+  const bad = totals.filter((t) => !t.agree)
   for (const t of bad) {
     const diff = Math.round((t.printed - t.added) * 100) / 100
     const twin = bad.find((u) => u !== t && near(u.printed - u.added, -diff))
@@ -307,7 +325,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
   return {
     rows, found: rows.filter((r) => r.found).length, unsure: rows.filter((r) => r.unsure).length,
     extra, missing: table.missing.filter((n) => !known.some((k) => sameItem(k.item_no, n) && pick.has(k.id))),
-    totals: table.totals, totalNotes, ...(table.application ? { application: table.application } : {}),
+    totals, totalNotes, ...(table.application ? { application: table.application } : {}),
     ...(table.g702 ? { g702: table.g702 } : {}),
     ...(() => { const t = table.rows.find((x) => x.kind === 'total'); return t ? { total: Object.fromEntries(Object.entries(t.read).filter(([, v]) => v != null)) as PdfLine } : {} })(),
   }

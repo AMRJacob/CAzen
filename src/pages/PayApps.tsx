@@ -851,6 +851,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               for (const [k, l] of lines.entries()) ids.push(await addSovLine(data.contract.id, { ...l, sort: nextSort + k }))
               return ids
             }}
+            onSetScheduled={async (changes) => {
+              for (const c of changes) await setSovLine(c.id, { scheduled_value: c.scheduled_value })
+            }}
             onKeep={async (rows, pdf, bytes) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
               if (pdf) {
