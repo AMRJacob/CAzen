@@ -12,6 +12,7 @@ ex={
  'observations':[O(1,'Oldest',  '2026-10-01','closed'),O(2,'Sealant missing at storefront','2026-11-10'),O(3,'Drywall needs repair','2026-11-15'),O(4,'Roof drain strainers missing','2026-11-18')],
  'observation_types':[{'id':T1,'firm_id':FIRM,'code':'W','name':'Work','position':0,'on_punch_list':False}],
  'issued_forms':[F(1,'asi','ASI-003','Door hardware revisions','2026-11-12T15:00:00Z'),F(2,'asi','ASI-002','Earlier ASI','2026-10-12T15:00:00Z'),F(3,'pr','PR-004','Added bollards','2026-11-05T15:00:00Z',{'pr.price':'12500'}),F(4,'change_order','CO-001','Sitework changes','2026-10-20T15:00:00Z',{'chg.cost':'8400'}),F(5,'field_report','FR-007','Site visit','2026-11-18T15:00:00Z')],
+ 'schedule_activities':[dict(id='5555555%d-5555-4555-8555-555555555555'%i,project_id=PROJ,contract_id=None,name=n,is_heading=h,starts_on=a,ends_on=e,percent=0,sort=i*10,level=l,ref=None,color=None) for i,(n,h,a,e,l) in enumerate([('Job',True,'2026-06-01','2027-03-09',0),('Tracking Milestones',True,'2026-06-01','2027-03-09',1),('Building Dried In',False,'2026-10-15','2026-10-15',2),('Building Complete',False,'2027-03-09','2027-03-09',2),('Interior',True,'2026-11-01','2027-03-08',1),('Hang Drywall',False,'2026-11-01','2026-12-10',2),('Inspection, above ceiling',False,'2026-12-01','2026-12-02',2),('Clean & Punch',False,'2027-02-23','2027-03-08',2)])],'schedule_activity_lines':[],
  'issued_form_links':[],'site_visits':[],'project_people':[],
 }
 with sync_playwright() as p:

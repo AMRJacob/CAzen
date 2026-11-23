@@ -3488,3 +3488,8 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .gx-zoom .gx-levels span { margin-right: 4px; }
 .gx-levels button { min-width: 30px; padding: 3px 8px; border-radius: 999px; }
 .gx-levels button.on { background: var(--moss, #5c7a65); color: #fff; border-color: var(--moss, #5c7a65); }
+.ov-marks .ov-past a { opacity: .55; }
+.ov-marks .ov-now .ov-state { color: var(--moss, #4c6b3c); font-weight: 600; }
+.ov-marks .ov-when { white-space: nowrap; }
+.ov-marks a { grid-template-columns: 184px 1fr max-content; }
+@media (max-width: 640px) { .ov-marks a { grid-template-columns: 1fr max-content; } }

@@ -11,6 +11,37 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 14:52 CST (outlined schedules, folding levels, handwriting, benchmarks)
+
+Prompted by a scanned Kinco schedule for a UCA project: six levels of outline, IDs that skip, a
+Gantt chart beside the table and pen notes from a meeting. Migration 0046 (additive: `level` and
+`ref` on `schedule_activities`) is applied to production. Nothing else was written there.
+
+- **Reading the scan.** Rows are found by text line, each anchored by the number in the ID
+  column; a misread ID is repaired from its neighbours (an "8" between 17 and 19 is 18) and marked
+  as a guess. Junk tokens at the start of a name are dropped, and a name cut off in the table is
+  finished from the chart label only when the missing words are real words.
+- **Outline.** Each row's indent is measured in text heights; the step between levels is the
+  widest step every indent sits on. A row can't sit two levels below the one above it. A row with
+  deeper rows under it becomes a summary row and keeps its printed dates. The Kinco scan reads as
+  33 activities and 18 summary rows in 6 levels.
+- **Handwriting.** Coloured ink, highlighter and table rules are removed from the page before it
+  is read. Words much taller than the printed text, or read with very low confidence, are left out.
+- **Folding.** The Gantt has Levels buttons (1 to the deepest, and All) and a fold arrow on each
+  summary row; folds are remembered per project on the device. The Line column shows the
+  contractor's own ID.
+- **Keeping an issue.** Rows are matched to existing ones by printed ID first, then by name; the
+  schedule takes the issue's order.
+- **Benchmarks on the Overview.** A "Schedule benchmarks" card lists dates the architect is part of:
+  everything under a heading named Milestones (or Benchmarks, Key dates), plus activities named for
+  punch lists, substantial or final completion, dry-in, commissioning, inspections, occupancy,
+  closeout, walkthroughs, mock-ups, test and balance. Deliveries and procurement stay out. Punch
+  lists and inspections are dated by their start; the rest by their finish. It shows the last one
+  passed and the next eight.
+
+Checked with unit tests (outline levels, benchmark picking) and in a test browser with the Kinco
+scan locally (the PDF is not committed) and made-up rows in `checks/t_overview.py`.
+
 # Checkpoint — 2026-11-23, 14:40 CST (title case in the navigation)
 
 **Menu labels and page headings capitalise their important words** (Jacob, 14:30). Sidebar:

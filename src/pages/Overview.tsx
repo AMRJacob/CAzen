@@ -9,6 +9,8 @@ import { FORM_LABELS } from '../lib/templates/fields'
 import { money, NOTHING } from '../lib/money'
 import { usDate } from '../lib/dates'
 import type { FormKind } from '../lib/templates/types'
+import { listActivities } from '../lib/schedule'
+import { benchmarks, type Benchmark } from '../lib/benchmarks'
 
 /**
  * A project's front page.
@@ -33,12 +35,13 @@ export default function Overview() {
   const [observations, setObservations] = useState<Observation[] | null>(null)
   const [types, setTypes] = useState<ObservationType[]>([])
   const [issued, setIssued] = useState<RegisterRow[] | null>(null)
+  const [marks, setMarks] = useState<Benchmark[] | null>(null)
   const id = current?.id
 
   useEffect(() => {
     if (!id) return
     let gone = false
-    setMoney(null); setObservations(null); setIssued(null)
+    setMoney(null); setObservations(null); setIssued(null); setMarks(null)
     ;(async () => {
       const contracts = await listContracts(id)
       if (!contracts.length) return 'none' as const
@@ -53,6 +56,7 @@ export default function Overview() {
     })().then((m) => { if (!gone) setMoney(m) }).catch(() => { if (!gone) setMoney('none') })
     listObservations(id).then((o) => { if (!gone) setObservations(o) }).catch(() => { if (!gone) setObservations([]) })
     listTypes().then((t) => { if (!gone) setTypes(t) }).catch(() => {})
+    listActivities(id).then((a) => { if (!gone) setMarks(benchmarks(a)) }).catch(() => { if (!gone) setMarks([]) })
     listRegister(id).then((r) => { if (!gone) setIssued(r) }).catch(() => { if (!gone) setIssued([]) })
     return () => { gone = true }
   }, [id])
@@ -67,6 +71,11 @@ export default function Overview() {
   const m = money_ && money_ !== 'none' ? money_ : null
   const g = m?.figures.g702
   const percent = m ? Math.round(m.figures.totals.percent) : null
+  // Benchmarks still ahead, and the last one passed so the list says where the job stands.
+  const today = new Date().toLocaleDateString('en-CA')
+  const ahead = (marks ?? []).filter((b) => (b.to ?? b.day) >= today)
+  const passed = (marks ?? []).filter((b) => (b.to ?? b.day) < today)
+  const daysTo = (day: string) => Math.round((Date.parse(`${day}T12:00:00`) - Date.parse(`${today}T12:00:00`)) / 86_400_000)
 
   return (
     <section className="overview">
@@ -113,6 +122,28 @@ export default function Overview() {
           )}
         </Link>
 
+        {marks && marks.length > 0 && (
+          <div className="ov-card ov-wide">
+            <h2><Link to="/schedule">Schedule benchmarks</Link><span className="ov-count">{ahead.length} ahead{passed.length ? ` · ${passed.length} passed` : ''}</span></h2>
+            <ul className="ov-list ov-marks">
+              {[...passed.slice(-1), ...ahead.slice(0, 8)].map((b) => {
+                const n = daysTo(b.day)
+                const on = b.day <= today && (b.to ?? b.day) >= today
+                return (
+                  <li key={b.activity.id} className={(b.to ?? b.day) < today ? 'ov-past' : on ? 'ov-now' : ''}>
+                    <Link to="/schedule">
+                      <span className="ov-when">{usDate(b.day)}{b.to ? <> – {usDate(b.to)}</> : null}</span>
+                      <span className="ov-what">{b.activity.name}</span>
+                      <span className="ov-state">{on ? 'underway' : n < 0 ? 'passed' : n === 0 ? 'today' : n < 14 ? `in ${n} days` : n < 70 ? `in ${Math.round(n / 7)} weeks` : `in ${Math.round(n / 30.4)} months`}</span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+            {ahead.length > 8 && <p className="muted small">{ahead.length - 8} more on <Link to="/schedule">the schedule</Link>.</p>}
+          </div>
+        )}
+
         <div className="ov-card ov-wide">
           <h2><Link to="/field-notes/observations">Observations</Link>{observations && observations.length > 0 && <span className="ov-count">{open} open of {observations.length}</span>}</h2>
           {observations === null ? <p className="muted">Looking…</p> : !lastSeen.length ? <p className="muted">None recorded.</p> : (
@@ -147,7 +178,7 @@ export default function Overview() {
           )}
         </div>
       </div>
-      <p className="muted small ov-foot">Contract and progress are from the latest pay application; {NOTHING} means there is no figure.</p>
+      <p className="muted small ov-foot">Contract and progress are from the latest pay application; benchmarks are from the construction schedule; {NOTHING} means there is no figure.</p>
     </section>
   )
 }

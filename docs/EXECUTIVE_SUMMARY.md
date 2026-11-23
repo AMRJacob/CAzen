@@ -68,6 +68,8 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Search of the words on drawings with no signal, from the copy on the device | Live (2026-11-19); checked in a test browser only |
 | Submittal register: log received, send to a consultant and back, review and return, resubmittals (R1, R2…), days out and late | Live (2026-11-19); checked in a test browser only; no submittal logged on a real project yet |
 | Several drawing tags per observation, on one sheet or several; tag type chosen on the drawing | Live (2026-11-20); checked in a test browser only |
+| Outlined schedules read from a scan (levels, summary rows, contractor IDs), with handwriting and coloured ink filtered out; levels fold on the Gantt | Live (2026-11-23); checked in a test browser with a Kinco scan |
+| Schedule benchmarks (punch list, completion, dry-in, inspections, milestones) on the project Overview | Live (2026-11-23); checked in a test browser only |
 | AI access to project content | Planned |
 
 ## Decisions made

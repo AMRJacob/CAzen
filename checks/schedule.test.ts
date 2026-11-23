@@ -65,3 +65,11 @@ import { diffSchedule, afterIssue, summary, finishSlip } from '../src/lib/schedu
   outline(rows,[0.3,1.5,2.7,2.7,1.5,5.1,2.7,1.5])
   eq(rows.map(r=>[r.level,r.is_heading]),[[0,true],[1,true],[2,false],[2,false],[1,false],[1,true],[2,false],[1,false]],'outline levels; a row two levels deeper is kept a sibling')
 }
+{ // Benchmarks: architect-facing names anywhere, everything under a Milestones heading, no deliveries.
+  const { benchmarks } = await import('../src/lib/benchmarks.ts')
+  const A=(sort:number,name:string,level:number,s:string|null,e:string|null,h=false)=>({id:String(sort),project_id:'p',contract_id:null,name,is_heading:h,starts_on:s,ends_on:e,percent:0,sort,level,lines:[]})
+  const b=benchmarks([A(1,'Job',0,'2026-01-01','2027-03-01',true),A(2,'Pump Delivery',1,'2026-07-01','2026-07-01'),
+    A(3,'Tracking Milestones',1,'2026-06-01','2027-03-01',true),A(4,'Existing Plant Modifications',2,'2026-12-09','2026-12-09'),A(5,'North Plant Dried In',2,'2026-12-15','2026-12-15'),
+    A(6,'Interior',1,'2026-12-15','2027-03-08',true),A(7,'Drywall',2,'2027-01-01','2027-01-20'),A(8,'Clean & Punch',2,'2027-02-23','2027-03-08'),A(9,'Substantial Completion',2,'2027-03-09','2027-03-09')] as any)
+  eq(b.map(x=>[x.activity.name,x.day,x.to]),[['Existing Plant Modifications','2026-12-09',null],['North Plant Dried In','2026-12-15',null],['Clean & Punch','2027-02-23','2027-03-08'],['Substantial Completion','2027-03-09',null]],'benchmarks for the architect')
+}
