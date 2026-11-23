@@ -137,6 +137,30 @@ const MEETING_NOTES = (): Layout => ({
   ],
 })
 
+/**
+ * A meeting agenda on the firm's letterhead (Jacob, 11/23) — made from a notebook page's Agenda
+ * block, downloaded, and not entered in the issued register, so it is drawn from this layout
+ * rather than from a stored, editable template. The meeting notes' header, then the agenda.
+ */
+export const AGENDA = (): Layout => ({
+  useLetterhead: true,
+  continuation: DEFAULT_CONTINUATION,
+  elements: [
+    text(118, 30, 320, 18, 'Meeting Agenda', { size: 13.5, bold: true, color: 'accent', caps: true, repeat: true }),
+    field(118, 54, 320, 14, 'project.name', { size: 10, bold: true, repeat: true }),
+    field(118, 72, 320, 14, 'project.owner', { size: 10, bold: true, repeat: true }),
+    labeled(36, 126, 180, 'ag.title', 'MEETING:', 62, { labelAlign: 'left', size: 8.5 }),
+    labeled(36, 152, 180, 'ag.date', 'DATE:', 62, { labelAlign: 'left', size: 8.5 }),
+    labeled(36, 178, 180, 'ag.time', 'TIME:', 62, { labelAlign: 'left', size: 8.5 }),
+    field(36, 204, 180, 26, 'ag.location', { label: 'LOCATION:', labelMode: 'left', labelWidth: 62, labelAlign: 'left', size: 8.5 }),
+    heading(226, 122, 'Invited:'),
+    { id: newId(), type: 'table', x: 226, y: 136, w: 350, h: 104, field: 'ag.participants', size: 8, header: false,
+      columns: [{ label: 'Name', width: 110 }, { label: 'Company', width: 90 }, { label: 'Email', width: 150 }] },
+    hline(36, 250, 540),
+    field(54, 262, 514, 482, 'ag.items', { size: 9.5, rich: true, flow: true, headings: 'bold' }),
+  ],
+})
+
 /* Where the contract total actually moves. The sums sit in a column so they read as the
    arithmetic they are, and the signatures are the point of the page. */
 const CHANGE_ORDER = (): Layout => ({

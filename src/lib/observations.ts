@@ -1,3 +1,4 @@
+import { codeOf, type Tag } from './tags'
 import { db, whoAmI } from './supabase'
 import { all as localAll, get as localGet, put as localPut, remove as localRemove } from './offline/store'
 import { queue, unsentIds } from './offline/outbox'
@@ -53,6 +54,12 @@ export interface Observation {
   updated_at: string
   /** The field-notes page it was made on (migration 0045); absent or null for one made elsewhere. */
   visit_id?: string | null
+  /** Its number on the project, given once by the server and never reissued (migration 0049). */
+  ref?: number | null
+  /** Further field-notes pages it has been put on, beyond the one it was made on. */
+  also_on?: string[]
+  /** Put on the punch list by hand, whatever its type. */
+  on_punch?: boolean
 }
 
 /**
@@ -67,7 +74,8 @@ let linkAsked = false
 export const canLinkPages = () => linkKnown === true
 async function lookForLink(): Promise<void> {
   if (linkAsked || !navigator.onLine) return
-  const { error } = await db().from('observations').select('visit_id').limit(1)
+  // 0045 and 0049 together: the page it was made on, its project number, and its other places.
+  const { error } = await db().from('observations').select('visit_id, ref, also_on, on_punch').limit(1)
   if (error && !(error as { code?: string }).code) return
   linkAsked = true
   linkKnown = !error
@@ -89,10 +97,20 @@ const byDate = (a: Observation, b: Observation) =>
   (b.created_at ?? '').localeCompare(a.created_at ?? '')
 
 /** What a type's observations are called: the code and the number, "N-7". */
-export function nameOf(o: Observation, types: ObservationType[]): string {
+/**
+ * What an observation is called: its project number with its trade's two letters beside it —
+ * "Gl · 14" (Jacob, 11/23). The number is given once and never changes; the letters follow the
+ * trade if it is corrected. Before it has reached the server it has no number yet: "New".
+ * On a database without project numbers (before 0049) the old type-letter code is shown.
+ */
+export function nameOf(o: Observation, types: ObservationType[], custom: Tag[] = []): string {
+  if (o.ref != null) {
+    const code = codeOf(o.trade, custom)
+    return code ? `${code} · ${o.ref}` : String(o.ref)
+  }
+  if (linkKnown || o.number == null) return 'New'
   const t = types.find((x) => x.id === o.type_id)
-  if (!t || o.number == null) return o.number == null ? '—' : String(o.number)
-  return `${t.code}-${o.number}`
+  return t ? `${t.code}-${o.number}` : String(o.number)
 }
 
 export async function listTypes(): Promise<ObservationType[]> {
@@ -124,7 +142,7 @@ export async function listObservations(projectId: string): Promise<Observation[]
   try {
     await lookForLink().catch(() => {})
     const { data, error } = await db()
-      .from('observations').select(COLUMNS + (linkKnown ? ', visit_id' : '')).eq('project_id', projectId)
+      .from('observations').select(COLUMNS + (linkKnown ? ', visit_id, ref, also_on, on_punch' : '')).eq('project_id', projectId)
       .order('observed_on', { ascending: false })
     if (error) throw error
     const theirs = (data ?? []) as unknown as Observation[]
@@ -165,6 +183,9 @@ export function buildObservation(o: {
   by?: string | null
   /** The notebook page it is being made on. */
   visitId?: string | null
+  /** Further pages, and the punch list by hand. */
+  alsoOn?: string[]
+  onPunch?: boolean
 }): Observation {
   const now = new Date().toISOString()
   return {
@@ -189,6 +210,7 @@ export function buildObservation(o: {
     updated_at: now,
     // Sent only to a database that has the column, or the whole row would be refused.
     ...(linkKnown && o.visitId ? { visit_id: o.visitId } : {}),
+    ...(linkKnown ? { also_on: o.alsoOn ?? [], on_punch: !!o.onPunch } : {}),
   }
 }
 
@@ -201,7 +223,7 @@ export async function saveObservation(row: Observation): Promise<void> {
 
 export async function editObservation(
   o: Observation,
-  patch: Partial<Pick<Observation, 'title' | 'detail' | 'status' | 'trade' | 'area' | 'observed_on' | 'due_on' | 'type_id' | 'photos' | 'region' | 'sheet_id' | 'revision_id'>>,
+  patch: Partial<Pick<Observation, 'title' | 'detail' | 'status' | 'trade' | 'area' | 'observed_on' | 'due_on' | 'type_id' | 'photos' | 'region' | 'sheet_id' | 'revision_id' | 'also_on' | 'on_punch'>>,
 ): Promise<Observation> {
   const next = { ...o, ...patch, updated_at: new Date().toISOString() }
   await localPut('observations', next).catch(() => { /* it can still be sent */ })
@@ -219,9 +241,12 @@ export async function removeObservation(o: Observation): Promise<void> {
 export const onDay = (all: Observation[], day: string) => all.filter((o) => o.observed_on === day)
 
 /** The open ones of punch types — which is what a punch list is a view of. */
+/** Whether it is on the punch list by its type — which only changing the type takes it off. */
+export const punchByType = (o: Observation, types: ObservationType[]) => !!o.type_id && types.some((t) => t.id === o.type_id && t.is_punch)
+
 export function punchList(all: Observation[], types: ObservationType[]): Observation[] {
   const punch = new Set(types.filter((t) => t.is_punch).map((t) => t.id))
-  return all.filter((o) => o.type_id && punch.has(o.type_id) && o.status !== 'closed')
+  return all.filter((o) => (o.on_punch || (o.type_id && punch.has(o.type_id))) && o.status !== 'closed')
 }
 
 /**

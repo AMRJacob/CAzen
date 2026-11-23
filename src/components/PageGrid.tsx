@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mark } from './Logo'
 import {
-  addBlock, BUILT_IN, COLS, defaultLayout, depth, itemsOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
+  addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, itemsOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
   type Block, type BlockKind, type CheckItem, type Layout, type Screen, type VisitKind, type Widget, type Widgets,
 } from '../lib/pageLayout'
 import { keepLayout, layoutHere, layoutThere } from '../lib/layoutStore'
@@ -54,8 +54,8 @@ export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen
   let y = depth(layout.blocks)
   for (const [id, w] of Object.entries(widgets ?? {})) {
     if (mine.has(id) || gone.has(id)) continue
-    const kind: BlockKind | null = id.startsWith('check-') ? 'check' : id.startsWith('text-') ? 'text' : null
-    if (!kind || !(textOf(w).trim() || itemsOf(w).some((i) => i.text.trim()))) continue
+    const kind: BlockKind | null = id.startsWith('check-') ? 'check' : id.startsWith('text-') ? 'text' : id.startsWith('agenda-') ? 'agenda' : null
+    if (!kind || !holds(w)) continue
     extra.push({ id, kind, x: 0, y, w: screen === 'phone' ? 1 : COLS[screen], h: screen === 'phone' ? 1 : 4, title: w.title })
     y += 4
   }
@@ -182,7 +182,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
             <div className="nb-arr" onPointerDown={(e) => grab(e, b, 'move')} onPointerMove={follow} onPointerUp={drop} onPointerCancel={drop}>
               <div className="nb-arr-head" onPointerDown={(e) => { if ((e.target as HTMLElement).closest('input, button')) e.stopPropagation() }}>
                 {!phone && <span className="nb-arr-grip" aria-hidden="true">⠿</span>}
-                {b.kind === 'text' || b.kind === 'check'
+                {ADDED.includes(b.kind)
                   ? <input className="nb-arr-name" defaultValue={b.title ?? LABEL[b.kind]} aria-label="Heading"
                       onBlur={(e) => { const t = e.target.value.trim(); if (t !== (b.title ?? '')) rename(b, t || LABEL[b.kind]) }}
                       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
@@ -232,7 +232,7 @@ export function ArrangeMenu({ kind, screen, layout, onChange, onClose, onDiscard
   const spot = (label: string, icon: React.ReactNode, act: (() => void) | undefined) => (
     <button className="nb-menu-spot" disabled={!act} onClick={() => act?.()}>{icon}<span>{label}</span></button>
   )
-  const add = (k: BlockKind) => onChange(addBlock(layout, k, cols, k === 'text' || k === 'check' ? LABEL[k] : undefined))
+  const add = (k: BlockKind) => onChange(addBlock(layout, k, cols, ADDED.includes(k) ? LABEL[k] : undefined))
   return (
     <>
     {/* Above the mark, as the pad's colour and More panels are; outside the bar so the bar cannot clip it. */}
@@ -248,6 +248,7 @@ export function ArrangeMenu({ kind, screen, layout, onChange, onClose, onDiscard
         {/* Greyed until the database can keep what they hold (migration 0044). */}
         {spot('Text box', I(<><rect x="4" y="5" width="16" height="14" rx="1.5" /><path d="M8 9h8M8 12h8M8 15h5" /></>), canHoldWidgets() ? () => add('text') : undefined)}
         {spot('Checklist', I(<><path d="M4 7l2 2 3-3M4 14l2 2 3-3" /><path d="M12 8h8M12 15h8" /></>), canHoldWidgets() ? () => add('check') : undefined)}
+        {spot('Agenda', I(<><path d="M8 4h8M9 2.8h6v2.4H9z" /><rect x="5" y="4" width="14" height="17" rx="1.5" /><path d="M8.5 10l1.3 1.3 2.2-2.3M8.5 15.5l1.3 1.3 2.2-2.3M14 10.5h2.5M14 16h2.5" /></>), canHoldWidgets() ? () => add('agenda') : undefined)}
         {spot(`Show${hidden.length ? ` · ${hidden.length}` : ''}`, I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), hidden.length ? () => setShowing(!showing) : undefined)}
         {spot('Reset', I(<><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4h4" /></>), () => onChange(defaultLayout(kind, screen)))}
         {spot('Discard', I(<><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></>), onDiscard)}
@@ -260,7 +261,7 @@ export function ArrangeMenu({ kind, screen, layout, onChange, onClose, onDiscard
 // ---------- The added blocks ----------
 
 /** Keeps typing on the device's screen at once and sends it a moment after the hand stops, and when the block goes. */
-function useSoon<T>(value: T, save: (v: T) => void, ms = 600) {
+export function useSoon<T>(value: T, save: (v: T) => void, ms = 600) {
   const [here, setHere] = useState(value)
   const pending = useRef<T | null>(null)
   const saveRef = useRef(save)

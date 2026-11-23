@@ -3529,3 +3529,32 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-line-menu { max-width: 300px; }
 .pay-line-note { display: block; margin-top: 2px; white-space: normal; }
 .pay-703-name { cursor: context-menu; }
+
+/* ---------- Where an observation is listed, and adding existing ones (src/components/ObsPlaces.tsx) ---------- */
+.obs-places { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 2px; }
+.obs-places-h { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #7a837c; margin-right: 2px; }
+.obs-place { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.obs-place.on { background: var(--moss-soft); border-color: var(--moss); }
+.obs-place-x { border: none; background: none; padding: 0 2px; font-size: 15px; line-height: 1; color: #6b736d; }
+.obs-place-add { font-size: 13px; padding: 4px 8px; border-radius: 999px; max-width: 220px; }
+.obs-picker { width: min(560px, 100%); max-height: min(80vh, 720px); display: flex; flex-direction: column; }
+.obs-picker-top { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.obs-picker-top input[type="search"] { flex: 1; min-width: 0; }
+.obs-picker-list { list-style: none; margin: 0 0 10px; padding: 0; overflow-y: auto; flex: 1; min-height: 120px; border-top: 1px solid var(--hair); }
+.obs-picker-list li { border-bottom: 1px solid var(--hair); }
+.obs-picker-list label { display: flex; align-items: baseline; gap: 10px; padding: 9px 4px; cursor: pointer; }
+.obs-picker-list .obs-no { flex: none; min-width: 52px; }
+.obs-picker-t { flex: 1; min-width: 0; }
+.nb-z-btns { display: inline-flex; align-items: center; gap: 10px; }
+.nb-seen li { position: relative; }
+.nb-seen-off { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.85); color: #6b736d; font-size: 15px; line-height: 1; }
+
+/* ---------- An agenda block on a notebook page (src/components/AgendaBlock.tsx) ---------- */
+.ag-from { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.ag-from select { max-width: 100%; font-size: 13.5px; }
+.ag-part { margin: 6px 0 12px; }
+.ag-part h3 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #6b736d; }
+.ag-obs { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-check li.done .ag-obs { color: #9aa09a; text-decoration: line-through; }
+.ag-x { flex: none; width: 26px; height: 26px; padding: 0; border: none; background: none; color: #8a918b; font-size: 16px; line-height: 1; border-radius: 50%; }
+.ag-x:hover { background: #f1e3de; color: #a2452f; }

@@ -223,6 +223,79 @@ made-up manual.
 
 ---
 
+# Checkpoint — 2026-11-23, 16:15 CST (observation numbers, trades, several places, the agenda)
+
+**Migrations applied, with Jacob's OK in chat (15:2x):** `0044_notebook_layouts`, `0045_observation_page`,
+and a new one, applied as `0046_observation_ref_and_places` and filed as
+`0049_observation_ref_and_places.sql` (another 0046, the schedule outline, landed on main the same
+afternoon). Checked after each. 0044 and 0045 had been refused
+from this session earlier today without that OK. The guards written for them stay in place.
+
+**Observation numbers: "Gl · 14"** (Jacob: the type-letter codes were not intuitive; chose the
+hybrid). A project number, once, never reissued — `observations.ref`, filled by `number_observation`
+when an observation reaches the server, under a per-project lock; the existing two were given 1 and 2
+in the order made ("Dry wall needs repair" W-1 → 1, "Test" N-1 → 2). The old per-type `number` is
+still filled, so an older copy of the app keeps working. The label is the trade's two letters and
+the number (`nameOf`, `codeOf` in `tags.ts`); the letters follow the trade if it is corrected; no
+trade, just the number; not yet numbered (no signal), **New**. Found on the way: the old label
+was built from the observation's *current* type, so changing a type changed its code and could
+give two the same — gone with this.
+
+**Trades: 17 → 41** (Jacob: cover most potential trades). Added: Demolition / Abatement, Earthwork,
+Site utilities, Paving / Striping, Fencing, Landscaping / Irrigation, Misc. metals, Casework /
+Millwork, Waterproofing / Air barrier, Insulation, Siding / Metal panels, Sealants, Firestopping,
+Overhead / Coiling doors, Storefront / Curtain wall, Tile, Wall coverings / Acoustic, Specialties,
+Equipment, Furnishings, Elevators, Controls / BAS, Low voltage / Data / AV, Fire alarm / Security —
+each with a unique two-letter code, a shape by family, a colour, a CSI position and three or four
+preset issues. **The CSI numbers are from memory of MasterFormat, not looked up.** The colours and
+preset issues are mine.
+
+**One observation, several places** (Jacob: add to documents from the observation, and choose
+from the pool of existing ones when adding to field notes etc.). `also_on` (further field-notes
+pages) and `on_punch` (on the punch list by hand, whatever its type) are columns on the observation,
+so a change goes through the same offline path as any edit.
+- On the observation form, an **On** row: the page it was made on; further pages, each with ×;
+  *+ Punch list* (or "Punch list · by type", which only changing the type removes); and
+  *+ Field-notes page…*.
+- On a notebook page's Observations block, **Add existing**: a picker over the project's
+  observations (open first, newest first, searchable by number, words, trade, area; closed ones on
+  request). An added one is marked "added" and has × to take it off; one made on the page stays.
+- Observations → **Punch list**: *Add existing*, and *Take off* on hand-added items. **Field Notes**
+  tab: *Add existing to this page*, and *Take off*.
+- A page's list, its field report's "Observations recorded" and photographs, and the contents
+  page's counts are now **the observations on that page** (made there or added) rather than the
+  observations of its day. A general observation made the same day is no longer in that day's
+  report unless it is added to the page. That follows from the ask; Jacob did not say it outright.
+
+**The Agenda block** (Jacob: a meeting agenda, as a widget on the notebook page, with a PDF on the
+letterhead; picking up previous meeting notes and observations to check they are resolved).
+*Arrange → Agenda*, in either book (`src/components/AgendaBlock.tsx`, `src/lib/agenda.ts`):
+- *Pick up from* an earlier page, any book, newest first; it opens on the last page of the same
+  book. Picking up carries that page's **notes** as old business ("Heading — line"; the board's
+  Unsorted lines without the heading) and whatever **its own agenda left unresolved**; and the open
+  observations on that page and on its agenda. Picking up again adds nothing twice.
+- Old business and new business are tick-to-resolve lines (Enter for the next, × to take off).
+  Observations to review: ticking one **closes the observation itself**, everywhere it is listed;
+  *+ Add existing* from the pool.
+- **Export PDF**: the meeting notes' header (project, owner, meeting, date, time, location, the
+  page's attendees as *Invited*) and the agenda as a numbered outline, on the firm's letterhead
+  (`AGENDA` in `templates/defaults.ts`, drawn by the forms' renderer). It is downloaded, not issued:
+  no number and no entry in the issued register, and its layout is not editable in Settings — an
+  issued kind would have needed the database's list of form kinds changed.
+- A meeting book now loads the project's observations (it did not need them before).
+- In the meeting notes or field report made from the page, an agenda's business is listed after
+  the notes with "— resolved" / "— open"; its observations are in the report's own list.
+- Duplicating a page carries the agenda with every tick taken off.
+
+Checks: `checks/agenda.test.ts`; `checks/t_places.py` (names; new trades offered; From the form:
+added to a page; punch Add existing → on, Take off → off; an agenda picked up from a meeting page
+with an earlier agenda — three old items, the observation added to that page; ticking it sends
+status closed; a new-business line; the PDF downloaded and read back); `t_arrange`, `t_obstabs`,
+`t_noscroll`, and the layout and page tests rerun clean. Test browser only; the letterhead in the
+stand-in is the placeholder, not AMR's.
+
+---
+
 # Checkpoint — 2026-11-23, 14:05 CST (Observations tabs: All / General / Field Notes / Punch list)
 
 Jacob, 13:26, confused by *One visit* vs *Punch list* and the issue information; 13:32: "maybe

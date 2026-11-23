@@ -11,7 +11,7 @@
  */
 
 export interface PageTimes { id: string; visited_on: string; visited_at: string | null }
-export interface Placed { visit_id?: string | null; created_at: string; observed_on: string }
+export interface Placed { visit_id?: string | null; created_at: string; observed_on: string; also_on?: string[] }
 
 /** From this moment, an observation with no page id was made outside the notebooks. */
 export const LINKED_SINCE = Date.parse('2026-11-23T20:00:00Z')
@@ -36,4 +36,9 @@ export function pageOf(o: Placed, pages: PageTimes[], linked: boolean): string |
   let best: PageTimes | null = null
   for (const p of pages) if (startOf(p) <= t && (!best || startOf(p) > startOf(best))) best = p
   return best?.id ?? null
+}
+
+/** Whether it is listed on a page: made there, or put there afterwards. */
+export function onPage(o: Placed, pageId: string, pages: PageTimes[], linked: boolean): boolean {
+  return pageOf(o, pages, linked) === pageId || !!o.also_on?.includes(pageId)
 }

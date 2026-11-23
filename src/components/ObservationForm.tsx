@@ -1,3 +1,4 @@
+import { ObsPlaces } from './ObsPlaces'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { SheetSpot } from './SheetSpot'
 import { byTrade, listCustomTags, markOf, markOfTag, type Mark, type Tag } from '../lib/tags'
@@ -22,6 +23,7 @@ import { message } from '../lib/errors'
 import {
   buildObservation, editObservation, saveObservation, STATUS_LABELS,
   type Observation, type ObservationStatus, type ObservationType, type Region,
+  canLinkPages,
 } from '../lib/observations'
 import type { ProjectStore } from '../lib/files'
 import { readPref, writePref } from '../lib/prefs'
@@ -106,6 +108,8 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
   const [kept, setKept] = useState(0)
   const titleBox = useRef<HTMLInputElement | null>(null)
   const listId = useId()
+  // The other places it is listed (src/components/ObsPlaces.tsx), kept with everything else on Save.
+  const [places, setPlaces] = useState({ alsoOn: existing?.also_on ?? [], onPunch: existing?.on_punch ?? false })
 
   async function save(another = false) {
     if (!title.trim() || busy) return
@@ -116,6 +120,8 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
         area: area.trim() || null, trade: trade.trim() || null,
         status, observed_on: observedOn, due_on: dueOn || null, photos,
         sheet_id: spot?.sheetId ?? null, revision_id: spot?.revisionId || null, region: regionNow(),
+        // Only to a database that keeps them (0049), or the edit would be refused whole.
+        ...(canLinkPages() ? { also_on: places.alsoOn, on_punch: places.onPunch } : {}),
       }
       if (existing) {
         onSaved(await editObservation(existing, patch))
@@ -135,6 +141,8 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
           revisionId: spot?.revisionId || null,
           region: regionNow(),
           visitId,
+          alsoOn: places.alsoOn,
+          onPunch: places.onPunch,
         })
         await saveObservation(row)
         if (typeId) writePref(LAST_TYPE, typeId)
@@ -269,6 +277,9 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
           onPick={(s) => { const n = spotting; setSpots((all) => (n >= all.length ? [...all, s] : all.map((p, k) => (k === n ? s : p)))); setSpotting(null) }}
           onClose={() => setSpotting(null)} />
       )}
+
+      <ObsPlaces project={project} types={types} typeId={typeId} madeOn={existing?.visit_id ?? visitId ?? null}
+        alsoOn={places.alsoOn} onPunch={places.onPunch} onChange={setPlaces} />
 
       <div className="actions">
         <button className="primary" disabled={!title.trim() || busy} onClick={() => void save()}>

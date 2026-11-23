@@ -1,5 +1,6 @@
 /** Which notebook: field notes or meeting notes (as in visits.ts, repeated so this file needs nothing). */
 export type VisitKind = 'visit' | 'meeting'
+import type { Agenda } from './agenda'
 
 /**
  * How a notebook page is laid out, chosen by the person writing in it.
@@ -18,7 +19,7 @@ export type VisitKind = 'visit' | 'meeting'
  */
 
 export type Screen = 'desktop' | 'tablet' | 'phone'
-export type BlockKind = 'head' | 'names' | 'notes' | 'sketch' | 'photos' | 'seen' | 'text' | 'check'
+export type BlockKind = 'head' | 'names' | 'notes' | 'sketch' | 'photos' | 'seen' | 'text' | 'check' | 'agenda'
 
 export interface Block {
   /** The kind's own name for a built-in block; "text-…" / "check-…" for an added one. */
@@ -48,17 +49,19 @@ export const BUILT_IN: Record<VisitKind, BlockKind[]> = {
   visit: ['head', 'names', 'notes', 'sketch', 'photos', 'seen'],
   meeting: ['head', 'names', 'notes', 'sketch'],
 }
+/** Kinds the writer adds, any number of each; what they hold belongs to the page. */
+export const ADDED: BlockKind[] = ['text', 'check', 'agenda']
 /** The head carries the day, the report and Tear out: it can be moved and sized, not hidden. */
 export const KEPT: BlockKind[] = ['head']
 
 export const LABEL: Record<BlockKind, string> = {
   head: 'Day and weather', names: 'Attendees', notes: 'Notes', sketch: 'Sketch',
-  photos: 'Documentation photos', seen: 'Observations', text: 'Text box', check: 'Checklist',
+  photos: 'Documentation photos', seen: 'Observations', text: 'Text box', check: 'Checklist', agenda: 'Agenda',
 }
 /** Smallest a block may be made, in cells: enough for its heading and something under it. */
 export const LEAST: Record<BlockKind, { w: number; h: number }> = {
   head: { w: 3, h: 3 }, names: { w: 2, h: 2 }, notes: { w: 3, h: 3 }, sketch: { w: 2, h: 2 },
-  photos: { w: 2, h: 2 }, seen: { w: 2, h: 2 }, text: { w: 2, h: 2 }, check: { w: 2, h: 2 },
+  photos: { w: 2, h: 2 }, seen: { w: 2, h: 2 }, text: { w: 2, h: 2 }, check: { w: 2, h: 2 }, agenda: { w: 3, h: 4 },
 }
 
 const b = (kind: BlockKind, x: number, y: number, w: number, h: number): Block => ({ id: kind, kind, x, y, w, h })
@@ -127,8 +130,8 @@ export const depth = (blocks: Block[]) => blocks.reduce((m, x) => Math.max(m, x.
 
 /** A new block's place: across the full width under everything else. */
 export function addBlock(layout: Layout, kind: BlockKind, cols: number, title?: string): Layout {
-  const id = kind === 'text' || kind === 'check' ? `${kind}-${crypto.randomUUID().slice(0, 8)}` : kind
-  const h = kind === 'check' || kind === 'text' ? 4 : LEAST[kind].h + 2
+  const id = ADDED.includes(kind) ? `${kind}-${crypto.randomUUID().slice(0, 8)}` : kind
+  const h = kind === 'agenda' ? 8 : kind === 'check' || kind === 'text' ? 4 : LEAST[kind].h + 2
   const blk: Block = { id, kind, x: 0, y: depth(layout.blocks), w: cols === 1 ? 1 : Math.min(cols, Math.max(LEAST[kind].w, Math.round(cols / 2))), h: cols === 1 ? 1 : h, ...(title ? { title } : {}) }
   return { ...layout, blocks: cols === 1 ? [...layout.blocks, blk] : settle([...layout.blocks, blk], cols) }
 }
@@ -141,7 +144,7 @@ export function clean(raw: unknown, kind: VisitKind, screen: Screen): Layout {
   const fallback = defaultLayout(kind, screen)
   const blocks = (raw as Layout | null)?.blocks
   if (!Array.isArray(blocks)) return fallback
-  const known = new Set<BlockKind>([...BUILT_IN[kind], 'text', 'check'])
+  const known = new Set<BlockKind>([...BUILT_IN[kind], ...ADDED])
   const seen = new Set<string>()
   const kept = blocks.filter((x): x is Block => !!x && typeof x.id === 'string' && known.has(x.kind) && !seen.has(x.id) && !!seen.add(x.id))
   for (const must of KEPT) if (!kept.some((x) => x.kind === must)) kept.unshift(fallback.blocks.find((x) => x.kind === must)!)
@@ -169,7 +172,7 @@ export function screenNow(): Screen {
 
 export interface CheckItem { text: string; done: boolean }
 /** Its heading travels with it, so a page shows it properly to someone whose layout lacks the block. */
-export type Widget = { title?: string; text: string } | { title?: string; items: CheckItem[] }
+export type Widget = { title?: string; text: string } | { title?: string; items: CheckItem[] } | { title?: string; agenda: Agenda }
 export type Widgets = Record<string, Widget>
 
 export const textOf = (w: Widget | undefined) => (w && 'text' in w ? w.text : '')
@@ -177,8 +180,12 @@ export const itemsOf = (w: Widget | undefined): CheckItem[] => (w && 'items' in 
 
 /** Whether a block holds anything on this page — a block with something in it is never silently dropped from view. */
 export function holds(w: Widget | undefined): boolean {
-  return !!textOf(w).trim() || itemsOf(w).some((i) => i.text.trim())
+  const a = agendaOf(w)
+  return !!textOf(w).trim() || itemsOf(w).some((i) => i.text.trim()) || a.old.length + a.obs.length + a.fresh.length > 0
 }
+// (as emptyAgenda in agenda.ts; repeated so this file imports nothing it runs)
+const noAgenda = (): Agenda => ({ from: null, old: [], obs: [], fresh: [] })
+export const agendaOf = (w: Widget | undefined): Agenda => (w && 'agenda' in w && w.agenda ? { ...noAgenda(), ...w.agenda } : noAgenda())
 
 /**
  * The added blocks as lines for the report: each a top-level heading with its lines or items
@@ -188,11 +195,14 @@ export function widgetsForReport(blocks: Block[], widgets: Widgets | undefined, 
   let n = after
   const out: string[] = []
   for (const blk of blocks) {
-    if (blk.kind !== 'text' && blk.kind !== 'check') continue
+    if (!ADDED.includes(blk.kind)) continue
     const w = widgets?.[blk.id]
+    // An agenda's observations are already in the report's own list; its business is what is added here.
     const lines = blk.kind === 'text'
       ? textOf(w).split('\n').map((s) => s.trim()).filter(Boolean)
-      : itemsOf(w).filter((i) => i.text.trim()).map((i) => `${i.text.trim()}${i.done ? ' — done' : ' — open'}`)
+      : blk.kind === 'agenda'
+        ? [...agendaOf(w).old, ...agendaOf(w).fresh].filter((i) => i.text.trim()).map((i) => `${i.text.trim()}${i.done ? ' — resolved' : ' — open'}`)
+        : itemsOf(w).filter((i) => i.text.trim()).map((i) => `${i.text.trim()}${i.done ? ' — done' : ' — open'}`)
     if (!lines.length) continue
     n += 1
     out.push(`${n}. ${blk.title || w?.title || LABEL[blk.kind]}`, ...lines.map((l, i) => `  ${String.fromCharCode(97 + (i % 26))}. ${l}`))

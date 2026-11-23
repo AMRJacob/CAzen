@@ -45,6 +45,31 @@ const BUILT_IN: { trade: string; shape: Shape; text: string; colour: string; tag
   { trade: 'Electrical', shape: 'hexagon', text: 'El', colour: '#d98200', tags: ['Device missing', 'Cover plate missing', 'Not labelled'] },
   { trade: 'Fire protection', shape: 'hexagon', text: 'Fp', colour: '#b3261e', tags: ['Head obstructed', 'Escutcheon missing'] },
   { trade: 'General', shape: 'triangle', text: 'Ge', colour: '#555b57', tags: ['Cleaning', 'Protection of work', 'Safety'] },
+  // Added 11/23 (Jacob: make sure most potential trades are covered).
+  { trade: 'Demolition / Abatement', shape: 'triangle', text: 'De', colour: '#6b4f3a', tags: ['Not removed', 'Damage to existing', 'Debris left'] },
+  { trade: 'Earthwork', shape: 'square', text: 'Ew', colour: '#7a5c2e', tags: ['Compaction', 'Subgrade soft', 'Backfill'] },
+  { trade: 'Site utilities', shape: 'square', text: 'Ut', colour: '#2d6e5e', tags: ['Depth / slope', 'Structure / cleanout', 'Testing'] },
+  { trade: 'Paving / Striping', shape: 'square', text: 'Pv', colour: '#5c5f66', tags: ['Cracking', 'Ponding', 'Striping / signage'] },
+  { trade: 'Fencing', shape: 'square', text: 'Fe', colour: '#6d6a4b', tags: ['Post / footing', 'Gate adjust', 'Damage'] },
+  { trade: 'Landscaping / Irrigation', shape: 'square', text: 'La', colour: '#3c7a32', tags: ['Plant dead / missing', 'Irrigation coverage', 'Sod / seed'] },
+  { trade: 'Misc. metals', shape: 'square', text: 'Mm', colour: '#56636f', tags: ['Railing loose', 'Weld / finish', 'Anchorage'] },
+  { trade: 'Casework / Millwork', shape: 'circle', text: 'Mw', colour: '#8c5a2b', tags: ['Not level / plumb', 'Hardware adjust', 'Countertop seam', 'Damage'] },
+  { trade: 'Waterproofing / Air barrier', shape: 'diamond', text: 'Wp', colour: '#2c5d8a', tags: ['Laps / terminations', 'Penetration not sealed', 'Damage'] },
+  { trade: 'Insulation', shape: 'diamond', text: 'In', colour: '#c27c2c', tags: ['Gaps / voids', 'Missing', 'Wrong type / R-value'] },
+  { trade: 'Siding / Metal panels', shape: 'diamond', text: 'Pn', colour: '#4f6d7a', tags: ['Joint / trim', 'Dent / damage', 'Fastening'] },
+  { trade: 'Sealants', shape: 'diamond', text: 'Jt', colour: '#3a7d8c', tags: ['Missing', 'Failed adhesion', 'Wrong colour'] },
+  { trade: 'Firestopping', shape: 'hexagon', text: 'Fs', colour: '#a8322d', tags: ['Penetration not sealed', 'Wrong system', 'Label missing'] },
+  { trade: 'Overhead / Coiling doors', shape: 'diamond', text: 'Oh', colour: '#66733a', tags: ['Operation', 'Weatherstrip', 'Damage'] },
+  { trade: 'Storefront / Curtain wall', shape: 'diamond', text: 'Cw', colour: '#1d5d8f', tags: ['Sealant / gaskets', 'Water test', 'Anchorage'] },
+  { trade: 'Tile', shape: 'circle', text: 'Ti', colour: '#a2496b', tags: ['Lippage', 'Grout', 'Cracked tile', 'Slope to drain'] },
+  { trade: 'Wall coverings / Acoustic', shape: 'circle', text: 'Wc', colour: '#8a4f9e', tags: ['Seams', 'Damage', 'Panel missing'] },
+  { trade: 'Specialties', shape: 'circle', text: 'Sp', colour: '#6a5a8c', tags: ['Accessory missing', 'Partition adjust', 'Signage', 'Mounting height'] },
+  { trade: 'Equipment', shape: 'triangle', text: 'Eq', colour: '#5a6b60', tags: ['Not installed', 'Not operating', 'Clearance'] },
+  { trade: 'Furnishings', shape: 'circle', text: 'Fu', colour: '#94653f', tags: ['Shades', 'Damage', 'Missing'] },
+  { trade: 'Elevators', shape: 'hexagon', text: 'Ev', colour: '#4c4f8a', tags: ['Inspection', 'Cab finish', 'Leveling'] },
+  { trade: 'Controls / BAS', shape: 'hexagon', text: 'Bs', colour: '#d0642a', tags: ['Sensor location', 'Not commissioned', 'Labeling'] },
+  { trade: 'Low voltage / Data / AV', shape: 'hexagon', text: 'Lv', colour: '#2f7fa0', tags: ['Cabling', 'Device missing', 'Not labelled'] },
+  { trade: 'Fire alarm / Security', shape: 'hexagon', text: 'Fa', colour: '#c2185b', tags: ['Device missing', 'Coverage', 'Access control'] },
 ]
 
 /**
@@ -57,7 +82,24 @@ const CSI: Record<string, string> = {
   General: '01 00', Concrete: '03 00', Masonry: '04 00', Steel: '05 00', Carpentry: '06 00', Roofing: '07 50',
   'Doors / Hardware': '08 10', Glazing: '08 80', Drywall: '09 20', Ceilings: '09 50', Flooring: '09 60', Paint: '09 90',
   'Fire protection': '21 00', Plumbing: '22 00', Mechanical: '23 00', Electrical: '26 00', Sitework: '31 00',
+  // From memory of MasterFormat 2018, as the line above — not looked up.
+  'Demolition / Abatement': '02 41', 'Misc. metals': '05 50', 'Casework / Millwork': '06 40',
+  'Waterproofing / Air barrier': '07 10', Insulation: '07 21', 'Siding / Metal panels': '07 42', Firestopping: '07 84', Sealants: '07 92',
+  'Overhead / Coiling doors': '08 33', 'Storefront / Curtain wall': '08 41', Tile: '09 30', 'Wall coverings / Acoustic': '09 72',
+  Specialties: '10 00', Equipment: '11 00', Furnishings: '12 00', Elevators: '14 20', 'Controls / BAS': '25 00',
+  'Low voltage / Data / AV': '27 00', 'Fire alarm / Security': '28 00', Earthwork: '31 20', 'Paving / Striping': '32 10',
+  Fencing: '32 31', 'Landscaping / Irrigation': '32 80', 'Site utilities': '33 00',
 }
+/** The two letters an observation's number carries for its trade ("Gl · 14"); a firm's own trade is its first two letters. */
+export function codeOf(trade: string | null | undefined, custom: Tag[] = []): string | null {
+  const t = (trade ?? '').trim()
+  if (!t) return null
+  const own = custom.find((c) => c.trade.toLowerCase() === t.toLowerCase() && c.label === '*' && c.text)
+  if (own?.text) return own.text
+  const b = BUILT_IN.find((x) => x.trade.toLowerCase() === t.toLowerCase())
+  return b?.text ?? t.replace(/[^A-Za-z]/g, '').slice(0, 2).replace(/^./, (c) => c.toUpperCase())
+}
+
 /** A trade's CSI division, as two digits, where it is one of the built-in trades. */
 export const divisionOf = (trade: string): string | null => CSI[trade]?.slice(0, 2) ?? null
 /** Trades in CSI order; a firm's own trades, which have no division, follow in name order. */

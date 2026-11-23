@@ -11,13 +11,14 @@ import { listRegister, type RegisterRow } from '../lib/issued'
 import { listMarks, listPads, newPad, removePad, setPad, type NotePad as Pad, type PadKind, type PadMark } from '../lib/pads'
 import {
   editObservation, listObservations, listTypes, nameOf, punchList,
-  STATUS_LABELS, watchObservations, canLinkPages,
+  STATUS_LABELS, watchObservations, canLinkPages, punchByType,
   type Observation, type ObservationStatus, type ObservationType,
 } from '../lib/observations'
 import { ObservationForm } from '../components/ObservationForm'
 import { Notebook } from '../components/Notebook'
 import { listVisits, shortDay, type SiteVisit, type VisitKind } from '../lib/visits'
-import { pageOf, startOf } from '../lib/obsPages'
+import { onPage, pageOf, startOf } from '../lib/obsPages'
+import { ObsPicker } from '../components/ObsPlaces'
 import { Photos } from '../components/Photos'
 import type { Project } from '../lib/types'
 import { openFile } from '../lib/files'
@@ -360,6 +361,7 @@ function Observations() {
   const navigate = useNavigate()
   const [pages, setPages] = useState<SiteVisit[]>([])
   const [pageId, setPageId] = useState<string | null>(null)
+  const [picking, setPicking] = useState<'punch' | 'page' | null>(null)
 
   const projectId = current?.id
   const load = useCallback(() => {
@@ -392,7 +394,7 @@ function Observations() {
     const list = all ?? []
     const linked = canLinkPages()
     if (view === 'general') return list.filter((o) => pageOf(o, pages, linked) === null)
-    if (view === 'page') return pageId ? list.filter((o) => pageOf(o, pages, linked) === pageId) : []
+    if (view === 'page') return pageId ? list.filter((o) => onPage(o, pageId, pages, linked)) : []
     if (view === 'punch') return punchList(list, types)
     return list
   }, [all, view, pages, pageId, types])
@@ -459,8 +461,26 @@ function Observations() {
       {view === 'punch' && (
         <p className="muted small">
           Open items whose type is a punch type ({types.filter((t) => t.is_punch).map((t) => t.name).join(' or ') || 'none set'}),
-          from anywhere. Nothing is copied here; closing one closes it everywhere.
+          and any added by hand, from anywhere. Nothing is copied here; closing one closes it everywhere.
+          {canLinkPages() && <> <button className="link" onClick={() => setPicking('punch')}>Add existing</button></>}
         </p>
+      )}
+      {view === 'page' && page && canLinkPages() && (
+        <p className="small"><button className="link" onClick={() => setPicking('page')}>Add existing to this page</button></p>
+      )}
+      {picking && (
+        <ObsPicker title={picking === 'punch' ? 'Add existing observations to the punch list' : 'Add existing observations to this page'}
+          all={all ?? []} types={types} skip={(o) => shown.includes(o)}
+          onClose={() => setPicking(null)}
+          onAdd={async (list) => {
+            const where = picking; setPicking(null)
+            for (const o of list) {
+              try {
+                const next = await editObservation(o, where === 'punch' ? { on_punch: true } : { also_on: [...(o.also_on ?? []), pageId!] })
+                setAll((xs) => (xs ?? []).map((x) => (x.id === o.id ? next : x)))
+              } catch (e) { setError(message(e)) }
+            }
+          }} />
       )}
 
       {!all ? <p className="muted">Loading…</p>
@@ -469,6 +489,12 @@ function Observations() {
             {shown.map((o) => (
               <ObservationRow key={o.id} o={o} types={types} project={current}
                 onOpen={() => setEditing(o)}
+                // Put on the punch list or on this page by hand: it can be taken off again here.
+                takeOff={view === 'punch' && o.on_punch && !punchByType(o, types)
+                  ? async () => { const next = await editObservation(o, { on_punch: false }); setAll((xs) => (xs ?? []).map((x) => (x.id === o.id ? next : x))) }
+                  : view === 'page' && pageId && o.also_on?.includes(pageId) && o.visit_id !== pageId
+                    ? async () => { const next = await editObservation(o, { also_on: (o.also_on ?? []).filter((x) => x !== pageId) }); setAll((xs) => (xs ?? []).map((x) => (x.id === o.id ? next : x))) }
+                    : undefined}
                 onStatus={async (status) => {
                   try {
                     const next = await editObservation(o, { status })
@@ -482,12 +508,13 @@ function Observations() {
   )
 }
 
-function ObservationRow({ o, types, project, onOpen, onStatus }: {
+function ObservationRow({ o, types, project, onOpen, onStatus, takeOff }: {
   o: Observation
   types: ObservationType[]
   project: Project | null
   onOpen: () => void
   onStatus: (s: ObservationStatus) => void
+  takeOff?: () => void
 }) {
   const type = types.find((t) => t.id === o.type_id)
   return (
@@ -499,6 +526,7 @@ function ObservationRow({ o, types, project, onOpen, onStatus }: {
         <button className="link obs-title" onClick={onOpen}>{o.title}</button>
         {type && <span className="tag">{type.name}</span>}
         {o.sheet_id && <span className="tag">on a sheet</span>}
+        {takeOff && <button className="link small" onClick={takeOff} title="Added by hand — take it off this list">Take off</button>}
       </div>
       <div className="obs-row-side">
         {o.area && <span className="muted small">{o.area}</span>}

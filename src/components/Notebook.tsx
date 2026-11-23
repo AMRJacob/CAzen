@@ -6,17 +6,19 @@ import { ObservationForm } from './ObservationForm'
 import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
 import { ArrangeMenu, CheckBlock, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
-import { LABEL, widgetsForReport, type Block, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
+import { ADDED, LABEL, widgetsForReport, type Block, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
 import { getPad, isPicture, listMarks, listPads, newPad, setPad, type NotePad as Pad, type PadMark } from '../lib/pads'
 import {
-  listObservations, listTypes, nameOf, onDay, photosOf, STATUS_LABELS,
+  editObservation, listObservations, listTypes, nameOf, photosOf, STATUS_LABELS,
   type Observation, type ObservationType,
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
-import { madeAt, pageOf } from '../lib/obsPages'
+import { madeAt, onPage, pageOf } from '../lib/obsPages'
+import { ObsPicker } from './ObsPlaces'
+import { AgendaBlock } from './AgendaBlock'
 import { canLinkPages } from '../lib/observations'
 import {
   canHoldLocation, clockTime, coverOf, longDay, setVisit, shortDay, startVisit,
@@ -132,8 +134,8 @@ export function Notebook({ project, kind, pages, onPages }: {
     return () => clearTimeout(t)
   }, [error])
 
+  // Both books: a meeting page has no observations block, but an agenda on it reviews them.
   useEffect(() => {
-    if (kind !== 'visit') return
     listObservations(project.id).then(setObservations).catch(() => setObservations([]))
     listTypes().then(setTypes).catch(() => setTypes([]))
   }, [project.id, kind])
@@ -263,7 +265,7 @@ export function Notebook({ project, kind, pages, onPages }: {
           )}
           <ol className="nb-toc">
             {pages.map((p, n) => {
-              const seen = kind === 'visit' ? onDay(observations, p.visited_on) : []
+              const seen = kind === 'visit' ? observations.filter((o) => onPage(o, p.id, pages, canLinkPages())) : []
               const photos = p.photos.length + photosOf(seen).length
               return (
                 <li key={p.id} className={removing ? 'nb-toc-removing' : ''}>
@@ -422,7 +424,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   const showing = (k: Block['kind']) => shown.some((b) => b.kind === k)
   const arrange = (next: Block[]) => {
     // An added block taken off is remembered as gone, so writing in it on some page does not bring it back.
-    const off = shown.filter((b) => (b.kind === 'text' || b.kind === 'check') && !next.some((n) => n.id === b.id)).map((b) => b.id)
+    const off = shown.filter((b) => ADDED.includes(b.kind) && !next.some((n) => n.id === b.id)).map((b) => b.id)
     setWork({ v: 1, blocks: next, gone: [...(work?.gone ?? layout.gone ?? []), ...off] })
   }
   const [notes, setNotes] = useState(page.notes ?? '')
@@ -610,14 +612,24 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
     change({ photo_labels: next })
   }
 
-  const seen = visit ? onDay(observations, page.visited_on) : []
   // On the page itself: what was seen while this page was the one being written, and then —
   // under a line — what was seen before it and is still open.
   const began = startOf(page)
   // Which page an observation is on is the same question the Observations book's Field Notes tab asks (src/lib/obsPages.ts).
-  const own = visit ? observations.filter((o) => pageOf(o, pages, canLinkPages()) === page.id).sort((a, b) => madeAt(a) - madeAt(b)) : []
+  // Made on this page, or put on it afterwards (from the observation, or Add existing here).
+  const own = visit ? observations.filter((o) => onPage(o, page.id, pages, canLinkPages())).sort((a, b) => madeAt(a) - madeAt(b)) : []
+  const [picking, setPicking] = useState(false)
+  const addHere = async (list: Observation[]) => {
+    setPicking(false)
+    for (const o of list) {
+      try { onObserved(await editObservation(o, { also_on: [...(o.also_on ?? []), page.id] })) } catch (e) { onTrouble(message(e)) }
+    }
+  }
+  const takeOff = async (o: Observation) => {
+    try { onObserved(await editObservation(o, { also_on: (o.also_on ?? []).filter((x) => x !== page.id) })) } catch (e) { onTrouble(message(e)) }
+  }
   const before = visit ? observations.filter((o) => madeAt(o) < began && o.status !== 'closed' && !own.includes(o)).sort((a, b) => madeAt(b) - madeAt(a)) : []
-  const cover = visit ? coverOf(page, photosOf(seen)) : null
+  const cover = visit ? coverOf(page, photosOf(own)) : null
 
   if (photoPad) {
     // The same pad as the page's sketch — one component, so a tool added to one is in both.
@@ -634,8 +646,8 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
     // something in it on this page, whether or not it is in this person's layout.
     const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen), page.widgets, notes.match(/^\d+\.\s/gm)?.length ?? 0)
     const headings = (notes + added).match(/^\d+\.\s/gm)?.length ?? 0
-    const recorded = seen.length
-      ? `\n${headings + 1}. Observations recorded\n` + seen.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
+    const recorded = own.length
+      ? `\n${headings + 1}. Observations recorded\n` + own.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
       : ''
     const day = usDateOf(new Date(`${page.visited_on}T12:00:00`))
     const who = page.names?.trim() ? page.names.trim() : null
@@ -650,7 +662,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
           <IssueForm key={page.id} kind="field_report" sheetKey={page.id}
             photos={[
               ...page.photos.map((path) => ({ path, label: label(path) })),
-              ...seen.flatMap((o) => o.photos.map((path) => ({ path, label: o.title }))),
+              ...own.flatMap((o) => o.photos.map((path) => ({ path, label: o.title }))),
             ]}
             prefill={{
             'fr.date': day,
@@ -756,7 +768,10 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
         <section className="nb-z nb-z-seen">
           <div className="nb-z-top">
             <h2>Observations{own.length ? ` · ${own.length}` : ''}</h2>
-            <button className="primary-lite" onClick={() => setObserving('new')}>New observation</button>
+            <span className="nb-z-btns">
+              {canLinkPages() && <button className="link" onClick={() => setPicking(true)}>Add existing</button>}
+              <button className="primary-lite" onClick={() => setObserving('new')}>New observation</button>
+            </span>
           </div>
           {!own.length && <p className="nb-none">None on this page yet.</p>}
           {(own.length > 0 || before.length > 0) && (
@@ -767,9 +782,13 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
                     {o.photos[0] && <span className="nb-seen-thumb"><Thumb project={project} path={o.photos[0]} /></span>}
                     <span className="nb-seen-text">
                       <span><span className="mono muted">{nameOf(o, types)}</span> {o.title}</span>
-                      <span className="muted small">{[STATUS_LABELS[o.status], o.area, o.trade].filter(Boolean).join(' · ')}</span>
+                      <span className="muted small">{[STATUS_LABELS[o.status], o.area, o.trade, o.also_on?.includes(page.id) && o.visit_id !== page.id ? 'added' : null].filter(Boolean).join(' · ')}</span>
                     </span>
                   </button>
+                  {/* One put here afterwards can be taken off again; one made here stays with its page. */}
+                  {o.also_on?.includes(page.id) && o.visit_id !== page.id && (
+                    <button className="nb-seen-off" aria-label={`Take ${nameOf(o, types)} off this page`} title="Take off this page" onClick={() => void takeOff(o)}>×</button>
+                  )}
                 </li>
               ))}
               {/* What was seen before this page was started and is not yet closed: on the page
@@ -792,6 +811,8 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       )
       case 'text': return <TextBlock title={b.title || page.widgets?.[b.id]?.title || LABEL.text} widget={page.widgets?.[b.id]} onSave={(w) => setWidget(b.id, w)} />
       case 'check': return <CheckBlock title={b.title || page.widgets?.[b.id]?.title || LABEL.check} widget={page.widgets?.[b.id]} onSave={(w) => setWidget(b.id, w)} />
+      case 'agenda': return <AgendaBlock title={b.title || page.widgets?.[b.id]?.title || LABEL.agenda} widget={page.widgets?.[b.id]} onSave={(w) => setWidget(b.id, w)}
+        page={page} observations={observations} types={types} onObserved={onObserved} onTrouble={onTrouble} />
     }
   }
 
@@ -842,6 +863,10 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
         </div>
       )}
 
+      {picking && (
+        <ObsPicker title="Add existing observations to this page" all={observations} types={types}
+          skip={(o) => own.includes(o)} onAdd={(list) => void addHere(list)} onClose={() => setPicking(false)} />
+      )}
       {observing && (
         <div className="nb-light nb-sheet" role="dialog" aria-label="Observation" onClick={() => setObserving(null)}>
           <div className="nb-sheet-in" onClick={(e) => e.stopPropagation()}>
@@ -859,7 +884,11 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
 /** A duplicated page's text boxes and checklists: the words carried, every tick taken off. */
 function freshWidgets(w: Widgets | undefined): Widgets {
   const out: Widgets = {}
-  for (const [id, v] of Object.entries(w ?? {})) out[id] = 'items' in v ? { ...v, items: v.items.map((i) => ({ ...i, done: false })) } : v
+  for (const [id, v] of Object.entries(w ?? {})) {
+    out[id] = 'items' in v ? { ...v, items: v.items.map((i) => ({ ...i, done: false })) }
+      : 'agenda' in v ? { ...v, agenda: { ...v.agenda, old: v.agenda.old.map((i) => ({ ...i, done: false })), fresh: v.agenda.fresh.map((i) => ({ ...i, done: false })) } }
+      : v
+  }
   return out
 }
 

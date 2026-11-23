@@ -15,6 +15,8 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_arrange_reach.py # arranging a page longer than the screen: edge scrolling, touch settings
     python3 t_obstabs.py       # Observations tabs: All, General, Field Notes (one page), Punch list; "premig" for before 0045
     node --experimental-strip-types obspages.test.ts   # which field-notes page an observation is on
+    node --experimental-strip-types agenda.test.ts     # an agenda: carry-forward and its outline
+    python3 t_places.py        # numbers, trades, one observation in several places, the Agenda block and its PDF
     node --experimental-strip-types layout.test.ts     # the notebook page grid
     python3 t_frames.py 4      # dropped frames while zooming and panning a hatch-heavy sheet
     python3 t_markup.py        # Delete, undo, and the question on leaving markup
