@@ -5,6 +5,8 @@ import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
 import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
+import { ArrangeMenu, CheckBlock, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
+import { LABEL, widgetsForReport, type Block, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
@@ -154,7 +156,7 @@ export function Notebook({ project, kind, pages, onPages }: {
   async function duplicate(p: SiteVisit) {
     try {
       const v = await startVisit(project.id, kind, p.names ?? null, p.location ?? null)
-      const carried = { title: p.title ?? null, notes: p.notes ?? '' }
+      const carried = { title: p.title ?? null, notes: p.notes ?? '', widgets: freshWidgets(p.widgets) }
       await setVisit(v.id, carried)
       const copy = { ...v, ...carried } as SiteVisit
       setChoosing(null)
@@ -167,6 +169,8 @@ export function Notebook({ project, kind, pages, onPages }: {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
+      // While a page is being arranged, Escape and the arrows belong to that; the book stays on the page.
+      if (document.querySelector('.nb-arranging')) return
       if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/project') }
       if (!page) return
       // Pages run newest first, so "next" in the book is the older one.
@@ -308,7 +312,7 @@ export function Notebook({ project, kind, pages, onPages }: {
  * few seconds of not being used.
  */
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
-interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void }
+interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void; arrange?: () => void }
 
 function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents }: {
   /** On a page: a copy of it. On the contents page: puts the list into choosing one to copy. */
@@ -364,6 +368,8 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents
         {spot('Sketch', I(<><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4Z" /><path d="M14 7l3 3" /></>), () => adds?.current?.sketch?.())}
         {visit && spot('Photo', I(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7l1.5-3h5L16 7" /><circle cx="12" cy="13.5" r="3.2" /></>), () => adds?.current?.photo?.())}
         {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds?.current?.observation?.())}
+        {/* Move, size, hide and add the page's blocks — this person's own arrangement, for this book on this kind of screen. */}
+        {spot('Arrange', I(<><rect x="3.5" y="3.5" width="7" height="7" rx="1" /><rect x="13.5" y="3.5" width="7" height="4" rx="1" /><rect x="13.5" y="10.5" width="7" height="10" rx="1" /><rect x="3.5" y="13.5" width="7" height="7" rx="1" /></>), () => adds?.current?.arrange?.())}
         </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
         {onDuplicate && spot(contents ? 'Duplicate a page' : 'Duplicate', I(<><rect x="8" y="8" width="11" height="12" rx="1.5" /><path d="M5 16V5.5A1.5 1.5 0 0 1 6.5 4H15" /></>), onDuplicate)}
@@ -400,6 +406,21 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   onTrouble: (m: string) => void
 }) {
   const visit = page.kind === 'visit'
+  const screen = useScreen()
+  const [layout, keepArrangement] = usePageLayout(page.kind, screen)
+  /** The arrangement being worked on, while the page is being arranged. */
+  const [work, setWork] = useState<Layout | null>(null)
+  const arranging = work !== null
+  // An arrangement is for one kind of screen: turning a phone or unfolding one leaves arranging rather than save it to the wrong one.
+  const [arrangedOn, setArrangedOn] = useState(screen)
+  if (arrangedOn !== screen) { setArrangedOn(screen); if (work) setWork(null) }
+  const shown = shownBlocks(work ?? layout, page.widgets, screen)
+  const showing = (k: Block['kind']) => shown.some((b) => b.kind === k)
+  const arrange = (next: Block[]) => {
+    // An added block taken off is remembered as gone, so writing in it on some page does not bring it back.
+    const off = shown.filter((b) => (b.kind === 'text' || b.kind === 'check') && !next.some((n) => n.id === b.id)).map((b) => b.id)
+    setWork({ v: 1, blocks: next, gone: [...(work?.gone ?? layout.gone ?? []), ...off] })
+  }
   const [notes, setNotes] = useState(page.notes ?? '')
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
@@ -457,6 +478,16 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
     onChanged({ ...page, ...patch })
     setVisit(page.id, patch).catch((e) => onTrouble(message(e)))
   }, [page, onChanged, onTrouble])
+  // A text box or checklist saves a moment after typing stops — by then the page may have
+  // changed under it, so it goes through the page as it is now.
+  const changeNow = useRef(change)
+  const widgetsNow = useRef<Widgets>(page.widgets ?? {})
+  useEffect(() => { changeNow.current = change; widgetsNow.current = page.widgets ?? {} })
+  const setWidget = (id: string, w: Widget) => {
+    const next = { ...widgetsNow.current, [id]: w }
+    widgetsNow.current = next
+    changeNow.current({ widgets: next })
+  }
 
   const padId = page.pad_id
   useEffect(() => {
@@ -528,7 +559,8 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   const root = useRef<HTMLElement | null>(null)
   useEffect(() => {
     adds.current = {
-      note: () => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() },
+      arrange: () => setWork(layout),
+      note: !showing('notes') ? undefined : () => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() },
       sketch: () => { void draw() },
       photo: visit ? () => camera.current?.click() : undefined,
       observation: visit ? () => setObserving('new') : undefined,
@@ -594,8 +626,12 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
   }
 
   if (exporting) {
+    // The added blocks follow the notes in the report, each a heading of its own — every one with
+    // something in it on this page, whether or not it is in this person's layout.
+    const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen), page.widgets, notes.match(/^\d+\.\s/gm)?.length ?? 0)
+    const headings = (notes + added).match(/^\d+\.\s/gm)?.length ?? 0
     const recorded = seen.length
-      ? `\n${(notes.match(/^\d+\.\s/gm)?.length ?? 0) + 1}. Observations recorded\n` + seen.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
+      ? `\n${headings + 1}. Observations recorded\n` + seen.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
       : ''
     const day = usDateOf(new Date(`${page.visited_on}T12:00:00`))
     const who = page.names?.trim() ? page.names.trim() : null
@@ -618,7 +654,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             ...(page.weather ? { 'fr.weather': page.weather } : {}),
             ...(page.location ? { 'fr.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'fr.participants': who } : {}),
-            'fr.observations': notes + recorded,
+            'fr.observations': notes + added + recorded,
           }} />
         ) : (
           <IssueForm key={page.id} kind="meeting_notes" prefill={{
@@ -627,7 +663,7 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             ...(page.title ? { 'mn.title': page.title } : {}),
             ...(page.location ? { 'mn.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'mn.participants': who } : {}),
-            'mn.notes': notes,
+            'mn.notes': notes + added,
           }} />
         )}
       </article>
@@ -636,59 +672,61 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
 
   const at = viewing ? page.photos.indexOf(viewing.path) : -1
 
-  return (
-    <article ref={root} className={`nb-paper nb-page nb-turn-${turn}`}>
-      <section className="nb-z nb-z-head">
-        <h1>{longDay(page.visited_on)}</h1>
-        <div className="nb-head-fields">
-          <input type="date" value={page.visited_on} aria-label="Day"
-            onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
-          <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
-            onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
-          {visit && (
-            <input key={page.weather ?? ''} className="nb-weather" defaultValue={page.weather ?? ''} aria-label="Weather"
-              placeholder={asking ? 'Looking up the weather…' : 'Weather'}
-              onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
-          )}
-          {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather(true)} title="Look the weather up from where you are">↻</button>}
-        </div>
-        {canHoldLocation() && (
-          <div className="nb-head-fields nb-where">
-            <input key={page.location ?? ''} className="nb-location" defaultValue={(page.location ?? '').replace(/\n/g, ', ')} aria-label="Location"
-              placeholder={locating ? 'Finding where you are…' : 'Location'}
-              onBlur={(e) => { const v = e.target.value.trim(); if (v !== (page.location ?? '').replace(/\n/g, ', ')) change({ location: v || null }) }} />
-            <button className="link nb-weather-again" disabled={locating} onClick={() => void locate()} title="Use where you are" aria-label="Use where you are">⌖</button>
+  /** One block of the page, as it is drawn wherever the arrangement puts it. */
+  const part = (b: Block): React.ReactNode => {
+    switch (b.kind) {
+      case 'head': return (
+        <section className="nb-z nb-z-head">
+          <h1>{longDay(page.visited_on)}</h1>
+          <div className="nb-head-fields">
+            <input type="date" value={page.visited_on} aria-label="Day"
+              onChange={(e) => { if (e.target.value) change({ visited_on: e.target.value }) }} />
+            <input type="time" value={(page.visited_at ?? '').slice(0, 5)} aria-label="Time"
+              onChange={(e) => change({ visited_at: e.target.value ? `${e.target.value}:00` : null })} />
+            {visit && (
+              <input key={page.weather ?? ''} className="nb-weather" defaultValue={page.weather ?? ''} aria-label="Weather"
+                placeholder={asking ? 'Looking up the weather…' : 'Weather'}
+                onBlur={(e) => { if (e.target.value !== (page.weather ?? '')) change({ weather: e.target.value.trim() || null }) }} />
+            )}
+            {visit && <button className="link nb-weather-again" disabled={asking} onClick={() => void lookUpWeather(true)} title="Look the weather up from where you are">↻</button>}
           </div>
-        )}
-        <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
-          placeholder={visit ? 'What the visit was for' : 'Which meeting'}
-          onBlur={(e) => { if (e.target.value !== (page.title ?? '')) change({ title: e.target.value.trim() || null }) }} />
-        <div className="nb-head-actions">
-          <button className="primary-lite" onClick={() => { if (notes !== (page.notes ?? '')) change({ notes }); setExporting(true) }}>{BOOK[page.kind].exportAs}</button>
-          <button className="link danger-link" onClick={() => {
-            onTear(page, own)
-          }}>Tear out</button>
-        </div>
-      </section>
-
-      {bar}
-      <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
-
-      <section className="nb-z nb-z-notes">
-        <div className="nb-z-top"><h2>Notes</h2></div>
-        {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
-        <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
-      </section>
-
-      <section className="nb-z nb-z-sketch">
-        <div className="nb-z-top"><h2>Sketch</h2><button className="link" onClick={() => void draw()}>{marks.length ? 'Open' : 'Start'}</button></div>
-        <button ref={frame} className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
-          <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} ratio={shape} contrast={!!pad?.contrast} />
-          {!marks.length && <span className="nb-pad-empty">Tap to draw or write by hand</span>}
-        </button>
-      </section>
-
-      {visit && (
+          {canHoldLocation() && (
+            <div className="nb-head-fields nb-where">
+              <input key={page.location ?? ''} className="nb-location" defaultValue={(page.location ?? '').replace(/\n/g, ', ')} aria-label="Location"
+                placeholder={locating ? 'Finding where you are…' : 'Location'}
+                onBlur={(e) => { const v = e.target.value.trim(); if (v !== (page.location ?? '').replace(/\n/g, ', ')) change({ location: v || null }) }} />
+              <button className="link nb-weather-again" disabled={locating} onClick={() => void locate()} title="Use where you are" aria-label="Use where you are">⌖</button>
+            </div>
+          )}
+          <input className="nb-title" defaultValue={page.title ?? ''} aria-label="What this page is about"
+            placeholder={visit ? 'What the visit was for' : 'Which meeting'}
+            onBlur={(e) => { if (e.target.value !== (page.title ?? '')) change({ title: e.target.value.trim() || null }) }} />
+          <div className="nb-head-actions">
+            <button className="primary-lite" onClick={() => { if (notes !== (page.notes ?? '')) change({ notes }); setExporting(true) }}>{BOOK[page.kind].exportAs}</button>
+            <button className="link danger-link" onClick={() => {
+              onTear(page, own)
+            }}>Tear out</button>
+          </div>
+        </section>
+      )
+      case 'names': return <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
+      case 'notes': return (
+        <section className="nb-z nb-z-notes">
+          <div className="nb-z-top"><h2>Notes</h2></div>
+          {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
+          <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
+        </section>
+      )
+      case 'sketch': return (
+        <section className="nb-z nb-z-sketch">
+          <div className="nb-z-top"><h2>Sketch</h2><button className="link" onClick={() => void draw()}>{marks.length ? 'Open' : 'Start'}</button></div>
+          <button ref={frame} className="nb-pad" onClick={() => void draw()} aria-label="Open the sketch pad">
+            <PadStill marks={marks} rule={pad?.rule ?? 'blank'} ink={pad?.rule_ink ?? 40} ratio={shape} contrast={!!pad?.contrast} />
+            {!marks.length && <span className="nb-pad-empty">Tap to draw or write by hand</span>}
+          </button>
+        </section>
+      )
+      case 'photos': return !visit ? null : (
         <section className="nb-z nb-z-photos">
           <div className="nb-z-top">
             <h2>Documentation photos{page.photos.length ? ` · ${page.photos.length}` : ''}</h2>
@@ -708,12 +746,9 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
               ))}
             </div>
           )}
-          <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void taken(e.target.files)} />
-          <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => void taken(e.target.files)} />
         </section>
-      )}
-
-      {visit && (
+      )
+      case 'seen': return !visit ? null : (
         <section className="nb-z nb-z-seen">
           <div className="nb-z-top">
             <h2>Observations{own.length ? ` · ${own.length}` : ''}</h2>
@@ -750,8 +785,27 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
             </ul>
           )}
         </section>
-      )}
+      )
+      case 'text': return <TextBlock title={b.title || page.widgets?.[b.id]?.title || LABEL.text} widget={page.widgets?.[b.id]} onSave={(w) => setWidget(b.id, w)} />
+      case 'check': return <CheckBlock title={b.title || page.widgets?.[b.id]?.title || LABEL.check} widget={page.widgets?.[b.id]} onSave={(w) => setWidget(b.id, w)} />
+    }
+  }
 
+  return (
+    <article ref={root} className={`nb-paper nb-page nb-laid nb-on-${screen} nb-turn-${turn}`}>
+      {arranging ? (
+        <ArrangeMenu kind={page.kind} screen={screen} layout={{ ...work, blocks: shown }}
+          onChange={setWork}
+          onClose={() => { keepArrangement(work); setWork(null) }}
+          onDiscard={() => setWork(null)} />
+      ) : bar}
+      {arranging && <p className="nb-arr-say">{screen === 'phone'
+        ? 'Arranging this book’s page for a phone: ↑ ↓ to reorder, × to hide.'
+        : `Arranging this book’s page for a ${screen}: drag a block to move it, its corner to size it, × to hide.`}</p>}
+      <PageGrid blocks={shown} screen={screen} arranging={arranging} render={part} onArrange={(next) => arrange(next)} />
+      {/* Kept outside the photographs' block, so the corner menu's Photo works with that block hidden. */}
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void taken(e.target.files)} />
+      <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => void taken(e.target.files)} />
       {viewing && at >= 0 && (
         <div className="nb-light" role="dialog" aria-label="Photograph" onClick={() => setViewing(null)}>
           <div className="nb-light-in" onClick={(e) => e.stopPropagation()}>
@@ -796,6 +850,13 @@ function Page({ project, page, turn, bar, adds, until, earlier, observations, ty
       )}
     </article>
   )
+}
+
+/** A duplicated page's text boxes and checklists: the words carried, every tick taken off. */
+function freshWidgets(w: Widgets | undefined): Widgets {
+  const out: Widgets = {}
+  for (const [id, v] of Object.entries(w ?? {})) out[id] = 'items' in v ? { ...v, items: v.items.map((i) => ({ ...i, done: false })) } : v
+  return out
 }
 
 // ---------- Typing as it comes ----------

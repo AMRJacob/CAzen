@@ -35,6 +35,8 @@ export interface SiteVisit {
   photo_labels: Record<string, string>
   cover_photo: string | null
   pad_id: string | null
+  /** What the page's added text boxes and checklists hold, keyed by block id (src/lib/pageLayout.ts). */
+  widgets?: import('./pageLayout').Widgets
   issued_id: string | null
   created_at: string
 }
@@ -72,6 +74,25 @@ async function lookForLocation(): Promise<void> {
   try { localStorage.setItem(LOCATION_KEY, locationKnown ? '1' : '0') } catch { /* private mode */ }
 }
 
+/**
+ * Whether pages can hold what text boxes and checklists carry. The column arrives with migration
+ * 0044; until then those blocks are not offered, and the rest of the notebook works as before.
+ */
+const WIDGETS_KEY = 'cazen.visits.widgets'
+let widgetsKnown: boolean | null = (() => {
+  try { const v = localStorage.getItem(WIDGETS_KEY); return v === null ? null : v === '1' } catch { return null }
+})()
+let widgetsAsked = false
+export const canHoldWidgets = () => widgetsKnown === true
+async function lookForWidgets(): Promise<void> {
+  if (widgetsAsked || !navigator.onLine) return
+  const { error } = await db().from('site_visits').select('widgets').limit(1)
+  if (error && !(error as { code?: string }).code) return
+  widgetsAsked = true
+  widgetsKnown = !error
+  try { localStorage.setItem(WIDGETS_KEY, widgetsKnown ? '1' : '0') } catch { /* private mode */ }
+}
+
 const newestFirst = (a: SiteVisit, b: SiteVisit) =>
   b.visited_on.localeCompare(a.visited_on) || (b.visited_at ?? '').localeCompare(a.visited_at ?? '')
 
@@ -86,8 +107,8 @@ export function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisi
     store: 'visits',
     here: async () => (await localAll<SiteVisit>('visits', projectId)).filter((v) => v.kind === kind),
     theirs: async () => {
-      await lookForLocation().catch(() => {})
-      const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : ''))
+      await Promise.all([lookForLocation().catch(() => {}), lookForWidgets().catch(() => {})])
+      const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : '') + (widgetsKnown ? ', widgets' : ''))
         .eq('project_id', projectId).eq('kind', kind)
         .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
       if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }

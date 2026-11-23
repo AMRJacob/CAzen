@@ -3392,3 +3392,61 @@ a.trb-open:hover { box-shadow: 0 1px 1px rgba(40, 35, 25, 0.08), 0 10px 18px -8p
 .obs-list .obs-pillrow { border-top: none; margin: 6px 0; padding: 12px 18px; border-radius: 26px; background: #fff;
   border: 1px solid color-mix(in srgb, var(--tc, #6b7f6a) 24%, #fff);
   box-shadow: 0 1px 1px rgba(40, 35, 25, 0.06), 0 8px 18px -9px color-mix(in srgb, var(--tc, #6b7f6a) 70%, transparent); }
+
+/* ---------- A notebook page arranged by its writer (src/components/PageGrid.tsx) ----------
+   The page's blocks sit on a grid of cells — twelve columns at a desk, eight on a tablet,
+   twelve rows filling the screen — wherever the writer put them. Each block keeps the look it
+   had in the fixed layout: a hairline on its left and top where it has a neighbour there. */
+.nb-page.nb-laid { display: block; overflow-y: auto; }
+.nb-grid { display: grid; gap: 0; }
+.nb-cell { position: relative; min-width: 0; min-height: 0; display: flex; }
+.nb-cell-in { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.nb-laid .nb-cell-in > .nb-z { flex: 1; grid-area: auto; min-height: 0; max-height: none; border: none; padding: 0 18px 12px; }
+.nb-grid:not(.nb-grid-phone) .nb-cell:not(.at-left) > .nb-cell-in > .nb-z { border-left: 1px solid var(--hair); }
+.nb-grid:not(.nb-grid-phone) .nb-cell:not(.at-top) > .nb-cell-in > .nb-z { border-top: 1px solid var(--hair); }
+.nb-grid:not(.nb-grid-phone) .nb-cell.at-left > .nb-cell-in > .nb-z { padding-left: 0; }
+.nb-laid .nb-cell-head > .nb-cell-in > .nb-z { padding-bottom: 14px; }
+.nb-laid .nb-cell-head > .nb-cell-in > .nb-z, .nb-laid .nb-cell-names > .nb-cell-in > .nb-z,
+.nb-laid .nb-cell-text > .nb-cell-in > .nb-z, .nb-laid .nb-cell-check > .nb-cell-in > .nb-z { overflow-y: auto; }
+
+/* A text box: the page's ruling, typed on. */
+.nb-paper .nb-free { flex: 1; min-height: 0; width: 100%; resize: none; border: none; outline: none; font: inherit; font-size: 16px; color: inherit; }
+/* A checklist: a tick and a line, on the ruling's pitch. */
+.nb-check { list-style: none; margin: 0; padding: 0; }
+.nb-check li { display: flex; align-items: center; gap: 10px; height: 34px; border-bottom: 1px solid var(--rule); }
+.nb-check input[type="checkbox"] { width: 19px; height: 19px; flex: none; margin: 0; accent-color: var(--moss); }
+.nb-check input[type="text"] { flex: 1; min-width: 0; border: none; outline: none; background: none; font: inherit; font-size: 16px; padding: 0; color: inherit; }
+.nb-check li.done input[type="text"] { color: #9aa09a; text-decoration: line-through; }
+.nb-check-add { align-self: flex-start; margin-top: 6px; }
+
+/* On a phone the blocks are the page's stacked cards, in the writer's order. */
+.nb-grid-phone { display: block; }
+.nb-grid-phone .nb-cell, .nb-grid-phone .nb-cell-in { display: block; }
+.nb-grid-phone .nb-free { min-height: 160px; }
+
+/* Arranging: each block is a thing to pick up. Its contents cannot be touched until Close. */
+.nb-arr-say { position: relative; z-index: 8; margin: 0 0 10px; padding: 9px 14px; border-radius: 10px; background: #eaf0ea; color: #3f5a48; font-size: 13.5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+.nb-arranging .nb-cell { z-index: 1; }
+.nb-arr { position: absolute; inset: 4px; z-index: 3; border: 1.5px dashed #9db3a3; border-radius: 10px; background: rgba(92, 122, 101, 0.07); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.nb-grid-phone .nb-arr { inset: 0 0 12px; cursor: default; touch-action: auto; }
+.nb-cell.lifted { z-index: 4; }
+.nb-cell.lifted .nb-arr { cursor: grabbing; border-style: solid; border-color: var(--moss); background: rgba(92, 122, 101, 0.16); box-shadow: 0 10px 28px rgba(43, 45, 44, 0.18); }
+.nb-arr-head { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 6px; padding: 4px 5px 4px 10px;
+  background: #fff; border: 1px solid #cfd8d1; border-radius: 999px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08); font-size: 14px; }
+.nb-arr-grip { color: #7a8a7e; font-size: 15px; line-height: 1; }
+.nb-arr-name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2b2d2c; }
+input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 600; padding: 2px 0; outline: none; border-bottom: 1px dashed #b9c4bb; cursor: text; }
+.nb-arr-head button { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 50%; background: #eef2ee; color: #2b2d2c; font-size: 17px; line-height: 1; display: grid; place-items: center; }
+.nb-arr-head button:disabled { opacity: 0.3; }
+.nb-arr-head .nb-arr-hide:hover { background: #f6dfd8; color: #a2452f; }
+.nb-arr-size { position: absolute; right: 2px; bottom: 2px; width: 26px; height: 26px; cursor: nwse-resize; touch-action: none; border-radius: 0 0 9px 0;
+  background: linear-gradient(135deg, transparent 52%, var(--moss) 52%, var(--moss) 60%, transparent 60%, transparent 70%, var(--moss) 70%, var(--moss) 78%, transparent 78%); }
+
+/* The corner menu while arranging: open the whole time, the mark given up to the tools. */
+.nb-menu-arrange { width: min(430px, calc(100vw - var(--corner-room))); }
+.nb-menu-arrange .nb-menu-mark { width: 0; opacity: 0; }
+.nb-menu-arrange .nb-menu-bar { padding-left: 8px; }
+.nb-arr-show { position: fixed; z-index: 67; left: var(--corner-x); bottom: calc(var(--corner) + 62px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; min-width: 200px; padding: 6px; background: var(--panel); border: 1.5px solid #2b2d2c; border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16); }
+.nb-arr-show button { text-align: left; border: none; background: none; padding: 10px 12px; border-radius: 9px; font-size: 14.5px; }
+.nb-arr-show button:hover { background: var(--moss-soft); }

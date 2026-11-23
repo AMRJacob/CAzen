@@ -9,6 +9,9 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_obs.py           # a run of observations kept offline and sent on reconnect
     python3 t_pay.py           # set a contract up from a pasted schedule of values
     python3 t_notebook.py      # the field-notes and meeting-notes books on desk and phone
+    python3 t_arrange.py       # arrange a notebook page: desk, tablet, phone; text boxes and checklists
+    python3 t_arrange_premig.py  # the same before migration 0044: kept on the device, new blocks greyed
+    node --experimental-strip-types layout.test.ts     # the notebook page grid
     python3 t_frames.py 4      # dropped frames while zooming and panning a hatch-heavy sheet
     python3 t_markup.py        # Delete, undo, and the question on leaving markup
     python3 t_zoom.py 4        # zoom a hatch-heavy sheet at a quarter CPU speed: how long the drawing is gone, time to sharp

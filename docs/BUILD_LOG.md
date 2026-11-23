@@ -11,6 +11,63 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23 (notebook pages arranged by their writer)
+
+**A notebook page's blocks can be moved, sized, hidden and added to** (Jacob, 12:02: let users
+change the layout, add / remove and move widgets, drag to place and resize). His answers to the
+questions asked first: each person's own layout; per book; per kind of screen — desktop, tablet
+and phone apart, with what is shown chosen separately for each; snap to a grid; and two new
+kinds of block, **checklist** and **text box**.
+
+- **Arrange** in a page's corner menu (after Observation). While arranging, the corner menu stays
+  open with Close (keeps it), Text box, Checklist, Show (hidden blocks, to put back), Reset (the
+  page as it was drawn) and Discard (back to before arranging began). Block contents cannot be
+  touched while arranging. Escape no longer turns back to the contents while arranging.
+- **Desktop and tablet**: a grid, 12 columns at a desk and 8 on a tablet, 12 rows filling the
+  screen (a taller arrangement scrolls). A block is dragged anywhere on it and sized by its
+  bottom-right corner, in whole cells, with a least size per kind. Blocks never overlap: one
+  dropped on another trades places with it when that one fits the spot left; otherwise it is
+  pushed down, and everything then slides up to close gaps (`settle` in `src/lib/pageLayout.ts`).
+- **Phone**: one column; ↑ ↓ to reorder, × to hide. **No dragging on the phone** — a choice
+  made here, not asked for.
+- **Which screen**: under 760 px wide is a phone (where the page has always gone to one
+  column); under 1200 px, or touch with no mouse, a tablet; otherwise a desk. Those two numbers
+  are mine. Turning or unfolding a phone mid-arrange leaves arranging without saving.
+- The head (day, weather, location, title, *Make the report*, *Tear out*) can be moved and sized
+  but not hidden. The defaults reproduce the fixed layout; at a desk the three columns are now
+  equal thirds (they were 35 / 29 / 36) and the head row is three rows of the grid, not its own
+  height.
+- **Kept**: on the device at once (`localStorage`, per person, book and screen) and in
+  `notebook_layouts` (one row per person, book, screen; only the person can read theirs). The
+  newer of the two wins. With no signal it is sent the next time the page is opened with one.
+- **Text box**: the page's ruling, typed on. **Checklist**: a tick and a line; Enter makes the
+  next item, Backspace in an empty one removes it; the heading counts "1 of 2". Both are
+  renamed from their heading pill while arranging; several of each may be added. What is in them
+  belongs to the page (`site_visits.widgets`, keyed by block id, with the heading), saved 0.6 s
+  after typing stops and when the page is left; a tick is saved at once.
+- A page holding writing in a text box or checklist that is not in the reader's layout (someone
+  else's) still shows it, at the foot; taking an added block off one's own layout stops that for
+  oneself (`gone`).
+- **In the report**: after the typed notes, each text box or checklist with anything in it is a
+  numbered heading with its lines; checklist items end "— done" or "— open". Observations follow,
+  renumbered. Whether that wording is wanted was not asked.
+- **Duplicate** carries text boxes and checklists, with every tick taken off.
+- The photo inputs moved out of the photographs' block, so the corner menu's Photo works with it
+  hidden; Note is greyed when the notes block is hidden.
+
+**Migration `0044_notebook_layouts` is written and NOT applied** — the database tool refused it
+from this session. Until it is applied: layouts are kept on each device only, and *Text box* and
+*Checklist* are greyed (`canHoldWidgets`, probed like the location column). Everything else works.
+`checks/t_arrange_premig.py` drives that state.
+
+Checks: `checks/layout.test.ts` (grid: defaults, swap, push, least size, cleaning stored layouts,
+report lines); `checks/t_arrange.py` at 1500 × 950, 1024 × 768 touch, and 402 px phone — drag,
+resize, hide, Show, add and rename, kept on the server, writing in both blocks reaches the page,
+reload brings it all back, the report carries it. **Test browser only; not on the iPhone, an iPad
+or the PC.**
+
+---
+
 # Checkpoint — 2026-11-20, 17:45 CST (pad tools, observation pills)
 
 **The pad and the photograph sketch** (Jacob, 17:14: leaders off the sides of text boxes, an
