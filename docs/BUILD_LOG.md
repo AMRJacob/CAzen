@@ -11,6 +11,13 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:55 CST (side by side: both scroll)
+
+With the contractor's PDF docked beside an application, the application could not be scrolled: the
+rule that stops the page moving under a full-screen viewer applied to the docked one too. It now
+applies only to a viewer over the whole screen, and scrolling inside the docked PDF stays inside it.
+`checks/t_beside.py` now scrolls the page with the PDF open.
+
 # Checkpoint — 2026-11-23, 17:50 CST (change orders off the PDF; selecting several lines)
 
 - **The cover sheet's change orders.** The G702 reader now also reads the change order summary

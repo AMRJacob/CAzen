@@ -677,7 +677,7 @@ section.page-drop { outline: 2px dashed var(--moss); outline-offset: 8px; border
 }
 /* While a sheet is open the page behind it does not exist as far as a finger is concerned:
    it cannot scroll, bounce or be dragged into view under the drawing. */
-html:has(.sheet-viewer), body:has(.sheet-viewer) { overflow: hidden; overscroll-behavior: none; }
+html:has(.sheet-viewer:not(.docked)), body:has(.sheet-viewer:not(.docked)) { overflow: hidden; overscroll-behavior: none; }
 .sv-body { flex: 1; display: flex; min-height: 0; position: relative; }  /* the markup palette floats against this */
 /* The sheet is moved by a transform, so this is a window onto it rather than a
    scroller. That is what lets it be dragged at any zoom — including when it
@@ -3581,3 +3581,4 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-pick-box { margin-right: 6px; vertical-align: middle; pointer-events: none; }
 .pay-703-wrap.picking .pay-703-item { white-space: nowrap; user-select: none; }
 .pay-703 tr.picked td { background: var(--moss-soft); }
+.sheet-viewer.docked, .sheet-viewer.docked * { overscroll-behavior: contain; }
