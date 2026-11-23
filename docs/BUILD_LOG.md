@@ -11,6 +11,35 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 14:35 CST (a section number that comes in twice)
+
+**Repeated sections are shown side by side above the upload list** (Jacob, 14:21, choosing this
+from four offered: redundant sections came in far apart on the upload screen; Join up / Join down
+stay as they are). When more than one included section in a project manual upload carries the same
+number, a panel above the review list shows each such number with every copy next to the others —
+first-page picture (opens the section), pages, title, what the footers say — and:
+
+- **Keep this one** on a copy leaves the other copies out (unticked in the list, not removed;
+  ticking one back brings the panel back).
+- **Combine them** makes one section of all the copies' pages, in the order of the PDF, in the
+  place of the copy that comes first in the list, and reads the footers again. Two identical
+  copies combined say so ("pages 1, 2 twice").
+- **Renumber** goes to that copy's number in the list below and selects it. (Typing in the panel
+  itself was tried first: the first keystroke ends the repeat and the panel vanished mid-word.)
+
+The list itself is unchanged and stays in the order of the PDF; a repeated row now reads "more than
+once — see above". The Pages column lists separate runs ("3–4, 8–9") where a section's pages are
+not continuous; it used to print first to last ("3–9"). The saved manual is still listed by section
+number, as before. `check` in `splitManual.ts` is exported for the combine.
+
+`checks/t_repeats.py` on `checks/repeat_spec.pdf` (made by `make_repeat_spec.py`: six sections,
+09 91 00 bound in twice, pages 3–4 and 8–9): panel with both copies, Save disabled; keep the
+second → panel gone, first skipped, Save 5; tick it back → panel back; combine → one row
+"3–4, 8–9 (4)"; renumber the second to 09 91 23 → panel gone, Save 6. Test browser only, on a
+made-up manual.
+
+---
+
 # Checkpoint — 2026-11-23, 14:05 CST (Observations tabs: All / General / Field Notes / Punch list)
 
 Jacob, 13:26, confused by *One visit* vs *Punch list* and the issue information; 13:32: "maybe

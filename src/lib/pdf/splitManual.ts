@@ -331,7 +331,7 @@ export function detectSections(pages: ManualPage[], box?: Region | null): { page
  * name. Reading them back is the only way to know a section arrived whole, so it is done here
  * rather than left for somebody to notice on site.
  */
-function check(sections: ManualSection[], pages: ManualPage[]): ManualSection[] {
+export function check<T extends ManualSection>(sections: T[], pages: ManualPage[]): T[] {
   // Whether this book bothers with END OF SECTION at all. Where most sections have one, the
   // handful that don't are worth pointing at — that is usually a front-end document where it was
   // left off. Where hardly any do, saying so on every section would be noise.

@@ -14,7 +14,7 @@ import {
   byDivision, listManual, listSectionRevisions, renameSection, saveManual, searchManual,
   type CurrentSpec, type SectionToSave, type SpecHit, type SpecRevision,
 } from '../lib/manual'
-import { cutSection, bodyOf, detectSections, inSectionOrder, readManual, sectionInRegion, troubleText, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
+import { check, cutSection, bodyOf, detectSections, inSectionOrder, readManual, sectionInRegion, troubleText, FRONT, type ManualPage, type ManualSection } from '../lib/pdf/splitManual'
 import { RegionPicker } from '../components/RegionPicker'
 import { PREFS, usePref } from '../lib/prefs'
 import type { Region } from '../lib/pdf/pageText'
@@ -278,6 +278,18 @@ function SectionRow({ section, project, onOpen, onOpenPath, onChanged }: {
 
 // ---------- Uploading ----------
 
+/** Page numbers as the runs they make: "3–4, 8–9" rather than "3–9" when the middle isn't there. */
+function runsOf(pages: number[]): string {
+  const out: string[] = []
+  for (let k = 0; k < pages.length;) {
+    let e = k
+    while (e + 1 < pages.length && pages[e + 1] === pages[e] + 1) e++
+    out.push(e === k ? `${pages[k] + 1}` : `${pages[k] + 1}–${pages[e] + 1}`)
+    k = e + 1
+  }
+  return out.join(', ')
+}
+
 interface Draft extends ManualSection {
   include: boolean
   touched?: boolean
@@ -431,6 +443,30 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
   const outOfOrder = useMemo(() => inSectionOrder(drafts), [drafts])
   const putInOrder = () => setDrafts((ds) => inSectionOrder(ds) ?? ds)
 
+  /** Keep one copy of a number that came in more than once; the others are left out, not removed. */
+  const keepOnly = (keep: number, number: string) => setDrafts((ds) => ds.map((d, j) =>
+    j !== keep && d.include && d.number.trim() === number ? { ...d, include: false, touched: true } : d))
+
+  /**
+   * Make one section of every included copy of a number: their pages in the order the PDF has
+   * them, in the place of the copy that comes first in the list. The footers are read again, since
+   * putting the pieces together is often what makes a section whole.
+   */
+  const combine = (number: string) => setDrafts((ds) => {
+    const at = ds.map((d, j) => [d, j] as const).filter(([d]) => d.include && d.number.trim() === number)
+    if (at.length < 2) return ds
+    const first = at[0][1]
+    const merged: Draft = {
+      ...ds[first],
+      pages: at.flatMap(([d]) => d.pages).sort((a, b) => a - b),
+      title: at.map(([d]) => d.title.trim()).find(Boolean) ?? '',
+      guessed: at.some(([d]) => d.guessed),
+      touched: true,
+    }
+    const gone = new Set(at.slice(1).map(([, j]) => j))
+    return check(ds.map((d, j) => (j === first ? merged : d)).filter((_, j) => !gone.has(j)), pages)
+  })
+
   /** Sections that say END OF SECTION, which is the strongest confirmation the cut is right. */
   const ended = useMemo(
     () => drafts.filter((d) => d.number !== FRONT && d.pages.some((i) => pages[i]?.ends)).length,
@@ -457,6 +493,12 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
     seen.add(n)
   }
   const known = new Set(existing.map((s) => s.number))
+  /** Each number that more than one included section carries, with where those sections are. */
+  const repeats = [...duplicates].map((n) => ({
+    number: n,
+    copies: drafts.map((d, i) => [d, i] as const).filter(([d]) => d.include && d.number.trim() === n),
+  }))
+  const pagesOf = (d: Draft) => `${d.pages.length === 1 ? 'page' : 'pages'} ${runsOf(d.pages)}`
 
   async function save() {
     if (!file) return
@@ -551,6 +593,46 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
             </div>
           </div>
 
+          {repeats.length > 0 && (
+            <div className="manual-repeats">
+              <h3>{repeats.length === 1 ? 'A section number comes in more than once' : `${repeats.length} section numbers come in more than once`}</h3>
+              <p className="muted small">Keep one copy, combine them into one section, or renumber one in the list. The list below stays in the order of the PDF.</p>
+              {repeats.map((g) => (
+                <div key={g.number} className="manual-repeat">
+                  <div className="manual-repeat-head">
+                    <strong className="mono">{g.number}</strong>
+                    <span className="muted small">{g.copies.length} copies{known.has(g.number) ? ' · replaces the current section' : ''}</span>
+                    <button onClick={() => combine(g.number)} title="One section made of all their pages, in the order of the PDF">Combine them</button>
+                  </div>
+                  <div className="manual-repeat-copies">
+                    {g.copies.map(([d, i]) => {
+                      const first = firsts[`${d.pages[0]}`]
+                      return (
+                        <div key={i} className="manual-copy">
+                          {first
+                            ? <PageThumb bytes={first} label={`${g.number} at ${pagesOf(d)}`} onOpen={() => setPeek(i)} />
+                            : <span className="muted small">…</span>}
+                          <div className="manual-copy-text">
+                            <span className="small"><strong>{pagesOf(d)}</strong> <span className="muted">({d.pages.length} {d.pages.length === 1 ? 'page' : 'pages'}) · row {i + 1}</span></span>
+                            <span className="small">{d.title || <span className="muted">no title read</span>}</span>
+                            {d.trouble.map((t, k) => <span key={k} className="bad-text small">{troubleText(t)}</span>)}
+                            <span className="manual-copy-actions">
+                              <button className="primary" onClick={() => keepOnly(i, g.number)}>Keep this one</button>
+                              <button title="Go to this copy's number in the list below" onClick={() => {
+                                const el = document.getElementById(`manual-num-${i}`) as HTMLInputElement | null
+                                el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); el?.focus(); el?.select()
+                              }}>Renumber</button>
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <table>
             <thead><tr>
               <th>
@@ -573,7 +655,7 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                     </td>
                     <td className="small">
                       <span className="nowrap">
-                        {d.pages[0] + 1}–{d.pages[d.pages.length - 1] + 1}
+                        {runsOf(d.pages)}
                         <span className="muted"> ({d.pages.length})</span>
                         {d.guessed && <span className="unsure-note">check</span>}
                       </span>
@@ -586,12 +668,12 @@ function ManualUpload({ project, existing, onDone, onCancel }: {
                         ? <PageThumb bytes={first} label={n || `page ${d.pages[0] + 1}`} onOpen={() => setPeek(i)} />
                         : <span className="muted small">…</span>}
                     </td>
-                    <td><input className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
+                    <td><input id={`manual-num-${i}`} className={`cell mono ${d.include && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.number}
                       placeholder="09 91 00" onChange={(e) => edit(i, { number: e.target.value })} /></td>
                     <td><input className="cell" value={d.title} onChange={(e) => edit(i, { title: e.target.value })} /></td>
                     <td className="small">
                       {!d.include ? 'skip' : !n ? <span className="bad-text">needs a number</span>
-                        : duplicates.has(n) ? <span className="bad-text">twice in this upload</span>
+                        : duplicates.has(n) ? <span className="bad-text">more than once — see above</span>
                         : known.has(n) ? 'replaces current' : 'new section'}
                     </td>
                     <td className="right nowrap">

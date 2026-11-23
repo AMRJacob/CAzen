@@ -901,6 +901,17 @@ tr.skipped .page-thumb { opacity: 0.45; }
 /* Row actions sat flush against each other: "join upjoin downsplit". */
 td .link.small + .link.small { margin-left: 10px; }
 .manual-trouble { display: block; font-size: 11.5px; margin-top: 2px; }
+/* Copies of one section number, side by side, so the choice is made by looking at them. */
+.manual-repeats { border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: 8px; padding: 12px 14px; margin: 10px 0 14px; background: var(--danger-soft); }
+.manual-repeats h3 { margin: 0 0 2px; font-size: 14px; }
+.manual-repeats > p { margin: 0 0 8px; }
+.manual-repeat { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-top: 8px; }
+.manual-repeat-head { display: flex; align-items: baseline; gap: 10px; }
+.manual-repeat-head button { margin-left: auto; }
+.manual-repeat-copies { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.manual-copy { display: flex; gap: 10px; align-items: flex-start; flex: 1 1 280px; min-width: 0; }
+.manual-copy-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; align-items: flex-start; }
+.manual-copy-actions { display: flex; gap: 8px; margin-top: 4px; }
 
 /* Drawing a box on a page to say where something is printed. */
 .rp-read { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
