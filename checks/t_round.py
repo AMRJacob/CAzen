@@ -8,7 +8,12 @@ ex['pay_contracts']=lambda r: con if 'pgrst.object' in (r.headers.get('accept') 
 ex['pay_app_lines']=[{'pay_app_id':o.A1,'sov_line_id':o.L1,'this_period':200000,'stored':0},{'pay_app_id':o.A2,'sov_line_id':o.L1,'this_period':100000,'stored':0},{'pay_app_id':o.A2,'sov_line_id':o.L2,'this_period':150333.33,'stored':0}]
 def patch_con(r): row=json.loads(r.post_data); patches.append(row); con.update(row); return []
 ex['PATCH:pay_contracts']=patch_con
-def patch_app(r): app_patches.append(json.loads(r.post_data)); return []
+apps=[dict(a) for a in o.ex['pay_apps']]; ex['pay_apps']=lambda r: apps
+def patch_app(r):
+    row=json.loads(r.post_data); app_patches.append(row)
+    for a in apps:
+        if a['id'] in r.url: a.update(row)
+    return []
 ex['PATCH:pay_apps']=patch_app
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex); signed_in(ctx)
@@ -24,6 +29,11 @@ with sync_playwright() as p:
     print('retainage after:',ret().inner_text(),'| class:',ret().get_attribute('class'),'| hover:',ret().get_attribute('title'))
     print('total:',pg.locator('.pay-703-total td').nth(9).inner_text(),'| hover:',pg.locator('.pay-703-total td').nth(9).get_attribute('title'))
     print('heading:',pg.locator('.pay-703 thead tr').first.locator('th').nth(9).inner_text())
+    ret().click(button='right'); pg.wait_for_selector('.pay-line-menu'); print('cell menu:',pg.inner_text('.pay-line-menu').replace('\n',' | '))
+    pg.click('.pay-line-menu button:has-text("Round down")'); pg.wait_for_timeout(900)
+    print('cell saved:',app_patches[-1]); print('cell after:',ret().inner_text(),'| class:',ret().get_attribute('class'),'| hover:',(ret().get_attribute('title') or '').replace('\n',' / '))
+    pg.locator('.pay-703').screenshot(path='round_cell.png')
+    print('total now:',pg.locator('.pay-703-total td').nth(9).inner_text())
     pg.locator('.pay-703 tbody tr').nth(1).scroll_into_view_if_needed(); pg.screenshot(path='round.png')
     pg.locator('.tabs button').filter(has_text=re.compile('^1')).first.click(); pg.wait_for_timeout(600)
     pg.click('button:has-text("Uncertify")'); print('asks:',pg.inner_text('.pay-uncertify')[:260].replace('\n',' '))

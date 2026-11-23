@@ -3569,3 +3569,5 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .nb-check li.done .ag-obs { color: #9aa09a; text-decoration: line-through; }
 .ag-x { flex: none; width: 26px; height: 26px; padding: 0; border: none; background: none; color: #8a918b; font-size: 16px; line-height: 1; border-radius: 50%; }
 .ag-x:hover { background: #f1e3de; color: #a2452f; }
+/* A cell rounded its own way, not its column's: burnt orange, to tell it from the column's blue. */
+.pay-703 td.pay-round-own { color: #b5531c; background: rgba(204, 85, 0, 0.09); cursor: help; font-weight: 500; }

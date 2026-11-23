@@ -65,7 +65,7 @@ export default function Schedule() {
     if (!data || !data.applications.length) return out
     const last = data.applications[data.applications.length - 1]
     const earlier = data.applications.slice(0, -1)
-      .map((a) => ({ billed: data.billed.get(a.id) ?? new Map(), period_to: a.period_to }))
+      .map((a) => ({ billed: data.billed.get(a.id) ?? new Map(), period_to: a.period_to, rounding: a.rounding }))
     const f = figure(data.contract, data.lines, last, data.billed.get(last.id) ?? new Map(), earlier, data.steps)
     for (const line of f.lines) out.set(line.line.id, line.toDate)
     return out

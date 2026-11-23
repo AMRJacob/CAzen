@@ -8,7 +8,7 @@ import { PageTitle } from '../components/PageTitle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
 import { today, usDate } from '../lib/dates'
-import { figure, standings, type Billed, type Figures, type RetainageStep, type RoundColumn, type RoundWay, type SovLine } from '../lib/payapps'
+import { figure, standings, type Billed, type Figures, type RetainageStep, type CellWay, type RoundColumn, type RoundWay, type SovLine } from '../lib/payapps'
 import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { PdfPreview } from '../components/PdfPreview'
@@ -64,7 +64,7 @@ export default function PayApps() {
   /** Every application worked out, in order, so the summary and the tabs agree by construction. */
   const figured = useMemo(() => {
     if (!data) return []
-    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>() }))
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), rounding: a.rounding }))
     return data.applications.map((a, i) =>
       figure(data.contract, data.lines, a, history[i].billed, history.slice(0, i), data.steps))
   }, [data])
@@ -598,16 +598,22 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
+  const [cellMenu, setCellMenu] = useState<{ lineId: string; col: RoundColumn; x: number; y: number } | null>(null)
   const roundCell = (exact: number | undefined, pct = false, lineId: string | null = null, col?: PdfCol) => {
     const d = col ? diffAt(lineId, col) : undefined
+    const rc = col === 'G' || col === 'pct' || col === 'H' || col === 'I' ? col : null
+    const own = lineId && rc ? figures.lines.find((x) => x.line.id === lineId)?.own?.[rc] : undefined
     const say = (n: number) => (pct ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
     const notes = [
-      exact != null ? `Rounded. Exact: ${say(exact)}` : '',
+      own ? `${CELL_SAYS[own]} in this cell${rounding[rc!] ? ` (the column: ${ROUND_SAYS[rounding[rc!]!].toLowerCase()})` : ''}.` : '',
+      exact != null ? `${own ? '' : 'Rounded. '}Exact: ${say(exact)}` : '',
       d ? `The contractor’s PDF has ${say(d.pdf)}; CAzen works it out as ${say(d.app)}.` : '',
+      lineId && rc && editable ? 'Right-click to round this cell its own way.' : '',
     ].filter(Boolean)
     return {
-      className: `right mono${exact != null ? ' pay-rounded' : ''}${d ? ' pay-pdf-diff' : ''}`,
+      className: `right mono${own ? ' pay-round-own' : exact != null ? ' pay-rounded' : ''}${d ? ' pay-pdf-diff' : ''}`,
       ...(notes.length ? { title: notes.join('\n') } : {}),
+      ...(lineId && rc && editable ? { onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); setCellMenu({ lineId, col: rc, x: e.clientX, y: e.clientY }) } } : {}),
     }
   }
 
@@ -860,6 +866,30 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               }} />
           )
         })()}
+        {cellMenu && (() => {
+          const l = data.lines.find((x) => x.id === cellMenu.lineId)
+          const mine = app.rounding?.[cellMenu.lineId]?.[cellMenu.col]
+          const colWay = rounding[cellMenu.col]
+          const items: [CellWay | null, string][] = [
+            [null, `As the column — ${colWay ? ROUND_SAYS[colWay].toLowerCase() : 'exact'}`],
+            ['exact', cellMenu.col === 'pct' ? 'Exact, to two places' : 'Exact, to the cent'],
+            ['nearest', 'Round to the nearest whole'], ['up', 'Round up'], ['down', 'Round down'],
+          ]
+          return (
+            <LineMenu at={cellMenu} onClose={() => setCellMenu(null)}
+              title={`${[l?.item_no, l?.description].filter(Boolean).join(' ')} — ${cellMenu.col === 'pct' ? '%' : `column ${cellMenu.col}`}, this cell only`}
+              items={items.map(([w, label]) => ({ label: (mine ?? null) === w ? `✓ ${label}` : label }))}
+              onPick={async (i) => {
+                const w = items[i][0]
+                setCellMenu(null)
+                const next = JSON.parse(JSON.stringify(app.rounding ?? {})) as Record<string, Partial<Record<RoundColumn, CellWay>>>
+                const cell = { ...(next[cellMenu.lineId] ?? {}) }
+                if (w) cell[cellMenu.col] = w; else delete cell[cellMenu.col]
+                if (Object.keys(cell).length) next[cellMenu.lineId] = cell; else delete next[cellMenu.lineId]
+                try { await setApplication(app.id, { rounding: next } as never); onChanged() } catch (e) { onTrouble(message(e)) }
+              }} />
+          )
+        })()}
         {roundMenu && (
           <RoundMenu at={roundMenu} way={rounding[roundMenu.col]} onClose={() => setRoundMenu(null)}
             onPick={async (w) => {
@@ -951,6 +981,7 @@ const ROUND_SAYS: Record<RoundWay | 'exact', string> = {
   exact: 'Exact, to the cent', nearest: 'Rounded to the nearest whole dollar', up: 'Rounded up to a whole dollar', down: 'Rounded down to a whole dollar',
 }
 const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: '↓' }
+const CELL_SAYS: Record<CellWay, string> = { exact: 'Left exact', nearest: 'Rounded to the nearest whole', up: 'Rounded up', down: 'Rounded down' }
 
 /** Right-click on a line of the schedule of values. */
 function LineMenu({ at, title, items, onPick, onClose }: {

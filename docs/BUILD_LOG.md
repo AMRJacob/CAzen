@@ -11,6 +11,14 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 17:30 CST (rounding a single cell its own way)
+
+On a draft application, right-clicking a cell in G, %, H or I opens "this cell only": as the column,
+exact, nearest, up, down. A cell set apart from its column is burnt orange, with what it is set to,
+what the column does and the exact figure on hover. Kept per application and line (migration 0049,
+additive: `pay_apps.rounding jsonb`, applied to production); totals and the G702 follow, and a later
+application's line 7 reads the earlier one with its own cells. Tests in `checks/rounding.test.ts`;
+browser check `checks/t_round.py`.
 # Checkpoint — 2026-11-23, 16:25 CST (a change document as one PDF: cover, manual pages, drawings)
 
 **Uploading a change document sorts its pages** (Jacob, 16:11: ASIs, addenda and the like arrive

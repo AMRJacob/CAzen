@@ -57,10 +57,13 @@ export interface Contract {
 export type RoundWay = 'nearest' | 'up' | 'down'
 export type RoundColumn = 'G' | 'pct' | 'H' | 'I'
 export type Rounding = Partial<Record<RoundColumn, RoundWay>>
+/** One cell set apart from its column: rounded another way, or left exact (migration 0049). */
+export type CellWay = RoundWay | 'exact'
+export type CellRounding = Record<string, Partial<Record<RoundColumn, CellWay>>>
 
 /** A figure rounded to a whole unit the way the column says: nearest takes under .5 down and .5 or more up. */
-export function roundAs(n: number, way: RoundWay | undefined): number {
-  if (!way) return n
+export function roundAs(n: number, way: RoundWay | 'exact' | undefined): number {
+  if (!way || way === 'exact') return n
   // Only floating-point dust is cleared first (1.4999999999 is 1.5); a real 0.4995 stays under a half.
   const t = Math.round(n * 1e6) / 1e6
   const w = way === 'up' ? Math.ceil(t) : way === 'down' ? Math.floor(t) : Math.round(t)
@@ -82,6 +85,8 @@ export interface Application {
   retainage_stored: number | null
   status: string
   certified_sum: number | null
+  /** Cells of this application rounded differently from their column (migration 0049). */
+  rounding?: CellRounding | null
   /** What was read off the contractor's PDF, to set the arithmetic against (migration 0048). */
   pdf_read?: import('./payCompare').PdfRead | null
 }
@@ -108,6 +113,8 @@ export interface LineFigures {
   retainage: number
   /** The exact figures of columns that are rounded, where rounding changed them. */
   exact?: { toDate?: number; percent?: number; balance?: number; retainage?: number }
+  /** Cells on this line rounded their own way rather than their column's. */
+  own?: Partial<Record<RoundColumn, CellWay>>
   /** The rate column I was figured at, so a row can say why it holds what it holds. */
   rate: number
   /** Column F on the previous application: what was sitting in storage a month ago. */
@@ -195,7 +202,7 @@ export function figure(
   lines: SovLine[],
   application: Application,
   billed: Map<string, Billed>,
-  earlier: { billed: Map<string, Billed>; period_to?: string }[],
+  earlier: { billed: Map<string, Billed>; period_to?: string; rounding?: CellRounding | null }[],
   steps: RetainageStep[] = [],
 ): Figures {
   /**
@@ -208,8 +215,10 @@ export function figure(
     !l.change_order_id || !l.approved_on || l.approved_on <= application.period_to
   const real = lines.filter((l) => !l.is_heading && onThisApplication(l))
   const way = contract.rounding ?? {}
-  const asG = (n: number) => roundAs(n, way.G)
-  const asI = (n: number) => roundAs(n, way.I)
+  // A cell's own way, where one is set on the application, then its column's.
+  const wayAt = (cells: CellRounding | null | undefined, id: string, col: RoundColumn): CellWay | undefined => cells?.[id]?.[col] ?? way[col]
+  const here = application.rounding ?? null
+  const anyI = !!way.I || Object.values(here ?? {}).some((c) => c.I && c.I !== 'exact')
 
   const previousOf = (id: string) => sum(earlier.map((a) => a.billed.get(id)?.this_period ?? 0))
 
@@ -222,7 +231,7 @@ export function figure(
   // any line's retainage can be.
   const completedAndStored = sum(real.map((l) => {
     const b = billed.get(l.id)
-    return asG(previousOf(l.id) + (b?.this_period ?? 0) + (b?.stored ?? 0))
+    return roundAs(previousOf(l.id) + (b?.this_period ?? 0) + (b?.stored ?? 0), wayAt(here, l.id, 'G'))
   }))
   const percentComplete = scheduled > 0 ? (completedAndStored / scheduled) * 100 : 0
 
@@ -241,22 +250,24 @@ export function figure(
     const stored = round(b?.stored ?? 0)
     const storedBefore = round(last?.billed.get(l.id)?.stored ?? 0)
     const released = round(Math.max(0, storedBefore - stored))
+    const wG = wayAt(here, l.id, 'G'), wP = wayAt(here, l.id, 'pct'), wH = wayAt(here, l.id, 'H'), wI = wayAt(here, l.id, 'I')
+    const own = here?.[l.id] && Object.keys(here[l.id]).length ? here[l.id] : undefined
     const exactToDate = round(previous + thisPeriod + stored)
-    const toDate = asG(exactToDate)
+    const toDate = roundAs(exactToDate, wG)
     // A line held at its own rate ignores the step: that is what "variable rate" means.
     const rate = l.retainage_rate ?? workRate
     const exactPercent = l.scheduled_value > 0 ? (exactToDate / l.scheduled_value) * 100 : 0
     const exactBalance = round(l.scheduled_value - exactToDate)
     // Column I: the rate on work completed, and the stored rate on what is only stored.
     const exactRetainage = round(((previous + thisPeriod) * rate) / 100 + (stored * storedRate) / 100)
-    const pct = roundAs(l.scheduled_value > 0 ? (toDate / l.scheduled_value) * 100 : 0, way.pct)
-    const balance = roundAs(round(l.scheduled_value - toDate), way.H)
-    const retainage = asI(exactRetainage)
+    const pct = roundAs(l.scheduled_value > 0 ? (toDate / l.scheduled_value) * 100 : 0, wP)
+    const balance = roundAs(round(l.scheduled_value - toDate), wH)
+    const retainage = roundAs(exactRetainage, wI)
     const exact: NonNullable<LineFigures['exact']> = {}
-    if (way.G && toDate !== exactToDate) exact.toDate = exactToDate
-    if (way.pct && Math.abs(pct - exactPercent) > 1e-9) exact.percent = exactPercent
-    if ((way.H || way.G) && balance !== exactBalance) exact.balance = exactBalance
-    if (way.I && retainage !== exactRetainage) exact.retainage = exactRetainage
+    if (toDate !== exactToDate) exact.toDate = exactToDate
+    if (Math.abs(pct - exactPercent) > 1e-9) exact.percent = exactPercent
+    if (balance !== exactBalance) exact.balance = exactBalance
+    if (retainage !== exactRetainage) exact.retainage = exactRetainage
     return {
       line: l,
       previous, thisPeriod, stored, toDate,
@@ -267,6 +278,7 @@ export function figure(
       retainage,
       rate,
       ...(Object.keys(exact).length ? { exact } : {}),
+      ...(own ? { own } : {}),
     }
   })
 
@@ -305,7 +317,7 @@ export function figure(
     const earned = sum(real.map((l) => {
       const b = a.billed.get(l.id)
       const prior = sum(before.map((x) => x.billed.get(l.id)?.this_period ?? 0))
-      return asG(prior + (b?.this_period ?? 0) + (b?.stored ?? 0))
+      return roundAs(prior + (b?.this_period ?? 0) + (b?.stored ?? 0), wayAt(a.rounding, l.id, 'G'))
     }))
     const pct = scheduled > 0 ? (earned / scheduled) * 100 : 0
     const { rate } = rateAt(pct, baseWork, steps)
@@ -313,7 +325,8 @@ export function figure(
       const b = a.billed.get(l.id)
       const prior = sum(before.map((x) => x.billed.get(l.id)?.this_period ?? 0))
       const r = l.retainage_rate ?? rate
-      if (way.I) return asI((prior + (b?.this_period ?? 0)) * r / 100 + (b?.stored ?? 0) * storedRate / 100)
+      const wI = wayAt(a.rounding, l.id, 'I')
+      if (wI) return roundAs(round((prior + (b?.this_period ?? 0)) * r / 100 + (b?.stored ?? 0) * storedRate / 100), wI)
       return round((prior + (b?.this_period ?? 0)) * r / 100) + round((b?.stored ?? 0) * storedRate / 100)
     }))
     return round(earned - held)
@@ -322,8 +335,8 @@ export function figure(
 
   // A rounded column I is rounded line by line, as the sheet does; the stored part is rounded on
   // its own and the work part is whatever the rounded line leaves.
-  const retainageStored = sum(figured.map((f) => (way.I ? asI : round)((f.stored * storedRate) / 100)))
-  const retainageWork = way.I
+  const retainageStored = sum(figured.map((f) => roundAs(round((f.stored * storedRate) / 100), wayAt(here, f.line.id, 'I'))))
+  const retainageWork = anyI
     ? round(totals.retainage - retainageStored)
     : sum(figured.map((f) => round(((f.previous + f.thisPeriod) * f.rate) / 100)))
   const retainageTotal = round(retainageWork + retainageStored)

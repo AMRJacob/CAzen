@@ -22,6 +22,14 @@ eq(figure({ ...base, rounding: { I: 'up' } }, lines, app, billed, []).g702.retai
 eq(r.lines[4].exact?.percent, undefined, 'no % rounding unless asked')
 const p = figure({ ...base, rounding: { pct: 'nearest' } }, lines, app, billed, [])
 eq([p.lines[4].percent, Math.round(p.lines[4].exact!.percent! * 100) / 100], [35, 35.01], '% to a whole percent')
+{ // Single cells set apart from their column.
+  const o = figure({ ...base, rounding: { I: 'nearest' } }, lines, { ...app, rounding: { l1: { I: 'down' }, l4: { I: 'exact' } } }, billed, [])
+  eq(o.lines.filter((f) => f.retainage).map((f) => f.retainage), [1488, 94.7, 9021, 225, 379], 'a cell rounded down and a cell left exact, in a column rounded to nearest')
+  eq([o.lines[1].own, o.lines[4].own, o.lines[7].own], [{ I: 'down' }, { I: 'exact' }, undefined], 'which cells have their own way')
+  eq(o.g702.retainageTotal, 11207.7, 'the total follows the cells')
+  const later = figure({ ...base, rounding: { I: 'nearest' } }, lines, { ...app, id: 'b', number: 2 }, new Map(), [{ billed, rounding: { l1: { I: 'down' }, l4: { I: 'exact' } } }])
+  eq(later.g702.previousCertificates, 224149 - 11207.7, 'a later application reads the earlier one with its own cells')
+}
 eq([roundAs(2.5, 'nearest'), roundAs(2.0000001, 'up'), roundAs(-1.5, 'down')], [3, 2, -2], 'roundAs edges')
 eq([roundAs(1488.49, 'nearest'), roundAs(1488.4995, 'nearest'), roundAs(1488.5, 'nearest'), roundAs(0.4995, 'nearest'), roundAs(0.1 + 0.2 + 1.2, 'nearest')], [1488, 1488, 1489, 0, 2], 'nearest: under .5 down, .5 and over up')
 console.log(bad ? `rounding: ${bad} of ${n} failed` : `rounding: ${n} checks pass`)
