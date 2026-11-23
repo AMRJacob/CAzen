@@ -70,7 +70,7 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Several drawing tags per observation, on one sheet or several; tag type chosen on the drawing | Live (2026-11-20); checked in a test browser only |
 | Outlined schedules read from a scan (levels, summary rows, contractor IDs), with handwriting and coloured ink filtered out; levels fold on the Gantt | Live (2026-11-23); checked in a test browser with a Kinco scan |
 | Schedule benchmarks (punch list, completion, dry-in, inspections, milestones) on the project Overview | Live (2026-11-23); checked in a test browser only |
-| Pay applications: New application from a dropped PDF; schedule of values set up from the PDF when there is none; columns rounded as the contractor rounds them (blue, exact on hover); uncertify to correct; dollar boxes typed as $1,234.56 everywhere | Live (2026-11-23); checked in a test browser |
+| Pay applications: New application from a dropped PDF; schedule of values set up from the PDF when there is none; columns rounded as the contractor rounds them (blue, exact on hover); every figure on the contractor's PDF (lines, totals, G702) set against CAzen's own arithmetic, differences listed and marked red; uncertify to correct; dollar boxes typed as $1,234.56 everywhere | Live (2026-11-23); checked in a test browser |
 | AI access to project content | Planned |
 
 ## Decisions made
