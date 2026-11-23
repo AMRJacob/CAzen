@@ -1,4 +1,4 @@
-import { readSchedule, datesIn, mendDates, suggestLines } from '../src/lib/scheduleRead.ts'
+import { readSchedule, datesIn, mendDates, suggestLines, outline } from '../src/lib/scheduleRead.ts'
 const eq=(a:unknown,b:unknown,n:string)=>{const ok=JSON.stringify(a)===JSON.stringify(b);console.log(ok?'ok  ':'FAIL',n,ok?'':JSON.stringify(a)+' != '+JSON.stringify(b))}
 eq(datesIn('x 01/15/26 y 2/3/2026').map(d=>d.day),['2026-01-15','2026-02-03'],'numeric dates')
 eq(datesIn('15-Jan-26 03FEB26 A').map(d=>d.day),['2026-01-15','2026-02-03'],'P6 dates')
@@ -59,4 +59,9 @@ import { diffSchedule, afterIssue, summary, finishSlip } from '../src/lib/schedu
   const r=readSchedule([{no:'3',text:'Mobilization 12days ~~ Mon2/16/26 Fri2/27/26',label:'Mobilization pss'},{no:'6',text:'Site Demo, Clearing, Prep BN 33 days Mon 2/16/26 Fri 3/20/26',label:'Site Demo, Clearing, Prep puss'},{no:'20',text:'Gabion Baskets/Masonry Walls C32 days Mon 1/18/27 Thu 2/18/27',label:'Gabion Baskets/Mos'},{no:'9',text:'Footings 10 days Mon 3/17/26 Fri 3/27/26'},{no:'11',text:'Office Section I'},{no:'12',text:'Steel 5 days Mon 6/15/26 Fri 6/19/26'}],{scanned:true})
   eq(r.map(a=>[a.no??'',a.name,a.starts_on,a.ends_on]),[['3','Mobilization','2026-02-16','2026-02-27'],['6','Site Demo, Clearing, Prep','2026-02-16','2026-03-20'],['20','Gabion Baskets/Masonry Walls','2027-01-18','2027-02-18'],['9','Footings','2026-03-17','2026-03-27'],['','Office Section',null,null],['12','Steel','2026-06-15','2026-06-19']],'a real scan\'s rows: glued weekdays, stray letters, a cut-off chart label')
   eq(r.map(a=>Object.keys(a.unsure??{}).join('+')),['','','','starts','',''],'only the date whose printed weekday it is not is doubted')
+}
+{ // Indented outline: levels from indents in text heights, with one stray deeper indent clamped.
+  const rows=['Job','Design','Drawings','Permit','Build','Footings','Framing','Closeout'].map(name=>({name,is_heading:false,starts_on:null,ends_on:null,percent:0} as any))
+  outline(rows,[0.3,1.5,2.7,2.7,1.5,5.1,2.7,1.5])
+  eq(rows.map(r=>[r.level,r.is_heading]),[[0,true],[1,true],[2,false],[2,false],[1,false],[1,true],[2,false],[1,false]],'outline levels; a row two levels deeper is kept a sibling')
 }

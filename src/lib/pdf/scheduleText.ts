@@ -1,6 +1,7 @@
 import { getDocument } from './pdfjs'
 import { pageBody, readPageText } from './pageText'
 import { linesByNumber, type PlacedWord } from '../scheduleRows'
+import { dropColour, removeRules } from './payText'
 import type { ScheduleLine } from '../scheduleRead'
 
 /**
@@ -87,6 +88,12 @@ export async function scheduleText(
       ctx.fillStyle = '#fff'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       await page.render({ canvas, canvasContext: ctx, viewport }).promise
+      // The table's ruled lines out of the picture first: a rule touching a word or a digit is
+      // what makes the reader lose it (as on the pay applications, payText.ts).
+      // Notes in coloured pen or highlighter, and the chart's coloured bars, out too. Notes in
+      // black pen are left for the rows to recognise by their size (`written` in scheduleRows).
+      dropColour(ctx, canvas.width, canvas.height)
+      removeRules(ctx, canvas.width, canvas.height, scale * 72)
       ocr ??= await reader()
       const { data } = await ocr.recognize(canvas, {}, { text: true, blocks: true })
       const placed: PlacedWord[] = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)))
@@ -94,7 +101,8 @@ export async function scheduleText(
         .map((w) => ({ text: w.text.trim(), x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0, conf: w.confidence }))
       const rows = placed.length ? linesByNumber(placed, canvas.width) : null
       // Left where a check can read it: what the reader saw, and the rows made of it.
-      ;(globalThis as { __schedule?: unknown }).__schedule = { width: canvas.width, height: canvas.height, placed, rows, text: data.text }
+      const seen = ((globalThis as { __schedule?: { pages?: unknown[] } }).__schedule?.pages ?? []).slice(0, n - 1)
+      ;(globalThis as { __schedule?: unknown }).__schedule = { width: canvas.width, height: canvas.height, placed, rows, text: data.text, pages: [...seen, { width: canvas.width, placed }] }
       if (rows) {
         numbered++
         lines.push(...rows)

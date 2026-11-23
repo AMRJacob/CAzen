@@ -20,7 +20,9 @@ export interface ImportResult {
   /** Everything read and kept this time, for the record of what this issue changed. */
   issue: { label: string | null; issued_on: string; rows: ReadActivity[] }
   add: (ReadActivity & { lines: string[] })[]
-  update: { id: string; patch: Pick<Activity, 'starts_on' | 'ends_on' | 'percent'> }[]
+  update: { id: string; patch: Pick<Activity, 'starts_on' | 'ends_on' | 'percent'> & Partial<Pick<Activity, 'is_heading' | 'level' | 'ref'>> }[]
+  /** Every kept row in the order the schedule prints it: what is already there by its id, what is new by its place among `add`. */
+  order: ({ id: string } | { add: number })[]
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase().replace(/\s+/g, ' ') === b.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -80,9 +82,21 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
 
   const doubts = (rows ?? []).filter((r) => r.keep).reduce((n, r) => n + (r.unsure?.starts ? 1 : 0) + (r.unsure?.ends ? 1 : 0) + (r.unsure?.name ? 1 : 0), 0)
   const kept = (rows ?? []).filter((r) => r.keep && r.name.trim())
-  const updating = (r: Row): Activity | undefined =>
-    r.is_heading ? undefined : existing.find((e) => !e.is_heading && same(e.name, r.name))
-  const news = kept.filter((r) => !updating(r) && !(r.is_heading && existing.some((e) => e.is_heading && same(e.name, r.name))))
+  // A row is the same activity as one already there by the ID the schedule prints for it, where
+  // both have one; otherwise by its name — the first not already claimed, since a schedule can
+  // say "Install New Equipment" under two plants.
+  const matched = useMemo(() => {
+    const claimed = new Set<string>()
+    const out = new Map<Row, Activity>()
+    for (const r of kept) {
+      const byRef = r.no ? existing.find((e) => e.ref && e.ref === r.no && !claimed.has(e.id)) : undefined
+      const byName = byRef ?? existing.find((e) => !claimed.has(e.id) && !(e.ref && r.no) && same(e.name, r.name) && (!e.is_heading || !!r.is_heading))
+      if (byName) { claimed.add(byName.id); out.set(r, byName) }
+    }
+    return out
+  }, [kept, existing])
+  const updating = (r: Row): Activity | undefined => matched.get(r)
+  const news = kept.filter((r) => !updating(r))
   const updates = kept.filter((r) => updating(r))
 
   async function keep() {
@@ -91,7 +105,11 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
       await onKeep({
         issue: { label: issueName.trim() || null, issued_on: issuedOn, rows: kept.map(({ keep: _k, lines: _l, ...r }) => ({ ...r, name: r.name.trim() })) },
         add: news.map(({ keep: _k, ...r }) => ({ ...r, name: r.name.trim() })),
-        update: updates.map((r) => ({ id: updating(r)!.id, patch: { starts_on: r.starts_on, ends_on: r.ends_on, percent: r.percent } })),
+        update: updates.map((r) => ({ id: updating(r)!.id, patch: {
+          starts_on: r.starts_on, ends_on: r.ends_on, percent: r.percent,
+          ...(r.level != null ? { level: r.level, is_heading: r.is_heading } : {}), ...(r.no ? { ref: r.no } : {}),
+        } })),
+        order: kept.map((r) => { const u = updating(r); return u ? { id: u.id } : { add: news.indexOf(r) } }),
       })
       onDone()
     } catch (e) { setError(message(e)) } finally { setBusy(false) }
@@ -141,7 +159,8 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
         <>
           <p className="small">
             Read {rows.filter((r) => !r.is_heading).length} activities
-            {rows.some((r) => r.is_heading) ? ` and ${rows.filter((r) => r.is_heading).length} headings` : ''}.
+            {rows.some((r) => r.is_heading) ? ` and ${rows.filter((r) => r.is_heading).length} ${rows.some((r) => r.is_heading && r.starts_on) ? 'summary rows' : 'headings'}` : ''}
+            {rows.some((r) => (r.level ?? 0) > 0) ? `, in ${Math.max(...rows.map((r) => r.level ?? 0)) + 1} levels` : ''}.
             {scanned > 0 && (
               <strong> {scanned === 1 ? 'A page was' : `${scanned} pages were`} read from a scan.</strong>
             )}
@@ -154,11 +173,12 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
               <thead><tr><th /><th className="right" title="The line number printed on the schedule">Line</th><th>Activity</th><th>Starts</th><th>Ends</th><th>Covers</th><th /></tr></thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} className={`${r.is_heading ? 'sov-heading' : ''}${r.keep ? '' : ' sched-left-out'}`}>
+                  <tr key={i} className={`${r.is_heading ? (r.starts_on ? 'sched-summary' : 'sov-heading') : ''}${r.keep ? '' : ' sched-left-out'}`}>
                     <td><input type="checkbox" checked={r.keep} aria-label={`Keep ${r.name}`} onChange={(e) => change(i, { keep: e.target.checked })} /></td>
-                    <td className={`right sched-no${r.unsure?.name ? ' doubt' : ''}`} title={r.unsure?.name}>{r.is_heading ? '' : r.no ?? ''}</td>
-                    <td><input className="cell" value={r.name} aria-label="Activity name" onChange={(e) => change(i, { name: e.target.value })} /></td>
-                    {r.is_heading ? <td colSpan={3} /> : (
+                    <td className={`right sched-no${r.unsure?.name ? ' doubt' : ''}`} title={r.unsure?.name}>{r.is_heading && !r.starts_on ? '' : r.no ?? ''}</td>
+                    {/* Indented as the schedule indents it; a summary row carries its own dates. */}
+                    <td style={r.level ? { paddingLeft: `${r.level * 14}px` } : undefined}><input className="cell" value={r.name} aria-label="Activity name" onChange={(e) => change(i, { name: e.target.value })} /></td>
+                    {r.is_heading && !r.starts_on ? <td colSpan={3} /> : (
                       <>
                         {/* Red until it has been looked at: changing the cell, or clicking it and leaving it, clears it. */}
                         <td className={r.unsure?.starts ? 'doubt' : undefined} title={r.unsure?.starts}><input className="cell" type="date" value={r.starts_on ?? ''} aria-label="Starts"
@@ -168,7 +188,7 @@ export function ScheduleImport({ existing, lines, onKeep, onDone }: {
                           onChange={(e) => change(i, { ends_on: e.target.value || null, unsure: { ...r.unsure, ends: undefined } })}
                           onBlur={() => { if (r.unsure?.ends) change(i, { unsure: { ...r.unsure, ends: undefined } }) }} /></td>
                         <td className="small">
-                          {r.lines.map((id) => (
+                          {!r.is_heading && r.lines.map((id) => (
                             <span key={id} className="tag sched-tie">{label(id)}
                               <button className="link" aria-label={`Don’t tie to ${label(id)}`} onClick={() => change(i, { lines: r.lines.filter((x) => x !== id) })}>×</button>
                             </span>

@@ -3473,3 +3473,18 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
   display: flex; flex-direction: column; min-width: 200px; padding: 6px; background: var(--panel); border: 1.5px solid #2b2d2c; border-radius: 14px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16); }
 .nb-arr-show button { text-align: left; border: none; background: none; padding: 10px 12px; border-radius: 9px; font-size: 14.5px; }
 .nb-arr-show button:hover { background: var(--moss-soft); }
+.sched-read tr.sched-summary input.cell { font-weight: 600; }
+
+/* ---------- Schedule outline: levels, folding ---------- */
+.gx-name { padding-left: calc(var(--lv, 0) * 14px) !important; }
+.gx-fold { border: none; background: none; padding: 0 4px 0 0; width: 18px; min-width: 0; font-size: 11px; line-height: 18px; color: var(--moss, #5c7a65); cursor: pointer; vertical-align: top; }
+.gx-fold:hover { color: #2b2d2c; background: none; }
+.gx-fold-gap { display: inline-block; width: 18px; }
+.gx-folded { font-weight: 400; }
+.gx-heading.gx-lv1 { background: #ebf0ea; }
+.gx-heading.gx-lv2 { background: #f1f4f0; font-weight: 600; }
+.gx-heading.gx-lv3 { background: #f6f8f5; font-weight: 600; box-shadow: inset 3px 0 0 #b9c7bc; }
+.gx-zoom .gx-levels { display: inline-flex; align-items: center; gap: 3px; margin-right: 14px; }
+.gx-zoom .gx-levels span { margin-right: 4px; }
+.gx-levels button { min-width: 30px; padding: 3px 8px; border-radius: 999px; }
+.gx-levels button.on { background: var(--moss, #5c7a65); color: #fff; border-color: var(--moss, #5c7a65); }

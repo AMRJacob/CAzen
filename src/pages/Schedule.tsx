@@ -106,15 +106,24 @@ export default function Schedule() {
     const before: Line[] = (activities ?? []).map((a) => ({ name: a.name, is_heading: a.is_heading, starts_on: a.starts_on, ends_on: a.ends_on, percent: a.percent }))
     const changes = diffSchedule(before, r.issue.rows)
     const snapshot = afterIssue(before, r.issue.rows)
-    const from = (activities ?? []).reduce((m, a) => Math.max(m, a.sort), 0)
+    // The schedule takes the order this issue prints its rows in — an outline means nothing out
+    // of order. Rows already there that this issue does not have keep their order, after it.
+    const at = new Map<string, number>(), addAt = new Map<number, number>()
+    r.order.forEach((o, i) => { if ('id' in o) at.set(o.id, (i + 1) * 10); else addAt.set(o.add, (i + 1) * 10) })
+    const after = (r.order.length + 1) * 10
+    const rest = (activities ?? []).filter((a) => !at.has(a.id)).sort((a, b) => a.sort - b.sort)
+    rest.forEach((a, k) => at.set(a.id, after + k * 10))
     const made = await addActivities(r.add.map((a, i) => ({
       project_id: projectId, contract_id: data?.contract.id ?? null,
       name: a.name, is_heading: a.is_heading, starts_on: a.starts_on, ends_on: a.ends_on,
-      percent: a.percent, sort: from + i + 1, lines: a.lines,
+      percent: a.percent, sort: addAt.get(i) ?? after + rest.length * 10 + i, lines: a.lines,
+      level: a.level ?? 0, ref: a.no ?? null,
     })))
-    for (const u of r.update) await setActivity(u.id, u.patch)
-    const patched = new Map(r.update.map((u) => [u.id, u.patch]))
-    setActivities((all) => [...(all ?? []).map((a) => ({ ...a, ...(patched.get(a.id) ?? {}) })), ...made])
+    const patched = new Map(r.update.map((u) => [u.id, { ...u.patch, sort: at.get(u.id)! }]))
+    for (const [id, patch] of patched) await setActivity(id, patch)
+    // Only rows whose place moved are touched.
+    for (const a of rest) if (a.sort !== at.get(a.id)) await setActivity(a.id, { sort: at.get(a.id)! })
+    setActivities((all) => [...(all ?? []).map((a) => ({ ...a, ...(patched.get(a.id) ?? {}), sort: at.get(a.id) ?? a.sort })), ...made].sort((a, b) => a.sort - b.sort))
     const tied = made.filter((a) => a.lines.length).length
     let recorded = ''
     try {
@@ -208,7 +217,7 @@ export default function Schedule() {
                     <> {untied} {untied === 1 ? 'activity is' : 'activities are'} not yet tied to pay lines and so {untied === 1 ? 'is' : 'are'} not compared below. <button className="link" onClick={suggestTies}>Suggest ties from the names</button></>
                   )}
                 </p>
-                <Gantt activities={activities} today={today()}
+                <Gantt activities={activities} today={today()} foldKey={projectId ? `cazen.schedule.fold.${projectId}` : undefined}
                   linesOf={(a) => (a.lines.length ? `${lineName(a.lines[0])}${a.lines.length > 1 ? ` +${a.lines.length - 1}` : ''}` : 'none')}
                   onChange={change}
                   onCovers={(id) => setPicking(picking === id ? null : id)}

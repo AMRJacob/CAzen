@@ -9,7 +9,7 @@ def post_acts(req):
     made=[dict(r,id='a%07d-0000-4000-8000-000000000000'%(len(state['acts'])+i)) for i,r in enumerate(rows)]; state['acts']+=made; return made
 def post_links(req): state['links']+=json.loads(req.post_data); return []
 extra={'pay_contracts':lambda r: contract if 'pgrst.object' in (r.headers.get('accept') or '') else [contract],'sov_lines':sov,
- 'schedule_activities':lambda r: state['acts'],'POST:schedule_activities':post_acts,'POST:schedule_activity_lines':post_links,'schedule_activity_lines':lambda r: state['links']}
+ 'schedule_activities':lambda r: state['acts'],'POST:schedule_activities':post_acts,'POST:schedule_activity_lines':post_links,'schedule_activity_lines':lambda r: state['links'],'schedule_versions':[],'POST:schedule_versions':lambda r: (lambda row: dict(row[0] if isinstance(row,list) else row, id='v1', created_at='2026-11-23T00:00:00Z'))(json.loads(r.post_data))}
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':1000}); install(ctx,extra); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m: m.type=='error' and errs.append(m.text[:200]))

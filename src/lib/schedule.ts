@@ -25,11 +25,15 @@ export interface Activity {
   sort: number
   /** A colour for its bar — a contractor's coding by trade or crew. Null is the ordinary green. */
   color?: string | null
+  /** Its place in the schedule's outline, 0 at the top (migration 0046). */
+  level?: number
+  /** Its ID as printed on the contractor's schedule. */
+  ref?: string | null
   /** The schedule-of-values lines this activity covers. */
   lines: string[]
 }
 
-const COLUMNS = 'id, project_id, contract_id, name, is_heading, starts_on, ends_on, percent, sort'
+const COLUMNS = 'id, project_id, contract_id, name, is_heading, starts_on, ends_on, percent, sort, level, ref'
 
 /** Thrown when the schedule tables are not in the database yet. */
 export class ScheduleNotSetUp extends Error {
@@ -106,6 +110,8 @@ export async function addActivities(rows: {
   ends_on: string | null
   percent: number
   sort: number
+  level?: number
+  ref?: string | null
   lines: string[]
 }[]): Promise<Activity[]> {
   if (!rows.length) return []
@@ -128,7 +134,7 @@ export async function addActivities(rows: {
 
 export async function setActivity(
   id: string,
-  patch: Partial<Pick<Activity, 'name' | 'starts_on' | 'ends_on' | 'percent' | 'sort' | 'is_heading' | 'color'>>,
+  patch: Partial<Pick<Activity, 'name' | 'starts_on' | 'ends_on' | 'percent' | 'sort' | 'is_heading' | 'color' | 'level' | 'ref'>>,
 ): Promise<void> {
   const { error } = await db().from('schedule_activities').update(patch).eq('id', id)
   if (error) throw error

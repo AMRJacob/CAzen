@@ -12,8 +12,13 @@
  */
 
 export interface ReadActivity {
-  /** The line number printed on the schedule, for finding the row on the sheet. Not kept. */
+  /** The line number (ID) printed on the schedule — kept, so the row can be found on the sheet. */
   no?: string | null
+  /**
+   * Its place in the schedule's outline, 0 at the top. A row with rows one level deeper under it
+   * is a summary — `is_heading`, with the dates the schedule prints for it.
+   */
+  level?: number
   /** What the reader was not sure of, and why — shown in red in the preview until looked at. */
   unsure?: { starts?: string; ends?: string; name?: string }
   name: string
@@ -65,7 +70,7 @@ export function mendDates(line: string): string {
     t.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5').replace(/B/g, '8').replace(/Z/g, '2'))
 }
 
-const JUNK = /^(activity|task)?\s*(id|name|description|#|no\.?)\b|^(start|finish|duration|orig(inal)?|rem(aining)?|early|late|total float|predecessors?|successors?|resource names?|% ?complete|page \d|data date|run date|print(ed)?|layout|filter|©|legend|remaining work|critical|milestone|summary)\b/i
+const JUNK = /^(activity|task)?\s*(id|name|description|#|no\.?)\b|^page\b|^(start|finish|duration|orig(inal)?|rem(aining)?|early|late|total float|predecessors?|successors?|resource names?|% ?complete|page \d|data date|run date|print(ed)?|layout|filter|©|legend|remaining work|critical|milestone|summary)\b/i
 
 function nameFrom(before: string, after: string): string {
   let s = before
@@ -115,7 +120,7 @@ function flagStrays(list: ReadActivity[]): void {
 }
 
 /** A line as text alone, or with the line number it was found by (`scheduleRows`). */
-export type ScheduleLine = string | { no: string | null; text: string; label?: string; /** The reader's lowest confidence in this row's dates, 0–100. */ dateConf?: number; /** Whether the row's number was read or worked out from its place. */ guessedNo?: boolean }
+export type ScheduleLine = string | { no: string | null; text: string; label?: string; /** The reader's lowest confidence in this row's dates, 0–100. */ dateConf?: number; /** Whether the row's number was read or worked out from its place. */ guessedNo?: boolean; /** How far the name is indented, in text heights. */ indent?: number }
 
 const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
 
@@ -127,9 +132,25 @@ const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
  */
 export function tidyScanned(name: string, label: string | undefined, heading: boolean): string {
   let words = name.replace(/\s[-–]?\s?\S{0,3}\s?days?\b.*$/i, '').split(/\s+/).filter(Boolean)
+  // What a ruling, a bar's end or a pen mark leaves in front of a name: a lone letter or digit,
+  // a stray symbol, "2%". A name does not start with those.
+  while (words.length > 1 && /^([^A-Za-z0-9]+|[A-Za-z]|\d{1,3}%?|[^A-Za-z]*\d[^A-Za-z]*)$/.test(words[0]) && /^[A-Z(]/.test(words[1])) words.shift()
+  // The chart's copy of the name may have what the table's lost at its start ("& Pour Slab"
+  // beside "Form & Pour Slab"): then the chart's is the name.
+  if (label) {
+    const chart = label.replace(/^(\d{1,2}\/\d{1,2}\s*)?[^A-Za-z(]*/, '').trim()
+    const mine = squash(words.join(''))
+    const extra = chart.split(/\s+/)
+    const lost = extra.slice(0, Math.max(0, extra.length - words.length))
+    // Only real words count as lost ones: a bar's reading ("SE wasn") is not part of a name.
+    if (mine.length >= 4 && squash(chart).endsWith(mine) && squash(chart).length > mine.length && squash(chart).length - mine.length <= 12
+      && lost.length && lost.every((w) => /^([A-Z][a-z]+|[A-Z]{2,}|&|-|and|of)$/.test(w))) words = extra
+  }
   if (label) {
     const against = squash(label)
     for (const skip of [0, 1]) {
+      // Reading past the first word is for a first word that is junk, not the start of the name.
+      if (skip && words[0] && /^[A-Z][a-z]{2,}|^[A-Z]{3,}$/.test(words[0])) continue
       const from = words.slice(skip), whole = squash(from.join(''))
       let same = 0
       while (same < whole.length && same < against.length && whole[same] === against[same]) same++
@@ -153,6 +174,8 @@ export function tidyScanned(name: string, label: string | undefined, heading: bo
 export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } = {}): ReadActivity[] {
   const out: ReadActivity[] = []
   let pendingHeading: string | null = null
+  let pendingAt: { no: string | null; indent?: number } = { no: null }
+  const indents: (number | undefined)[] = []
   for (const given of lines) {
     const raw = typeof given === 'string' ? given : given.text
     const line = (opts.scanned ? mendDates(raw) : raw).replace(/\u00a0/g, ' ').trim()
@@ -167,7 +190,10 @@ export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } 
       if (opts.scanned && typeof given !== 'string') clean = tidyScanned(clean, undefined, true)
       const letters = clean.replace(/[^A-Za-z]/g, '').length
       // A heading is mostly words. What a scan makes of a row of bars is mostly not.
-      if (letters >= 4 && letters / clean.replace(/\s/g, '').length >= 0.75 && clean.length <= 70 && !JUNK.test(clean)) pendingHeading = clean
+      if (letters >= 4 && letters / clean.replace(/\s/g, '').length >= 0.75 && clean.length <= 70 && !JUNK.test(clean)) {
+        pendingHeading = clean
+        pendingAt = typeof given === 'string' ? { no } : { no: given.no, indent: given.indent }
+      }
       continue
     }
     const tail = dates.length > 1 ? dates[1].end : dates[0].end
@@ -176,6 +202,7 @@ export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } 
     if (!name || JUNK.test(name)) continue
     if (pendingHeading) {
       out.push({ name: pendingHeading, is_heading: true, starts_on: null, ends_on: null, percent: 0 })
+      indents.push(pendingAt.indent)
       pendingHeading = null
     }
     let [a, b] = [dates[0].day, (dates[1] ?? dates[0]).day]
@@ -214,9 +241,45 @@ export function readSchedule(lines: ScheduleLine[], opts: { scanned?: boolean } 
       no, name, is_heading: false, starts_on: a, ends_on: b, ...(Object.keys(unsure).length ? { unsure } : {}),
       percent: pc ? Math.max(0, Math.min(100, Number(pc[1]))) : 0,
     })
+    indents.push(typeof given === 'string' ? undefined : given.indent)
   }
   flagStrays(out)
+  outline(out, indents)
   return out
+}
+
+/**
+ * The schedule's outline, from how far each name is indented. The indents are gathered into the
+ * few distances the program uses, one step apart; each row's level is how many steps in it is.
+ * A scheduling program never puts a row two levels below the one above it, so a row that reads
+ * that way has had the start of its name lost, and is taken as the row above's sibling. A row
+ * with a deeper row straight after it is a summary: a heading, keeping the dates printed for it.
+ * Where nothing is indented — a flat schedule — nothing changes.
+ */
+export function outline(rows: ReadActivity[], indents: (number | undefined)[]): void {
+  const known = indents.filter((x): x is number => x != null).sort((a, b) => a - b)
+  if (known.length < 4) return
+  // The step between levels: the widest step that every indent sits on (to within an eighth of
+  // a step, on average). Half the true step would fit too, so the widest that fits is taken.
+  const base = known[0]
+  if (known[known.length - 1] - base < 0.5) return
+  let step = 0
+  for (let s = 4; s >= 0.6; s -= 0.02) {
+    const err = known.reduce((t, x) => { const f = (x - base) / s; return t + Math.abs(f - Math.round(f)) }, 0) / known.length
+    if (err < 0.12) { step = s; break }
+  }
+  if (!step) return
+  let prev = -1
+  rows.forEach((r, i) => {
+    const x = indents[i]
+    let level = x == null ? Math.max(prev, 0) : Math.round((x - base) / step)
+    if (prev >= 0 && level > prev + 1) level = prev
+    r.level = Math.max(0, level)
+    prev = r.level
+  })
+  for (let i = 0; i < rows.length - 1; i++) {
+    if ((rows[i + 1].level ?? 0) > (rows[i].level ?? 0)) rows[i].is_heading = true
+  }
 }
 
 // ---------- Tying activities to the schedule of values ----------

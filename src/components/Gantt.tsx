@@ -14,8 +14,10 @@ import { usDate } from '../lib/dates'
  * right-clicking it (or pressing and holding, on a touch screen): it opens in place, and
  * closes on Enter, Escape or Done.
  */
-export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove }: {
+export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove, foldKey }: {
   activities: Activity[]
+  /** Where on this device which summary rows are folded is remembered — per project. */
+  foldKey?: string
   today: string
   /** What an activity's pay lines are called, for the row being edited. */
   linesOf: (a: Activity) => string
@@ -30,17 +32,55 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
   const months = range ? monthsIn(range.from, range.to) : []
   const now = range && today >= range.from && today <= range.to ? along(today, range.from, range.to) : null
 
-  // A heading stands for the activities under it, up to the next heading: its row carries the
-  // span of them, as a summary row does in a scheduling program.
-  const under = new Map<string, { from: string; to: string }>()
-  let head: string | null = null
-  for (const a of activities) {
-    if (a.is_heading) { head = a.id; continue }
-    const f = a.starts_on, t = a.ends_on ?? a.starts_on
-    if (!head || !f || !t) continue
-    const was = under.get(head)
-    under.set(head, was ? { from: f < was.from ? f : was.from, to: t > was.to ? t : was.to } : { from: f, to: t })
+  // A summary row stands for the rows under it: in an outline, every row deeper than it until one
+  // that is not; in a flat schedule, every activity up to the next heading. Its bar spans them, as
+  // a summary row does in a scheduling program, unless the schedule printed dates of its own.
+  const outlined = activities.some((a) => (a.level ?? 0) > 0)
+  const below = (i: number): number => {
+    const a = activities[i]
+    let j = i + 1
+    while (j < activities.length && (outlined ? (activities[j].level ?? 0) > (a.level ?? 0) : !activities[j].is_heading)) j++
+    return j
   }
+  const ends = new Map<string, number>()
+  const under = new Map<string, { from: string; to: string }>()
+  activities.forEach((a, i) => {
+    if (!a.is_heading) return
+    const j = below(i)
+    ends.set(a.id, j)
+    let from = a.starts_on, to = a.ends_on ?? a.starts_on
+    if (!from || !to) {
+      for (const b of activities.slice(i + 1, j)) {
+        if (b.is_heading) continue
+        const f = b.starts_on, t = b.ends_on ?? b.starts_on
+        if (!f || !t) continue
+        from = !from || f < from ? f : from
+        to = !to || t > to ? t : to
+      }
+    }
+    if (from && to) under.set(a.id, { from, to })
+  })
+
+  // Folded summary rows hide what is under them. Remembered on this device, per project.
+  const [fold, setFoldState] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse((foldKey && localStorage.getItem(foldKey)) || '[]') as string[]) } catch { return new Set() }
+  })
+  const setFold = (next: Set<string>) => {
+    setFoldState(next)
+    try { if (foldKey) localStorage.setItem(foldKey, JSON.stringify([...next])) } catch { /* private window: forgotten on reload */ }
+  }
+  const toggle = (id: string) => { const n = new Set(fold); if (n.has(id)) n.delete(id); else n.add(id); setFold(n) }
+  const shown: { a: Activity; i: number }[] = []
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i]
+    shown.push({ a, i })
+    if (a.is_heading && fold.has(a.id)) i = (ends.get(a.id) ?? i + 1) - 1
+  }
+  const deepest = outlined ? Math.max(...activities.map((a) => a.level ?? 0)) : 0
+  const headings = activities.filter((a) => a.is_heading)
+  /** Show the outline down to `n` levels: every summary at level n−1 or deeper is folded. */
+  const toLevel = (n: number) => setFold(new Set(headings.filter((h) => (h.level ?? 0) >= n - 1).map((h) => h.id)))
+  const atLevel = (n: number) => headings.length > 0 && headings.every((h) => fold.has(h.id) === ((h.level ?? 0) >= n - 1))
 
   // Time can be stretched and slid: the chart column of every row shares one zoom and one
   // offset, held as two CSS variables on the chart so that moving it re-lays nothing out.
@@ -85,6 +125,17 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
   return (
     <div className="gx-wrap">
       <div className="gx-zoom">
+        {headings.length > 0 && (
+          <span className="gx-levels" role="group" aria-label="Show levels">
+            <span className="muted small">{outlined ? 'Levels' : 'Headings'}</span>
+            {outlined
+              ? Array.from({ length: deepest + 1 }, (_, k) => k + 1).map((n) => (
+                <button key={n} className={atLevel(n) ? 'on' : ''} onClick={() => toLevel(n)} title={`Show ${n === 1 ? 'the top level only' : `the top ${n} levels`}`}>{n}</button>
+              ))
+              : <button className={headings.every((h) => fold.has(h.id)) ? 'on' : ''} onClick={() => toLevel(1)}>Fold all</button>}
+            <button className={fold.size === 0 ? 'on' : ''} onClick={() => setFold(new Set())}>All</button>
+          </span>
+        )}
         <span className="muted small">Drag the chart sideways to move through time; Ctrl + scroll, or a trackpad pinch, zooms.</span>
         <button aria-label="Zoom out" onClick={() => zoomAbout(0.5, 1 / 1.6)} disabled={zoomed <= 1}>−</button>
         <button aria-label="Zoom in" onClick={() => zoomAbout(0.5, 1.6)}>+</button>
@@ -121,7 +172,7 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
             </span>
           </span>
         </div>
-        {activities.map((a, i) => {
+        {shown.map(({ a, i }) => {
           const from = a.starts_on, to = a.ends_on ?? a.starts_on
           const edit = editing === a.id
           let bar = null
@@ -145,9 +196,10 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
             bar = <span className="gx-sum" style={{ left: `${left * 100}%`, width: `${Math.max(0.004, along(sum.to, range.from, range.to) - left) * 100}%` }} title={`${a.name}: ${usDate(sum.from)} to ${usDate(sum.to)}`} />
           }
           return (
-            <div key={a.id} role="row" className={`gx-row${a.is_heading ? ' gx-heading' : ''}${edit ? ' gx-editing' : ''}`}
+            <div key={a.id} role="row" className={`gx-row${a.is_heading ? ' gx-heading' : ''}${a.is_heading && outlined ? ` gx-lv${Math.min(a.level ?? 0, 3)}` : ''}${edit ? ' gx-editing' : ''}`}
+              style={{ ['--lv' as string]: a.level ?? 0 }}
               onContextMenu={(e) => { e.preventDefault(); if (!edit) open(a) }}>
-              <span className="gx-no">{i + 1}</span>
+              <span className="gx-no">{a.ref ?? i + 1}</span>
               {edit ? (
                 <>
                   <span><input autoFocus value={draft.name} aria-label="Activity name" onChange={(e) => setDraft({ ...draft, name: e.target.value })} onKeyDown={keys(a)} /></span>
@@ -174,7 +226,13 @@ export function Gantt({ activities, today, linesOf, onChange, onCovers, onRemove
                 </>
               ) : (
                 <>
-                  <span className="gx-name" title={a.name}>{a.name}</span>
+                  <span className="gx-name" title={a.name}>
+                    {a.is_heading && (ends.get(a.id) ?? i + 1) > i + 1
+                      ? <button className="gx-fold" aria-expanded={!fold.has(a.id)} aria-label={`${fold.has(a.id) ? 'Show' : 'Hide'} what is under ${a.name}`} onClick={() => toggle(a.id)}>{fold.has(a.id) ? '▸' : '▾'}</button>
+                      : outlined && <span className="gx-fold-gap" aria-hidden="true" />}
+                    {a.name}
+                    {a.is_heading && fold.has(a.id) && <span className="gx-folded muted small"> · {(ends.get(a.id) ?? i + 1) - i - 1}</span>}
+                  </span>
                   <span>{a.is_heading ? (sum ? usDate(sum.from) : '') : from ? usDate(from) : '—'}</span>
                   <span>{a.is_heading ? (sum ? usDate(sum.to) : '') : a.ends_on ? usDate(a.ends_on) : '—'}</span>
                   <span className="gx-pc">{a.is_heading ? '' : `${Math.round(a.percent)}%`}</span>

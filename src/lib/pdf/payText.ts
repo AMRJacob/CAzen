@@ -134,3 +134,18 @@ export function removeRules(ctx: CanvasRenderingContext2D, w: number, h: number,
   }
   ctx.putImageData(img, 0, 0)
 }
+
+/**
+ * Take colour out of a page's picture: what a schedule prints is black and grey, so a strongly
+ * coloured pixel is a pen or highlighter note made on the sheet, or a bar of the chart — neither
+ * of which is the table's text.
+ */
+export function dropColour(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const img = ctx.getImageData(0, 0, w, h)
+  const px = img.data
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i], g = px[i + 1], b = px[i + 2]
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 70) px[i] = px[i + 1] = px[i + 2] = 255
+  }
+  ctx.putImageData(img, 0, 0)
+}
