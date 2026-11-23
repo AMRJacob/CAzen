@@ -1,4 +1,5 @@
-"""New application: the contractor's PDF dropped on the panel opens the application and reads this period from it."""
+"""New application: the contractor's PDF dropped on the panel opens the application and reads this period from it.
+Then, on a contract with no schedule of values yet, the PDF's lines become the schedule of values."""
 from common import *
 import t_overview as o, json, re, base64
 apps=[a for a in o.ex['pay_apps'] if a['id']==o.A1]
@@ -26,3 +27,17 @@ with sync_playwright() as p:
     pg.click('.pay-read-card button:has-text("Cancel")'); pg.wait_for_timeout(300)
     pg.click('button:has-text("New application")'); pg.click('.pay-new button:has-text("without a PDF")'); pg.wait_for_timeout(900)
     print('blank start → apps:',len(apps),'| read dialog:',pg.locator('.pay-read-card').count(),'| errors:',errs); b.close()
+
+# No schedule of values on record: the lines come from the PDF.
+ex2=dict(ex); ex2['sov_lines']=[]; added=[]; billed=[]
+ex2['POST:sov_lines']=lambda r:(added.append(json.loads(r.post_data)) or {'id':'99999999-9999-4999-8999-9999999c%04d'%len(added)})
+ex2['POST:pay_app_lines']=lambda r:(billed.append(json.loads(r.post_data)) or [])
+del apps[1:]
+with sync_playwright() as p:
+    b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,ex2); signed_in(ctx)
+    pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_timeout(1200)
+    pg.click('button:has-text("New application")'); pg.set_input_files('.pay-new input[type=file]','g703.pdf'); pg.wait_for_selector('.pay-read-card',timeout=60000)
+    print('empty contract says:',pg.inner_text('.pay-read-card p')[:150]); print('button:',pg.inner_text('.pay-read-card button.primary'))
+    pg.click('.pay-read-card button.primary'); pg.wait_for_timeout(1200)
+    print('lines added:',[(l.get('item_no'),l['description'],l['scheduled_value']) for l in added]); print('billed:',[(x['this_period'],x['stored']) for x in billed],'| errors:',errs); b.close()

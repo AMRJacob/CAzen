@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { message } from '../lib/errors'
 import { money } from '../lib/money'
-import { matchTable, readPayLines, type Known, type MatchRead, type ReadRow } from '../lib/payRead'
+import { matchTable, readPayLines, type Extra, type Known, type MatchRead, type ReadRow } from '../lib/payRead'
 import type { Billed } from '../lib/payapps'
 
 /**
@@ -11,7 +11,9 @@ import type { Billed } from '../lib/payapps'
  * line of the schedule of values. What its arithmetic bears out is filled in plainly; what it
  * does not is filled in red with the reason, and nothing is kept until it has been looked over.
  */
-export function PayRead({ known, current, onKeep, number, start, onStarted }: {
+export function PayRead({ known, current, onKeep, onAddLines, number, start, onStarted }: {
+  /** Add lines the PDF has to the schedule of values; returns their ids, in the same order. */
+  onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number }[]) => Promise<string[]>
   known: (Known & { heading?: boolean })[]
   /** A PDF chosen while starting the application, to be read as soon as the application is open. */
   start?: File | null
@@ -30,6 +32,9 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
   const [edits, setEdits] = useState<Record<string, { e: string; f: string }>>({})
   const [seen, setSeen] = useState<Set<string>>(new Set())
   const [over, setOver] = useState(false)
+  /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
+  const [extra, setExtra] = useState<Extra[]>([])
+  const [adds, setAdds] = useState<Set<number>>(new Set())
 
   async function read(f: File | undefined | null) {
     if (!f) return
@@ -45,7 +50,7 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
       let out: { rows: ReadRow[]; found: number } | null = null
       if (t.table.pages) {
         const m = matchTable(t.table, sov)
-        if (m.found) { out = m; const { rows: _rows, ...rest } = m; void _rows; setChecks(rest) }
+        if (m.found || (onAddLines && m.extra.length)) { out = m; const { rows: _rows, ...rest } = m; void _rows; setChecks(rest) }
       }
       // A sheet whose columns could not be made out is read a line at a time, as before.
       if (!out) {
@@ -54,7 +59,11 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
         out = readPayLines(text.lines.map((l) => (typeof l === 'string' ? l : [l.no, l.text].filter(Boolean).join(' '))), sov)
         setChecks(null)
       }
-      if (!out.found) { setError('None of this PDF’s rows could be matched to the schedule of values. Is it this contract’s application?'); return }
+      const more = out && 'extra' in out ? (out as MatchRead).extra : []
+      if (!out.found && !(onAddLines && more.length)) { setError('None of this PDF’s rows could be matched to the schedule of values. Is it this contract’s application?'); return }
+      // A contract with no schedule of values yet takes the PDF's lines as its schedule of values.
+      setExtra(onAddLines ? more : [])
+      setAdds(new Set(sov.length ? [] : more.map((_, i) => i)))
       setRows(out.rows); setEdits({}); setSeen(new Set())
     } catch (e) { setError(message(e)) } finally { setBusy(null); if (file.current) file.current.value = '' }
   }
@@ -75,15 +84,25 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
   const unsure = rows?.filter(red).length ?? 0
   const lines = known.filter((k) => !k.heading)
 
+  const num = (t: string) => Number(t.replace(/[$,\s]/g, '')) || 0
+  const xval = (x: Extra, i: number) => edits[`x${i}`] ?? { e: x.this_period ? String(x.this_period) : '', f: x.stored ? String(x.stored) : '' }
+
   async function keep() {
     if (!rows) return
     setBusy('Keeping…')
     try {
-      await onKeep(rows.filter((r) => r.found).map((r) => {
-        const v = val(r)
-        return { id: r.id, value: { this_period: Number(v.e.replace(/[$,\s]/g, '')) || 0, stored: Number(v.f.replace(/[$,\s]/g, '')) || 0 } }
-      }))
-      setRows(null); setChecks(null)
+      const chosen = extra.map((x, i) => [x, i] as const).filter(([, i]) => adds.has(i))
+      const ids = chosen.length && onAddLines
+        ? await onAddLines(chosen.map(([x]) => ({ item_no: x.item, description: x.name, scheduled_value: x.scheduled })))
+        : []
+      await onKeep([
+        ...rows.filter((r) => r.found).map((r) => {
+          const v = val(r)
+          return { id: r.id, value: { this_period: num(v.e), stored: num(v.f) } }
+        }),
+        ...chosen.map(([x, i], k) => ({ id: ids[k], value: { this_period: num(xval(x, i).e), stored: num(xval(x, i).f) } })),
+      ])
+      setRows(null); setChecks(null); setExtra([])
     } catch (e) { setError(message(e)) } finally { setBusy(null) }
   }
 
@@ -105,16 +124,18 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
           <div className="take-card pay-read-card">
             <h3>Read from the PDF</h3>
             <p className="muted small">
-              {rows.filter((r) => r.found).length} of {lines.length} lines found.
+              {!lines.length
+                ? <>There is no schedule of values on record yet, so the PDF’s {extra.length} lines are set up as the schedule of values, with this period’s figures. Untick any that shouldn’t be.</>
+                : <>{rows.filter((r) => r.found).length} of {lines.length} lines found.</>}
               {unsure > 0
                 ? <> <strong className="pay-read-warn">{unsure} in red</strong> — the row’s own figures did not bear the reading out. Click into one to accept or correct it.</>
                 : ' Every row’s figures add up.'}
-              {' '}Lines the PDF does not have are left as they are.
+              {lines.length > 0 && ' Lines the PDF does not have are left as they are.'}
             </p>
-            {checks && <ReadChecks checks={checks} number={number} />}
+            {checks && <ReadChecks checks={checks} number={number} listed={extra.length > 0} />}
             <div className="pay-read-table">
               <table>
-                <thead><tr><th>Item</th><th>Description</th><th className="right">From previous</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
+                <thead><tr>{extra.length > 0 && <th title="Add to the schedule of values">Add</th>}<th>Item</th><th>Description</th><th className="right">From previous</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
                 <tbody>
                   {lines.map((k) => {
                     const r = byId.get(k.id)
@@ -122,7 +143,7 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
                       const c = current(k.id)
                       return (
                         <tr key={k.id} className="pay-read-missing">
-                          <td className="mono">{k.item_no ?? ''}</td><td>{k.description}<div className="muted small">not found on the PDF — left as it is</div></td>
+                          {extra.length > 0 && <td />}<td className="mono">{k.item_no ?? ''}</td><td>{k.description}<div className="muted small">not found on the PDF — left as it is</div></td>
                           <td className="right mono">{money(k.previous)}</td><td className="right mono">{money(c.this_period)}</td><td className="right mono">{money(c.stored)}</td>
                         </tr>
                       )
@@ -131,7 +152,7 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
                     const touch = () => setSeen((s) => new Set(s).add(r.id))
                     return (
                       <tr key={k.id} className={bad ? 'pay-read-unsure' : ''}>
-                        <td className="mono">{k.item_no ?? ''}</td>
+                        {extra.length > 0 && <td />}<td className="mono">{k.item_no ?? ''}</td>
                         <td>{k.description}{r.unsure && <div className={`small ${bad ? 'pay-read-warn' : 'muted'}`}>{r.unsure}</div>}{r.note && <div className="small muted">{r.note}</div>}{bad && r.from && <div className="muted small pay-read-from">PDF: {r.from}</div>}</td>
                         <td className="right mono">{money(k.previous)}</td>
                         <td className="right"><input className="cell mono right" inputMode="decimal" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
@@ -141,12 +162,31 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
                       </tr>
                     )
                   })}
+                  {extra.map((x, i) => {
+                    const v = xval(x, i), on = adds.has(i)
+                    return (
+                      <tr key={`x${i}`} className={`pay-read-new${on ? '' : ' off'}`}>
+                        <td><input type="checkbox" checked={on} aria-label={`Add ${x.name} to the schedule of values`}
+                          onChange={(e) => setAdds((a) => { const n = new Set(a); if (e.target.checked) n.add(i); else n.delete(i); return n })} /></td>
+                        <td className="mono">{x.item ?? ''}</td>
+                        <td>{x.name}
+                          <div className="small muted">{lines.length ? 'not in the schedule of values — ' : ''}scheduled {money(x.scheduled)}</div>
+                          {on && x.previous !== 0 && <div className="small pay-read-warn">“From previous” on the PDF is {money(x.previous)}; added here, the line starts with nothing billed before this application.</div>}
+                        </td>
+                        <td className="right mono">{money(x.previous)}</td>
+                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.e} disabled={!on} aria-label={`This period for ${x.name}`}
+                          onChange={(e) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, e: e.target.value } }))} /></td>
+                        <td className="right"><input className="cell mono right" inputMode="decimal" value={v.f} disabled={!on} aria-label={`Stored for ${x.name}`}
+                          onChange={(e) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, f: e.target.value } }))} /></td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
             <div className="actions">
-              <button className="primary" disabled={!!busy} onClick={() => void keep()}>{busy ?? 'Put these in the application'}</button>
-              <button className="link" onClick={() => { setRows(null); setChecks(null) }}>Cancel</button>
+              <button className="primary" disabled={!!busy} onClick={() => void keep()}>{busy ?? (adds.size ? `Add ${adds.size} ${adds.size === 1 ? 'line' : 'lines'} and put the figures in the application` : 'Put these in the application')}</button>
+              <button className="link" onClick={() => { setRows(null); setChecks(null); setExtra([]) }}>Cancel</button>
             </div>
           </div>
         </div>
@@ -156,7 +196,7 @@ export function PayRead({ known, current, onKeep, number, start, onStarted }: {
 }
 
 /** What the sheet's own checks said: the grand total, the run of line numbers, rows not on record. */
-function ReadChecks({ checks, number }: { checks: Omit<MatchRead, 'rows'>; number?: number }) {
+function ReadChecks({ checks, number, listed }: { checks: Omit<MatchRead, 'rows'>; number?: number; listed?: boolean }) {
   const agree = checks.totals.filter((t) => t.agree).length
   const items: { warn: boolean; text: string }[] = []
   if (checks.application && number != null && Number(checks.application) !== number)
@@ -168,7 +208,7 @@ function ReadChecks({ checks, number }: { checks: Omit<MatchRead, 'rows'>; numbe
   for (const n of checks.totalNotes) items.push({ warn: true, text: n })
   if (checks.missing.length)
     items.push({ warn: true, text: `${checks.missing.length === 1 ? 'Line' : 'Lines'} ${checks.missing.join(', ')} should be on the PDF, by the run of the line numbers, and ${checks.missing.length === 1 ? 'was' : 'were'} not read.` })
-  for (const x of checks.extra)
+  if (!listed) for (const x of checks.extra)
     items.push({ warn: true, text: `On the PDF and not in the schedule of values: ${[x.item, x.name].filter(Boolean).join(' ')} — scheduled ${money(x.scheduled)}${x.this_period ? `, ${money(x.this_period)} this period` : ''}${x.stored ? `, ${money(x.stored)} stored` : ''}.` })
   return (
     <ul className="pay-read-checks small">

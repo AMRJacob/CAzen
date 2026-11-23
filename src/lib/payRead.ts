@@ -131,7 +131,7 @@ export function readPayLines(lines: string[], known: Known[]): { rows: ReadRow[]
 // ── from a table read off the page ──────────────────────────────────────────────────────────────
 
 
-export interface Extra { item: string | null; name: string; scheduled: number; this_period: number; stored: number }
+export interface Extra { item: string | null; name: string; scheduled: number; previous: number; this_period: number; stored: number }
 export interface MatchRead {
   rows: ReadRow[]
   found: number
@@ -167,7 +167,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
       const m = new Map(names)
       for (const w of table.wraps) {
         const k = way === 'up' ? w.below : w.above
-        if (k == null || /copyright|aia document|contract documents/i.test(w.text)) continue
+        if (k == null || /copyright|aia document|contract documents/i.test(w.text) || /^([A-I]\s*){1,9}$/.test(w.text.trim())) continue
         const r = table.rows[k]
         if (r.kind !== 'line') continue
         m.set(r, way === 'up' ? `${w.text} ${m.get(r)}` : `${m.get(r)} ${w.text}`)
@@ -234,8 +234,9 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
   })
 
   const extra: Extra[] = lines
-    .filter((r) => !taken.has(r) && (r.value.C || r.value.D || r.value.E || r.value.F))
-    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, this_period: r.value.E, stored: r.value.F }))
+    // With nothing on record, every line is the schedule of values to be — a $0 line included.
+    .filter((r) => !taken.has(r) && (!known.length || r.value.C || r.value.D || r.value.E || r.value.F))
+    .map((r) => ({ item: r.item, name: names.get(r) ?? r.name, scheduled: r.value.C, previous: r.value.D, this_period: r.value.E, stored: r.value.F }))
 
   // A column total that disagrees with its lines, where one row accounts for the difference.
   const totalNotes: string[] = []

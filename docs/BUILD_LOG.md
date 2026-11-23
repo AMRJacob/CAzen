@@ -11,6 +11,24 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-23, 15:25 CST (a pay app read onto a contract with no schedule of values)
+
+Jacob's UCA CW Loop Application 1 (Kinco, scanned) "couldn't be read". The scan read fine — all 13
+lines, every column agreeing with the printed grand totals — but the UCA contract in the app had no
+schedule of values yet, so there was nothing to match the rows to and the reader gave up.
+
+Now lines on the PDF that are not on record are listed in the review window with an Add box. With
+no schedule of values at all, every line (a $0 line included) is ticked, and keeping adds them as
+the schedule of values (item, description, scheduled value) and puts this period's figures in.
+On a contract that has lines, the extras (a new change order line, say) are listed unticked. A line
+added with a "from previous" figure is flagged, since it starts with nothing billed before. A row
+of column letters (A B …) is no longer taken as part of the first line's name.
+`addSovLine` now returns the new line's id.
+
+Checked in a test browser with Jacob's PDF against an empty contract (13 lines added, $224,149
+this period across five lines, as printed) and with made-up data in `checks/t_paynew.py`. Nothing
+was written to production.
+
 # Checkpoint — 2026-11-23, 15:10 CST (New application starts from the contractor's PDF)
 
 "New application" now opens a panel with a drop zone, like the schedule reader's: drop the

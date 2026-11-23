@@ -641,6 +641,11 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             number={app.number}
             start={start}
             onStarted={onStarted}
+            onAddLines={async (lines) => {
+              const ids: string[] = []
+              for (const [k, l] of lines.entries()) ids.push(await addSovLine(data.contract.id, { ...l, sort: nextSort + k }))
+              return ids
+            }}
             onKeep={async (rows) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
               setEdits({}); onChanged()

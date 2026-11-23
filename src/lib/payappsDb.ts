@@ -109,9 +109,10 @@ export async function addSovLine(contractId: string, line: {
   approved_on?: string | null
   /** The register's change order this line is, when it was added from the register. */
   change_order_id?: string | null
-}): Promise<void> {
-  const { error } = await db().from('sov_lines').insert({ contract_id: contractId, ...line })
+}): Promise<string> {
+  const { data, error } = await db().from('sov_lines').insert({ contract_id: contractId, ...line }).select('id').single()
   if (error) throw error
+  return (data as { id: string }).id
 }
 
 export async function removeSovLine(id: string): Promise<void> {
