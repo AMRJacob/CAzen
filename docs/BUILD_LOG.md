@@ -29,6 +29,15 @@ shorter screens, and the notes board ran out past the bottom of its block over w
 - `checks/t_noscroll.py` lists every element in the grid with a scroll bar: four before at each
   size, none after. `t_arrange.py` rerun clean.
 
+**Reaching blocks below the fold while arranging**, which taller pages now make common. By touch,
+the arrange overlay took every touch, so the page could not be scrolled down to a lower block. On
+a touch screen a block is now picked up by its name pill or its corner, and a swipe on the rest of
+it scrolls the page (`touch-action: pan-y` on coarse pointers). And a block dragged to within 56 px
+of the top or bottom of the page scrolls the page under it. `checks/t_arrange_reach.py`: held at
+the bottom edge the page scrolls about 450 px at desk and tablet size and the block lands lower
+down. **That check drives a mouse**: the swipe-to-scroll and the pill-only pickup by a real finger
+were not driven.
+
 # Checkpoint — 2026-11-23 (notebook pages arranged by their writer)
 
 **A notebook page's blocks can be moved, sized, hidden and added to** (Jacob, 12:02: let users

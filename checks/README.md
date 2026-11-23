@@ -12,6 +12,7 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_arrange.py       # arrange a notebook page: desk, tablet, phone; text boxes and checklists
     python3 t_arrange_premig.py  # the same before migration 0044: kept on the device, new blocks greyed
     python3 t_noscroll.py      # a full notebook page: nothing scrolls inside a block
+    python3 t_arrange_reach.py # arranging a page longer than the screen: edge scrolling, touch settings
     node --experimental-strip-types layout.test.ts     # the notebook page grid
     python3 t_frames.py 4      # dropped frames while zooming and panning a hatch-heavy sheet
     python3 t_markup.py        # Delete, undo, and the question on leaving markup

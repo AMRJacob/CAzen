@@ -3433,6 +3433,8 @@ a.trb-open:hover { box-shadow: 0 1px 1px rgba(40, 35, 25, 0.08), 0 10px 18px -8p
 .nb-arranging .nb-cell { z-index: 1; }
 .nb-arr { position: absolute; inset: 4px; z-index: 3; border: 1.5px dashed #9db3a3; border-radius: 10px; background: rgba(92, 122, 101, 0.07); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .nb-grid-phone .nb-arr { inset: 0 0 12px; cursor: default; touch-action: auto; }
+/* By touch the page scrolls from a block's body; the name pill and the corner are what pick it up. */
+@media (pointer: coarse) { .nb-arr { touch-action: pan-y; } .nb-arr-head, .nb-arr-size { touch-action: none; } }
 .nb-cell.lifted { z-index: 4; }
 .nb-cell.lifted .nb-arr { cursor: grabbing; border-style: solid; border-color: var(--moss); background: rgba(92, 122, 101, 0.16); box-shadow: 0 10px 28px rgba(43, 45, 44, 0.18); }
 .nb-arr-head { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 6px; padding: 4px 5px 4px 10px;

@@ -107,6 +107,9 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
 
   const grab = (e: React.PointerEvent, b: Block, how: 'move' | 'size') => {
     if (screen === 'phone' || e.button > 0) return
+    // By touch, a block is picked up by its name or its corner; a swipe anywhere else on it
+    // scrolls the page, so a block below the fold can still be reached.
+    if (e.pointerType === 'touch' && how === 'move' && !(e.target as HTMLElement).closest('.nb-arr-head')) return
     const cell = (e.currentTarget as HTMLElement).closest('.nb-cell') as HTMLElement | null
     if (!cell) return
     e.preventDefault(); e.stopPropagation()
@@ -115,9 +118,30 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
     drag.current = { id: b.id, how, x0: e.clientX, y0: e.clientY, cw: r.width / b.w, rh: r.height / b.h, from: b, start: latest.current, moved: false }
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
+  // Held near the top or bottom of the screen while dragging, the page scrolls under the block.
+  const edge = useRef<{ dir: number; raf: number } | null>(null)
+  const stopEdge = () => { if (edge.current) cancelAnimationFrame(edge.current.raf); edge.current = null }
+  useEffect(() => stopEdge, [])
   const follow = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d) return
+    const paper = grid.current?.parentElement
+    if (paper) {
+      const r = paper.getBoundingClientRect(), zone = 56
+      const dir = e.clientY > r.bottom - zone ? 1 : e.clientY < r.top + zone ? -1 : 0
+      if (!dir) stopEdge()
+      else if (!edge.current) {
+        const tick = () => {
+          if (!edge.current || !drag.current) return
+          const before = paper.scrollTop
+          paper.scrollTop += edge.current.dir * 12
+          // The block's start moves with the page, so it stays under the finger.
+          drag.current.y0 -= paper.scrollTop - before
+          edge.current.raf = requestAnimationFrame(tick)
+        }
+        edge.current = { dir, raf: requestAnimationFrame(tick) }
+      } else edge.current.dir = dir
+    }
     const dx = Math.round((e.clientX - d.x0) / d.cw), dy = Math.round((e.clientY - d.y0) / d.rh)
     const b = d.how === 'move' ? { ...d.from, x: d.from.x + dx, y: d.from.y + dy } : { ...d.from, w: d.from.w + dx, h: d.from.h + dy }
     const next = settle(d.start.map((x) => (x.id === d.id ? b : x)), cols, d.id, d.how === 'move' ? d.from : undefined)
@@ -127,6 +151,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
     onArrange(next, false)
   }
   const drop = () => {
+    stopEdge()
     const d = drag.current
     drag.current = null
     setLifted(null)

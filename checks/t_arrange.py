@@ -39,6 +39,7 @@ with sync_playwright() as p:
             pg.mouse.move(s['x']+s['width']/2, s['y']+s['height']/2); pg.mouse.down()
             pg.mouse.move(n['x']+n['width']/2, s['y']+s['height']/2, steps=12); pg.mouse.up(); pg.wait_for_timeout(200)
             after=boxes(pg); print('  sketch dragged onto notes →', after['sketch'][:2], 'notes now', after['notes'][:2], '| overlaps:', overlaps(after))
+            pg.locator('.nb-cell[data-block="photos"] .nb-arr-size').scroll_into_view_if_needed(); after=boxes(pg); print('  resize handle bottom vs screen:', round(pg.locator('.nb-cell[data-block="photos"] .nb-arr-size').bounding_box()['y']), pg.viewport_size['height'])
             h=pg.locator('.nb-cell[data-block="photos"] .nb-arr-size').bounding_box(); w0=after['photos'][2]
             pg.mouse.move(h['x']+10,h['y']+10); pg.mouse.down(); pg.mouse.move(h['x']-w0/2,h['y']+150,steps=10); pg.mouse.up(); pg.wait_for_timeout(200)
             after=boxes(pg); print('  photos resized', w0, '→', after['photos'][2:], '| overlaps:', overlaps(after))
