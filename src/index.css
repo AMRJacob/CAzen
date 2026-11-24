@@ -3523,6 +3523,12 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .pay-703 td.pay-pdf-diff { box-shadow: inset 0 -2px 0 #c0392b; background: rgba(192, 57, 43, 0.06); cursor: help; }
 .pay-703 td.pay-sv-here { color: #a0522d; font-weight: 600; }
 .pay-sv-diff { line-height: 1.1; }
+.pay-sv-move { font-size: .72rem; color: #1d4690; line-height: 1.2; white-space: nowrap; }
+.pay-sv-move button, .pay-move button { color: #888; padding: 0 0 0 .25rem; font-size: .72rem; }
+.pay-moves { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: .25rem 0 .5rem; }
+.pay-move { color: #1d4690; }
+.pay-moving { position: sticky; top: 0; z-index: 5; }
+.pay-moving ~ .pay-703-wrap tr, .pay-moving ~ * .pay-703 tbody tr { cursor: crosshair; }
 .pay-sv-diff button, .pay-sv-diff span { color: #c0392b; font-size: .72rem; padding: 0; }
 .pay-703 td.pay-pdf-diff.pay-rounded { background: rgba(47, 111, 176, 0.07); }
 .pay-against.has-diffs { border-color: rgba(192, 57, 43, 0.35); }

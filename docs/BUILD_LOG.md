@@ -3342,3 +3342,4 @@ pixel ratio; and frame timing under 6× CPU throttling.
 - A line that first appears on a later application is added at $0 with its value on that application.
 - A line CAzen has a value on that the PDF's lines don't include is flagged "not on PDF".
 - Change orders: line 2 is the total of the change order lines on that application; approval dates no longer decide anything. The summary's "this month" is the change from the previous application. The dates check is gone.
+- Money moved between lines (migration 0053, applied: `pay_apps.moves`): right-click a scheduled value that changed on this application → "Show the line it moved to…" (or "came from"), then click that line. Both cells carry a note ("→ line 78 $25,000 ✕"), and the application lists its moves above the sheet; ✕ undoes one. The amount is what's left unaccounted on the two lines. An explanation only — no figure is worked out from it — so it works on certified applications too.

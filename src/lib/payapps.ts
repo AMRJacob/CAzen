@@ -100,9 +100,14 @@ export interface Application {
   certified_sum: number | null
   /** Cells of this application rounded differently from their column (migration 0050). */
   rounding?: CellRounding | null
+  /** Money moved between lines on this application, as linked by whoever checked it (migration 0053). */
+  moves?: Move[] | null
   /** What was read off the contractor's PDF, to set the arithmetic against (migration 0048). */
   pdf_read?: import('./payCompare').PdfRead | null
 }
+
+/** Scheduled value moved from one line to another on an application: an explanation, not a figure. */
+export interface Move { from: string; to: string; amount: number }
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const sum = (ns: number[]) => round(ns.reduce((a, b) => a + b, 0))
