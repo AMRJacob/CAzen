@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 17:40 CST (notes spread over the screen; hidden blocks' room filled)
+
+Two asks: the notes block full screen with things placed anywhere and combined (16:2x), and
+filling the space a hidden block leaves (16:39). Test browser only.
+
+**The notes spread** (`src/components/NoteSpread.tsx`). A click on open space in the notes block,
+or *Spread out* in its heading, opens the notes over the whole screen, as the sketch opens the pad.
+Categories and loose notes can be dragged anywhere on a dotted plane that scrolls; − / + zoom
+(a phone starts at 75%); *Tidy up* puts everything back in columns. Combining: a note dropped on
+another loose note makes a new category of the two and asks for its name (`combine` in
+`src/lib/noteBoard.ts`); on a category it is filed; on a filed note it goes under it, as on the
+board; a category dropped on a category becomes a subcategory. A note dragged out of a category
+onto open space is loose again where it was dropped; a subcategory dragged out is a category.
+The outline is still what is kept and printed. Places are kept with the page in
+`site_visits.widgets.spread`, each thing named by its words (`spreadKeys`), so they survive
+renumbering; renaming carries the place over. By touch, a note or heading on the spread moves at
+once (open space scrolls). `checks/t_spread.py` (desk and phone), `checks/spread.test.ts`.
+
+**Hidden blocks' room filled.** On a page with its own block list, blocks widen into empty cells
+beside them, move up into empty rows, then lengthen into empty rows beneath (`fill` in
+`src/lib/pageLayout.ts`); e.g. Attendees hidden → the day block runs full width; Sketch hidden →
+Notes take its columns. `checks/fill.test.ts`.
+
+---
+
 # Checkpoint — 2026-11-24, 17:05 CST (pages start nearly blank; hide from a heading; Add from the corner)
 
 Two asks, 16:29 and 16:30. Test browser only.

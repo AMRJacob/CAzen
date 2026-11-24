@@ -125,6 +125,31 @@ export function settle(blocks: Block[], cols: number, moved?: string, vacated?: 
   return blocks.map((orig) => out.find((x) => x.id === orig.id)!)
 }
 
+/**
+ * Blocks grown into the room left by blocks that are not on this page (Jacob, 11/24: when one is
+ * hidden, shift things to fill the space). Each widens into empty cells beside it, then lengthens
+ * into empty rows beneath it as far as the arrangement goes. Nothing grows over anything.
+ */
+export function fill(blocks: Block[], cols: number): Block[] {
+  // Wider first, where each block is; then up into any rows left empty; then wider again and longer.
+  const widen = (list: Block[]) => {
+    const out = list.map((x) => ({ ...x }))
+    const free = (c: Block) => !out.some((o) => overlaps(c, o))
+    for (const blk of [...out].sort((a, c) => a.y - c.y || a.x - c.x)) {
+      while (blk.x + blk.w < cols && free({ ...blk, x: blk.x + blk.w, w: 1 })) blk.w++
+      while (blk.x > 0 && free({ ...blk, x: blk.x - 1, w: 1 })) { blk.x--; blk.w++ }
+    }
+    return out
+  }
+  const out = widen(settle(widen(blocks.map((x) => fit(x, cols))), cols))
+  const free = (c: Block) => !out.some((o) => overlaps(c, o))
+  const bottom = depth(out)
+  for (const blk of [...out].sort((a, c) => a.y - c.y || a.x - c.x)) {
+    while (blk.y + blk.h < bottom && free({ ...blk, y: blk.y + blk.h, h: 1 })) blk.h++
+  }
+  return out
+}
+
 /** How many rows the arrangement takes. */
 export const depth = (blocks: Block[]) => blocks.reduce((m, x) => Math.max(m, x.y + x.h), 0)
 

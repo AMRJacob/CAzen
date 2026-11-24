@@ -1,35 +1,53 @@
-"""Schedule changes in the cells: the change from the previous application, linking where it went by
-right-click then clicking the other line (or every line that went the other way), the summary line, undo."""
+"""The notes spread: open from open space on the board, move things anywhere, combine two loose notes, file one, take one out."""
 from common import *
-import t_overview as o, json, re, sys
-L3='99999999-9999-4999-8999-99999999b003'
-base=o.ex['sov_lines'](None) if callable(o.ex['sov_lines']) else o.ex['sov_lines']
-lines=[dict(l) for l in base]+[dict(base[1],id=L3,sort=3,code='3',item_no='3',description='Roofing',scheduled_value=0)]
-lines[0]['item_no']='1'; lines[1]['item_no']='2'
-sv={l['id']:float(l['scheduled_value']) for l in lines}
-apps=[dict(a) for a in o.ex['pay_apps']]
-apps[1]['pdf_read']={'file':'App 2.pdf','read_at':'2026-11-23T20:00:00Z','g702':{},'lines':{o.L1:{'C':sv[o.L1]-75000},o.L2:{'C':sv[o.L2]+50000},L3:{'C':25000}}}
-apps[1]['moves']=[]
-ex=dict(o.ex); ex['issued_form_links']=[]; ex['sov_lines']=lines; ex['pay_apps']=lambda r: apps; patched=[]
-def patch(r): row=json.loads(r.post_data); patched.append(row); apps[1].update(row); return []
-ex['PATCH:pay_apps']=patch
+import json, sys
+phone = len(sys.argv) > 1
+V={'id':'cccccccc-cccc-4ccc-8ccc-ccccccccc001','project_id':PROJ,'kind':'visit','visited_on':'2026-11-18','visited_at':'15:00:00','title':'Walk','weather':'x','names':None,
+   'notes':'1. Structure\n  a. anchor bolts\n2. Envelope\n3. Unsorted\n  a. sealant gap\n  b. drywall dent\n  c. paint touch-up','photos':[],'photo_labels':{},'pad_id':None,'issued_id':None,'location':None,'widgets':{},'created_at':'2026-11-18T15:00:00Z'}
+patches=[]
 with sync_playwright() as p:
-    b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1500,'height':950}); install(ctx,ex); signed_in(ctx)
+    b=p.chromium.launch(); ctx=b.new_context(**(PHONE if phone else {'viewport':{'width':1440,'height':900}}))
+    install(ctx,{'site_visits':lambda r:[V],'PATCH:site_visits':lambda r:(patches.append(json.loads(r.post_data)),[{}])[1],'note_pads':[],'pad_marks':[],'observations':[],'observation_types':[],'project_people':[],'notebook_layouts':lambda r:None}); signed_in(ctx)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_timeout(1500)
-    pg.locator('.tabs button').filter(has_text=re.compile('2')).first.click(); pg.wait_for_selector('.pay-703')
-    print('card gone:',pg.locator('.pay-changes').count()==0,'| summary:',pg.inner_text('.pay-sv-summary'))
-    cell=lambda name: pg.locator('.pay-703 tbody tr').filter(has_text=name).locator('td[data-label="Scheduled value"]')
-    print('cell 1:',cell('Sitework').inner_text().replace('\n',' | '))
-    cell('Sitework').click(button='right'); pg.wait_for_timeout(200); pg.locator('.pay-line-menu button').filter(has_text='Moved to').click(); pg.wait_for_timeout(200)
-    print('bar:',pg.inner_text('.pay-moving').replace('\n',' '),'| amount:',pg.input_value('.pay-moving-amount'))
-    if 'one' in sys.argv:
-        pg.keyboard.press('Control+A'); pg.keyboard.type('50000'); pg.locator('.pay-703 tbody tr').filter(has_text='Building').locator('td.pay-703-name').click()
-    else: pg.click('.pay-moving button:has-text("Every line")')
-    pg.wait_for_timeout(800)
-    print('saved:',[(m['to'][-4:],m['amount']) for m in patched[-1]['moves']])
-    print('cells:',[cell(n).inner_text().replace('\n',' | ')+' :: '+cell(n).get_attribute('class') for n in ('Sitework','Building','Roofing')])
-    print('summary:',pg.inner_text('.pay-sv-summary'))
-    pg.locator('.pay-703').screenshot(path='inline.png')
-    cell('Sitework').click(button='right'); pg.wait_for_timeout(200); pg.locator('.pay-line-menu button').filter(has_text='Undo').first.click(); pg.wait_for_timeout(600)
-    print('after undo:',[(m['to'][-4:],m['amount']) for m in patched[-1]['moves']],'| errors:',errs); b.close()
+    tap=lambda sel: (pg.tap if phone else pg.click)(sel)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); tap('td.p-name, .p-card'); pg.wait_for_timeout(500)
+    pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc li'); tap('.nb-toc li button'); pg.wait_for_timeout(700)
+    if phone: tap('.nb-tabs button:has-text("Notes")'); pg.wait_for_timeout(300)
+    # open space on the board
+    bb=pg.locator('.nbd-board').bounding_box(); last=pg.locator('.nbd-board > *').last.bounding_box()
+    (pg.touchscreen.tap if phone else pg.mouse.click)(bb['x']+bb['width']-8, last['y']+last['height']+4 if last['y']+last['height']+4 < bb['y']+bb['height'] else bb['y']+bb['height']-4)
+    pg.wait_for_timeout(500)
+    if not pg.locator('.nsp').count():
+        print('open space did not open it; using the link'); tap('button:has-text("Spread out")'); pg.wait_for_timeout(500)
+    print('spread open:', pg.locator('.nsp').count()==1, '| things:', pg.locator('.nsp-at').count())
+    def drag(src, x, y):
+        s=src.bounding_box(); sx,sy=s['x']+20,s['y']+s['height']/2
+        if phone:
+            cdp=ctx.new_cdp_session(pg)
+            T=lambda k,a,b2: cdp.send('Input.dispatchTouchEvent',{'type':k,'touchPoints':[] if k=='touchEnd' else [{'x':a,'y':b2,'id':1}]})
+            T('touchStart',sx,sy)
+            for i in range(1,13): T('touchMove',sx+(x-sx)*i/12,sy+(y-sy)*i/12); pg.wait_for_timeout(16)
+            T('touchEnd',0,0)
+        else:
+            pg.mouse.move(sx,sy); pg.mouse.down(); pg.mouse.move(x,y,steps=12); pg.wait_for_timeout(80); pg.mouse.up()
+        pg.wait_for_timeout(500)
+    at=lambda t: pg.locator(f'.nsp-at:has-text("{t}")').first
+    card=lambda t: pg.locator(f'.nsp .nbd-card:has-text("{t}")').first
+    sc=pg.locator('.nsp-scroll').bounding_box()
+    b0=at('Envelope').bounding_box()
+    drag(pg.locator('.nsp-at:has-text("Envelope") .nbd-box-head').first, sc['x']+sc['width']*0.6, sc['y']+sc['height']*0.7)
+    b1=at('Envelope').bounding_box(); print('Envelope moved by', round(b1['x']-b0['x']), round(b1['y']-b0['y']), '| spread saved:', 'spread' in (patches[-1].get('widgets') or {}) if patches else None)
+    d=card('drywall dent').bounding_box()
+    drag(card('paint touch-up'), d['x']+d['width']/2, d['y']+d['height']/2)
+    pg.wait_for_timeout(300); pg.keyboard.type('Interior'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
+    notes=[x.get('notes') for x in patches if 'notes' in x]
+    print('combined:', repr(notes[-1]) if notes else None)
+    e=pg.locator('.nsp-at:has-text("Envelope") .nbd-box-head').first.bounding_box()
+    drag(card('sealant gap'), e['x']+40, e['y']+e['height']/2)
+    drag(card('anchor bolts'), sc['x']+sc['width']*0.25, sc['y']+sc['height']*0.85)
+    notes=[x.get('notes') for x in patches if 'notes' in x]
+    print('after filing and taking out:', repr(notes[-1]))
+    print('spread keys:', sorted((patches[-1].get('widgets') or {}).get('spread',{}).get('spread',{}).keys()) if patches else None)
+    pg.screenshot(path="/tmp/spread_phone.png" if phone else "/tmp/spread_desk.png"); tap(".nsp-bar button:has-text(\"Done\")"); pg.wait_for_timeout(400)
+    print('back on the page:', pg.locator('.nbd-board').count()==1, '| boxes:', pg.locator('.nbd-box.d0 > .nbd-box-head .nbd-box-name').all_inner_texts(), '| errors', errs)
+    b.close()

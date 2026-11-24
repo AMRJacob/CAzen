@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { Mark } from './Logo'
 import {
-  addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, freshBlock, itemsOf, kindOfId, onOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
+  addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, fill, freshBlock, itemsOf, kindOfId, onOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
   type Block, type BlockKind, type CheckItem, type Layout, type Screen, type VisitKind, type Widget, type Widgets,
 } from '../lib/pageLayout'
 import { keepLayout, layoutHere, layoutThere } from '../lib/layoutStore'
@@ -65,7 +65,7 @@ export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen
       list.push({ ...blk, ...(widgets?.[id]?.title ? { title: widgets[id].title } : {}) })
       y += blk.h
     }
-    return screen === 'phone' ? list : settle(list, cols)
+    return screen === 'phone' ? list : fill(list, cols)
   }
   const mine = new Set(layout.blocks.map((b) => b.id))
   const gone = new Set(all ? [] : layout.gone ?? [])

@@ -6,8 +6,9 @@ import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
 import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
+import { NoteSpread } from './NoteSpread'
 import { ArrangeMenu, CheckBlock, InFrame, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
-import { ADDED, BUILT_IN, COLS, holds, LABEL, ON, onOf, settle, widgetsForReport, type Block, type BlockKind, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
+import { ADDED, BUILT_IN, COLS, holds, LABEL, ON, onOf, settle, SPREAD, spreadOf, widgetsForReport, type Block, type BlockKind, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
@@ -703,6 +704,8 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   const [pad, setPadRow] = useState<Pad | null>(null)
   const [marks, setMarks] = useState<PadMark[]>([])
   const [drawing, setDrawing] = useState(false)
+  /** The notes spread over the whole screen, to be laid out by hand (Jacob, 11/24). */
+  const [spreading, setSpreading] = useState(false)
   // Each photograph can have a sketch laid over it: a pad of its own, found by its title
   // ("photo:" and the photograph's path), drawn on with the very same pad the page's sketch is.
   const [photoPads, setPhotoPads] = useState<Record<string, Pad>>({})
@@ -950,6 +953,15 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       onChanged={(p) => { setPhotoPad({ pad: p, path: photoPad.path }); setPhotoPads((m) => ({ ...m, [photoPad.path]: p })) }}
       onClose={() => { const path = photoPad.path; setPhotoPad(null); setInkSeen((n) => n + 1); setViewing({ path, fresh: false }) }} onTrouble={onTrouble} />
   }
+  if (spreading) {
+    return <NoteSpread notes={notes} spots={spreadOf(page.widgets)} onClose={() => setSpreading(false)}
+      onSave={({ notes: n, spots }) => {
+        const patch: Partial<SiteVisit> = {}
+        if (n !== undefined) { setNotes(n); patch.notes = n }
+        if (spots && canHoldWidgets()) { const w = { ...widgetsNow.current, [SPREAD]: { spread: spots } }; widgetsNow.current = w; patch.widgets = w }
+        if (Object.keys(patch).length) changeNow.current(patch)
+      }} />
+  }
   if (drawing && pad) {
     return <NotePad pad={pad} onChanged={setPadRow} onClose={() => setDrawing(false)} onTrouble={onTrouble} />
   }
@@ -1044,9 +1056,15 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       case 'names': return <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
       case 'notes': return (
         <section className="nb-z nb-z-notes">
-          <div className="nb-z-top"><h2>Notes</h2><button className="link" onClick={() => setChecking(true)} disabled={!notes.trim()}>Check with AI</button></div>
-          {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
-          <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
+          <div className="nb-z-top"><h2>Notes</h2>
+            <span className="nb-z-do">
+              <button className="link" onClick={() => setSpreading(true)} title="The notes over the whole screen, to lay out by hand">Spread out</button>
+              <button className="link" onClick={() => setChecking(true)} disabled={!notes.trim()}>Check with AI</button>
+            </span>
+          </div>
+          {/* Typed, then dragged where it belongs. The numbered outline is on the report's page.
+              A click on open space in it spreads the notes over the screen, as the sketch opens the pad. */}
+          <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} onOpen={() => setSpreading(true)} />
           {checking && <AiCheck notes={notes} kind={page.kind} onClose={() => setChecking(false)}
             onApply={(next) => { setChecking(false); setNotes(next); change({ notes: next }) }} />}
         </section>

@@ -17,7 +17,7 @@ const key = (p: Path) => p.join('.')
 const count = (n: Note): number => n.kids.reduce((t, k) => t + (k.kids.length ? count(k) : 1), 0)
 const pathOf = (s: string | undefined | null): Path | null => (s == null ? null : s === '' ? [] : s.split('.').map(Number))
 
-export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next: string) => void }) {
+export function NoteBoard({ notes, onChange, onOpen }: { notes: string; onChange: (next: string) => void; onOpen?: () => void }) {
   const board = readBoard(notes)
   const set = (next: Note[]) => { if (next !== board) onChange(writeBoard(next)) }
   const [text, setText] = useState('')
@@ -33,6 +33,8 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
   const [held, setHeld] = useState<{ path: Path; text: string; x: number; y: number; over: string | null } | null>(null)
   const press = useRef<{ path: Path; text: string; x: number; y: number; id: number; touch?: boolean } | null>(null)
   const root = useRef<HTMLDivElement>(null)
+  /** When something was last put down: the click that ends a drag is not a click on the board. */
+  const dropped = useRef(0)
 
   const loose = looseAt(board)
   const tray = loose >= 0 ? board[loose].kids : []
@@ -116,6 +118,7 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       const p = press.current
       press.current = null
       if (!p || !held) { setHeld(null); return }
+      dropped.current = Date.now()
       // Held, and let go where it was picked up: not a drag, a request for its menu.
       if (p.touch && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= STILL_PX * 1.5) {
         setHeld(null)
@@ -233,7 +236,13 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
   }
 
   return (
-    <div className={`nbd${held ? ' dragging' : ''}`} ref={root}>
+    <div className={`nbd${held ? ' dragging' : ''}`} ref={root} onClick={(e) => {
+      // Open space on the board (not a note, a box's heading, a button or the typing line): the spread.
+      const t = e.target as HTMLElement
+      if (!onOpen || held || menu || editing || Date.now() - dropped.current < 400) return
+      if (t.closest('.nbd-card, .nbd-box-head, button, input, form, .nbd-menu-back')) return
+      onOpen()
+    }}>
       <form className="nbd-type" onSubmit={(e) => { e.preventDefault(); add() }}>
         <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Type a note"
           placeholder="Type a note, then drag it where it belongs" enterKeyHint="done" autoCapitalize="sentences" />
