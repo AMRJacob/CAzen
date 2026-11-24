@@ -3786,3 +3786,10 @@ Jacob, 16:54–16:57: an approved PR can be added to a change order; ASIs need p
 - **Grouping**: a change order is a shaded heading row with the PRs in it listed under it (└), out of their own date place. A change order with no file says "no document yet" and has **Upload change order** (`attachIssuedFile`, filed under 13 Change Orders).
 - **PR cost**: typed straight into the Cost cell ("add cost"); saved as `pr.price`; a change order with no cost of its own shows the sum of its PRs (as before), and the totals follow.
 - `checks/t_pr.py` rewritten for all of it. Test browser only.
+
+## 2026-11-24 — Change register columns drag into any order
+Jacob, 17:01: rearrange the columns by dragging; Status between Type and Subject by default.
+- Default order is now Number · Type · Status · Subject · Issued · Cost · Time. Each heading drags (mouse, pen or finger; picked up after 6 px) and drops before or after the heading it is over, shown by a moss edge. The row's links stay last.
+- Kept per device (`cazen.pref.changeRegisterColumns`); a stored order is made whole if columns are added later. **Reset columns** appears in the last heading when the order isn't the default.
+- Rows, the edit row and both totals rows follow the order (`RegHead`, `TotalRow`, cells keyed by column in `Row`). A PR's indent under its change order now hangs off the Number cell wherever it is.
+- `checks/t_regcols.py`; `t_pr.py` updated. Test browser only; dragging by a real finger not driven.

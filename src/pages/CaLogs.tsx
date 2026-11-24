@@ -1,5 +1,6 @@
 import { PageTitle } from '../components/PageTitle'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePref } from '../lib/prefs'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
 import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, decisionLabel, decisionOf, setDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, startChangeOrder, attachIssuedFile, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
@@ -33,6 +34,83 @@ import type { FormKind } from '../lib/templates/types'
 const ALL_KINDS: FormKind[] = [...CHANGE_KINDS]
 
 type SortBy = 'date' | 'type' | 'number'
+
+/** The register's columns that can be dragged into another order. The row's links stay last. */
+type RegCol = 'number' | 'type' | 'status' | 'subject' | 'issued' | 'cost' | 'time'
+const REG_COLS: RegCol[] = ['number', 'type', 'status', 'subject', 'issued', 'cost', 'time']
+const REG_HEAD: Record<RegCol, { label: string; className?: string }> = {
+  number: { label: 'Number' }, type: { label: 'Type' }, status: { label: 'Status', className: 'col-status' },
+  subject: { label: 'Subject', className: 'col-title' }, issued: { label: 'Issued', className: 'col-date' },
+  cost: { label: 'Cost', className: 'right col-chg' }, time: { label: 'Time', className: 'right col-chg' },
+}
+const REG_ORDER_KEY = 'cazen.pref.changeRegisterColumns'
+/** A stored order, made whole: every column once, unknown ones dropped, missing ones added where the default has them. */
+function cleanCols(stored: unknown): RegCol[] {
+  const seen = (Array.isArray(stored) ? stored : []).filter((c): c is RegCol => REG_COLS.includes(c as RegCol))
+  const out = [...new Set(seen)]
+  for (const c of REG_COLS) if (!out.includes(c)) out.splice(Math.min(REG_COLS.indexOf(c), out.length), 0, c)
+  return out
+}
+
+/**
+ * Column headings that can be dragged into another order, by mouse, pen or finger. A heading is
+ * picked up once it has moved a few pixels; it is dropped before or after the heading it is over.
+ */
+function RegHead({ cols, onOrder }: { cols: RegCol[]; onOrder: (c: RegCol[]) => void }) {
+  const [drag, setDrag] = useState<{ col: RegCol; x0: number; on: boolean; target: RegCol | null; after: boolean } | null>(null)
+  const targetAt = (x: number, y: number) => {
+    const th = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest('th[data-col]') as HTMLElement | null
+    if (!th) return null
+    const r = th.getBoundingClientRect()
+    return { col: th.dataset.col as RegCol, after: x > r.left + r.width / 2 }
+  }
+  return (
+    <tr className={drag?.on ? 'reg-head dragging' : 'reg-head'}>
+      {cols.map((c) => (
+        <th key={c} data-col={c} title="Drag to move this column"
+          className={[REG_HEAD[c].className, 'reg-drag', drag?.on && drag.col === c ? 'reg-drag-from' : '',
+            drag?.on && drag.target === c && drag.col !== c ? (drag.after ? 'reg-drop-after' : 'reg-drop-before') : ''].filter(Boolean).join(' ')}
+          onPointerDown={(e) => { if (e.button !== 0) return; (e.target as HTMLElement).setPointerCapture(e.pointerId); setDrag({ col: c, x0: e.clientX, on: false, target: null, after: false }) }}
+          onPointerMove={(e) => {
+            if (!drag) return
+            const on = drag.on || Math.abs(e.clientX - drag.x0) > 6
+            const t = on ? targetAt(e.clientX, e.clientY) : null
+            setDrag({ ...drag, on, target: t?.col ?? drag.target, after: t ? t.after : drag.after })
+          }}
+          onPointerUp={() => {
+            if (drag?.on && drag.target && drag.target !== drag.col) {
+              const rest = cols.filter((x) => x !== drag.col)
+              const at = rest.indexOf(drag.target) + (drag.after ? 1 : 0)
+              onOrder([...rest.slice(0, at), drag.col, ...rest.slice(at)])
+            }
+            setDrag(null)
+          }}
+          onPointerCancel={() => setDrag(null)}>
+          {REG_HEAD[c].label}
+        </th>
+      ))}
+      <th>{cols.join() !== REG_COLS.join() && <button className="link small reg-cols-reset" onClick={() => onOrder(REG_COLS)} title="Put the columns back in their usual order">Reset columns</button>}</th>
+    </tr>
+  )
+}
+
+/** A totals row: the label across the first run of ordinary columns, the figures under Cost and Time. */
+function TotalRow({ cols, className, label, cost, days }: { cols: RegCol[]; className: string; label: string; cost: React.ReactNode; days: React.ReactNode }) {
+  const cells: React.ReactNode[] = []
+  let run = 0, labelled = false
+  const flush = (key: string) => {
+    if (!run) return
+    cells.push(<td key={key} colSpan={run}>{labelled ? null : label}</td>)
+    labelled = true; run = 0
+  }
+  cols.forEach((c, n) => {
+    if (c === 'cost' || c === 'time') { flush(`r${n}`); cells.push(<td key={c} className="right nowrap">{c === 'cost' ? cost : days}</td>) }
+    else run++
+  })
+  flush('end')
+  if (!labelled) cells.unshift(<td key="label">{label}</td>)
+  return <tr className={className}>{cells}<td /></tr>
+}
 
 export default function CaLogs() {
   const { current } = useProject()
@@ -101,6 +179,8 @@ export default function CaLogs() {
   const loose = useMemo(() => (rows ?? []).filter((r) => r.kind === 'pr' && !r.rolledInto), [rows])
   const orders = useMemo(() => (rows ?? []).filter((r) => r.kind === 'change_order')
     .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true })), [rows])
+  const [storedCols, setStoredCols] = usePref<unknown>(REG_ORDER_KEY, REG_COLS)
+  const cols = cleanCols(storedCols)
   const standing = useMemo(() => prStanding(rows ?? []), [rows])
   // Over everything on the project, not only what the filter is showing.
   const totals = useMemo(() => changeTotals(rows ?? []), [rows])
@@ -188,23 +268,17 @@ export default function CaLogs() {
         : !listed.length ? <div className="card muted">Nothing issued yet.</div> : (
         <table className="register">
           <thead>
-            <tr><th>Number</th><th>Type</th><th className="col-title">Subject</th><th className="col-status">Status</th><th className="col-date">Issued</th><th className="right col-chg">Cost</th><th className="right col-chg">Time</th><th /></tr>
-            <tr className="reg-total">
-              <td colSpan={5}>Change orders to date{totals.orders.count ? ` (${totals.orders.count})` : ''}</td>
-              <td className="right nowrap">{totals.orders.count ? asMoney(totals.orders.cost) : NOTHING}</td>
-              <td className="right nowrap">{totals.orders.count ? daysText(totals.orders.days) : NOTHING}</td><td />
-            </tr>
+            <RegHead cols={cols} onOrder={setStoredCols} />
+            <TotalRow cols={cols} className="reg-total" label={`Change orders to date${totals.orders.count ? ` (${totals.orders.count})` : ''}`}
+              cost={totals.orders.count ? asMoney(totals.orders.cost) : NOTHING} days={totals.orders.count ? daysText(totals.orders.days) : NOTHING} />
             {totals.loose.count > 0 && (
-              <tr className="reg-total reg-total-loose">
-                <td colSpan={5}>Proposal requests not yet in a change order ({totals.loose.count})</td>
-                <td className="right nowrap">{asMoney(totals.loose.cost)}</td>
-                <td className="right nowrap">{daysText(totals.loose.days)}</td><td />
-              </tr>
+              <TotalRow cols={cols} className="reg-total reg-total-loose" label={`Proposal requests not yet in a change order (${totals.loose.count})`}
+                cost={asMoney(totals.loose.cost)} days={daysText(totals.loose.days)} />
             )}
           </thead>
           <tbody>
             {listed.map((r) => (
-              <Row key={r.id} row={r} project={current} loose={loose} orders={orders} onValues={patchRow}
+              <Row key={r.id} cols={cols} row={r} project={current} loose={loose} orders={orders} onValues={patchRow}
                 inOrder={!!r.rolledInto && r.kind === 'pr'}
                 onNewOrder={async () => {
                   if (!current) return
@@ -253,9 +327,11 @@ function DownloadChange({ row, project, onError }: { row: RegisterRow; project: 
   )
 }
 
-function Row({ row, project, loose, orders, inOrder, onNewOrder, onValues, attaching, onAttach, onChanged, onError }: {
+function Row({ cols, row, project, loose, orders, inOrder, onNewOrder, onValues, attaching, onAttach, onChanged, onError }: {
   /** The project's change orders, for an approved proposal request to go in. */
   orders: RegisterRow[]
+  /** The columns, in the order this person has put them. */
+  cols: RegCol[]
   /** Start a new change order with this proposal request in it. */
   onNewOrder: () => void
   /** A proposal request listed under the change order it is in. */
@@ -350,13 +426,15 @@ function Row({ row, project, loose, orders, inOrder, onNewOrder, onValues, attac
     <>
       {edit ? (
         <tr className="reg-edit">
-          <td><input className="mono" value={edit.number} onChange={(e) => setEdit({ ...edit, number: e.target.value })} onKeyDown={keys} aria-label="Number" /></td>
-          <td className="nowrap">{FORM_LABELS[row.kind]}</td>
-          <td className="col-title"><input autoFocus value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} onKeyDown={keys} aria-label="Subject" /></td>
-          <td className="col-status" />
-          <td className="col-date"><input type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} onKeyDown={keys} aria-label="Issued" /></td>
-          <td className="col-chg"><MoneyInput className="right" value={edit.cost} placeholder="$0.00" onChange={(raw) => setEdit((x) => (x ? { ...x, cost: raw } : x))} onKeyDown={keys} aria-label="Change to contract cost" /></td>
-          <td className="col-chg"><input className="right" inputMode="numeric" value={edit.days} placeholder="days" onChange={(e) => setEdit({ ...edit, days: e.target.value })} onKeyDown={keys} aria-label="Change to contract time, in days" /></td>
+          {cols.map((c) => <Fragment key={c}>{({
+            number: <td><input className="mono" value={edit.number} onChange={(e) => setEdit({ ...edit, number: e.target.value })} onKeyDown={keys} aria-label="Number" /></td>,
+            type: <td className="nowrap">{FORM_LABELS[row.kind]}</td>,
+            subject: <td className="col-title"><input autoFocus value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} onKeyDown={keys} aria-label="Subject" /></td>,
+            status: <td className="col-status" />,
+            issued: <td className="col-date"><input type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} onKeyDown={keys} aria-label="Issued" /></td>,
+            cost: <td className="col-chg"><MoneyInput className="right" value={edit.cost} placeholder="$0.00" onChange={(raw) => setEdit((x) => (x ? { ...x, cost: raw } : x))} onKeyDown={keys} aria-label="Change to contract cost" /></td>,
+            time: <td className="col-chg"><input className="right" inputMode="numeric" value={edit.days} placeholder="days" onChange={(e) => setEdit({ ...edit, days: e.target.value })} onKeyDown={keys} aria-label="Change to contract time, in days" /></td>,
+          } as Record<RegCol, React.ReactNode>)[c]}</Fragment>)}
           <td className="right nowrap">
             <button className="primary" disabled={saving} onClick={() => void saveEdit()}>{saving ? 'Saving…' : 'Save'}</button>{' '}
             <button className="link" onClick={() => setEdit(null)}>Cancel</button>
@@ -374,34 +452,36 @@ function Row({ row, project, loose, orders, inOrder, onNewOrder, onValues, attac
           if ((e.target as HTMLElement).closest('button, a, select, input')) return
           openFile(project, row.file_path).catch((err) => onError(message(err)))
         }}>
-        <td className="mono">{row.number ?? '—'}</td>
-        <td className="nowrap">{FORM_LABELS[row.kind]}</td>
-        <td className="col-title">
+        {cols.map((c) => <Fragment key={c}>{({
+          number: <td className="mono reg-num">{row.number ?? "—"}</td>,
+          type: <td className="nowrap">{FORM_LABELS[row.kind]}</td>,
+          subject: <td className="col-title">
           {subject}
           {row.kind === 'change_order' && !row.file_path && <span className="covers"> · no document yet</span>}
-        </td>
-        <td className="col-status nowrap">
+        </td>,
+          status: <td className="col-status nowrap">
           {decision && (
             <span className={`pr-status pr-${decision}`} title="Right-click, or press and hold, to change">
               {decisionLabel(row.kind, decision)}
             </span>
           )}
-        </td>
-        <td className="col-date">{usDate(new Date(row.issued_at))}</td>
-        {row.kind === 'pr' ? (
+        </td>,
+          issued: <td className="col-date">{usDate(new Date(row.issued_at))}</td>,
           // A proposal request's cost is typed straight into its cell; the change order it is in adds them up.
-          <td className="right nowrap col-chg pr-cost" onClick={(e) => { e.stopPropagation(); if (costTyped === null) setCostTyped(cost == null ? '' : asMoney(cost)) }}
-            title={costTyped === null ? 'Click to enter the cost' : undefined}>
-            {costTyped === null ? (cost == null ? <span className="muted">add cost</span> : asMoney(cost)) : (
-              <MoneyInput className="right" autoFocus value={costTyped} placeholder="$0.00" aria-label={`Cost of ${row.number ?? 'this proposal request'}`}
-                onChange={setCostTyped} onBlur={() => void saveCost()}
-                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setCostTyped(null) }} />
-            )}
-          </td>
-        ) : (
-          <td className={`right nowrap col-chg${costIsOwn(row) ? '' : ' summed'}`} title={costIsOwn(row) ? undefined : 'Added up from the proposal requests it covers'}>{cost == null ? NOTHING : asMoney(cost)}</td>
-        )}
-        <td className={`right nowrap col-chg${daysAreOwn(row) ? '' : ' summed'}`}>{days == null ? NOTHING : daysText(days)}</td>
+          cost: row.kind === 'pr' ? (
+            <td className="right nowrap col-chg pr-cost" onClick={(e) => { e.stopPropagation(); if (costTyped === null) setCostTyped(cost == null ? '' : asMoney(cost)) }}
+              title={costTyped === null ? 'Click to enter the cost' : undefined}>
+              {costTyped === null ? (cost == null ? <span className="muted">add cost</span> : asMoney(cost)) : (
+                <MoneyInput className="right" autoFocus value={costTyped} placeholder="$0.00" aria-label={`Cost of ${row.number ?? 'this proposal request'}`}
+                  onChange={setCostTyped} onBlur={() => void saveCost()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setCostTyped(null) }} />
+              )}
+            </td>
+          ) : (
+            <td className={`right nowrap col-chg${costIsOwn(row) ? '' : ' summed'}`} title={costIsOwn(row) ? undefined : 'Added up from the proposal requests it covers'}>{cost == null ? NOTHING : asMoney(cost)}</td>
+          ),
+          time: <td className={`right nowrap col-chg${daysAreOwn(row) ? '' : ' summed'}`}>{days == null ? NOTHING : daysText(days)}</td>,
+        } as Record<RegCol, React.ReactNode>)[c]}</Fragment>)}
         <td className="right nowrap">
           {row.issuance_id && (
             <button className="link" onClick={(e) => { e.stopPropagation(); setShowing(!showing) }}>

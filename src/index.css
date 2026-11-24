@@ -3992,12 +3992,20 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 /* The change register: a change order heads the proposal requests in it. */
 .register tr.reg-co-head td { background: var(--wash); font-weight: 600; border-top: 1px solid var(--line); }
 .register tr.reg-co-head .covers { font-weight: 400; }
-.register tr.reg-in-co td:first-child { padding-left: 28px; }
-.register tr.reg-in-co td:first-child::before { content: '└ '; color: var(--muted); }
+.register tr.reg-in-co td.reg-num { padding-left: 28px; }
+.register tr.reg-in-co td.reg-num::before { content: '└ '; color: var(--muted); }
 .register td.pr-cost { cursor: text; }
 .register td.pr-cost input { width: 120px; }
 .co-upload { cursor: pointer; color: var(--moss); text-decoration: underline; text-underline-offset: 2px; font-weight: 400; }
-.register tr.reg-co-head td:first-child, .register tr.reg-in-co td:first-child, .register td.mono { white-space: nowrap; }
+.register td.mono { white-space: nowrap; }
 
 .register th.col-status, .register td.col-status { width: 1%; }
 .register td.col-title { min-width: 220px; }
+
+/* The change register's headings drag into another order. */
+.register th.reg-drag { cursor: grab; user-select: none; touch-action: none; }
+.register tr.reg-head.dragging th { cursor: grabbing; }
+.register th.reg-drag-from { opacity: 0.45; }
+.register th.reg-drop-before { box-shadow: inset 3px 0 0 var(--moss); }
+.register th.reg-drop-after { box-shadow: inset -3px 0 0 var(--moss); }
+.reg-cols-reset { font-weight: 400; text-transform: none; letter-spacing: 0; }

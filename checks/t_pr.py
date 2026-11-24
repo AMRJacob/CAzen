@@ -18,7 +18,7 @@ def files(route):
     return route.fulfill(status=200,content_type='application/json',body='{}')
 def blob(route):
     k=base64.urlsafe_b64decode(route.request.url.split('/blob/put/')[1]).decode(); puts[k]=len(route.request.post_data_buffer or b''); route.fulfill(status=200,body='')
-row=lambda pg,n: pg.locator(f'tr:has(td:first-child:text-is("{n}"))').first
+row=lambda pg,n: pg.locator(f'tr:has(td.reg-num:text-is("{n}"))').first
 with sync_playwright() as p:
     b=p.chromium.launch(channel='chrome'); ctx=b.new_context(viewport={'width':1440,'height':900}); install(ctx,extra); signed_in(ctx)
     def patch(route):
