@@ -546,3 +546,19 @@ export function readPlace(line: string): PagePlace | null {
 export function placeOnPage(text: PageText): PagePlace | null {
   return readPlace(bandText(text, BOTTOM)) ?? readPlace(bandText(text, TOP))
 }
+
+/**
+ * A section's title inside a box somebody drew round it — on the heading or in the footer.
+ *
+ * Whatever else the box takes is dropped: the word SECTION, the section number with its page
+ * ("01 21 00-1"), and page counts ("Page 2 of 4"). What is left is the title, as printed.
+ */
+export function titleInRegion(text: PageText, box: Region): string {
+  return textInRegion(text, box)
+    .replace(/\bSECTION\b/gi, ' ')
+    .replace(/\b\d{2}[\s.]?\d{2}[\s.]?\d{2}(?:\.\d{1,2})?(?:\s*[-–—]\s*\d+[A-Z]?)?\b/g, ' ')
+    .replace(/\bPAGE\s+\d+[A-Z]?(?:\s+OF\s+\d+)?\b/gi, ' ')
+    .replace(/\b\d+\s+OF\s+\d+\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—:|]+|[\s\-–—:|]+$/g, '')
+}

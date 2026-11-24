@@ -1,5 +1,5 @@
 import { classifyPages, readCover, dateIn, kindOnPage, suggestAction, splicePages, countOf } from '../src/lib/pdf/changeDoc.ts'
-import { readPlace, readFooter, endsSection, detectSections } from '../src/lib/pdf/specRead.ts'
+import { readPlace, readFooter, endsSection, detectSections, titleInRegion } from '../src/lib/pdf/specRead.ts'
 import type { PageText } from '../src/lib/pdf/pageText.ts'
 let bad = 0
 const eq = (n: string, g: unknown, w: unknown) => { const ok = JSON.stringify(g) === JSON.stringify(w); if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${n}${ok ? '' : ` got ${JSON.stringify(g)} want ${JSON.stringify(w)}`}`) }
@@ -88,3 +88,10 @@ const scan = (k: number) => ({ ...letter(['PART 2', 0.2], [`Chiller Plant 236416
 const cut = detectSections([10, 14, 12].map((k, index) => ({ index, text: scan(k), found: null, declares: false, at: null, of: null, ends: false })), null)
 eq('a misread scanned page number is put right by its neighbours', cut.pages.map((p) => p.at), [10, 11, 12])
 if (bad) { console.log(`${bad} failed`); process.exit(1) }
+
+{
+  const all = { x: 0, y: 0, w: 1, h: 1 }
+  eq('title box on a footer', titleInRegion(letter(['01 21 00-1   Cash Allowances', 0.95]), all), 'Cash Allowances')
+  eq('title box on a heading', titleInRegion(letter(['SECTION 01 21 00', 0.1], ['CASH ALLOWANCES', 0.13]), all), 'CASH ALLOWANCES')
+  eq('title box with a page count', titleInRegion(letter(['Painting', 0.9], ['Page 2 of 4', 0.93]), all), 'Painting')
+}

@@ -11,6 +11,34 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:50 CST (a manual page's section named from its preview; boxes for number and title)
+
+Jacob, 10:27–10:28, with the preview of Addendum 2's Cash Allowances page: change the section
+number and title from that screen; a tool to pick the header or footer to read from when a page
+needs help.
+
+- **The page preview of a manual page shows its section's fields** — *Section no.* and *Section
+  title* in place of the greyed Sheet no. and Title. They are the same values as the section's
+  row in the project manual card (the edits are now kept by the upload screen and shared:
+  `ChangeManual`'s `edits` / `onEdits`); a change in either shows in the other.
+- **A space can now be typed in a section number.** The number was trimmed as it was typed, so
+  "01 " became "01" and "01 21 00" could only be pasted. It is trimmed when used, not in the box.
+- **Box the number / Box the title** (in the preview): the page opens to draw a box on (the
+  manual upload's `RegionPicker`), saying what the box reads on this page and on how many pages.
+  *Done* puts it on the page's section. The number box takes the section-shaped number in it
+  (`sectionInRegion`); the title box takes its words less SECTION, the number with its page
+  ("01 21 00-1") and page counts (`titleInRegion` in `specRead.ts`).
+- **Cut every manual page by that box**: after a number box has read something, every manual
+  page in this upload can be cut by it instead of by its own header and footer (`cutBox`);
+  *Stop cutting by the box* goes back. For this upload only.
+
+`checks/t_secbox.py` (change_doc.pdf): 08 43 13 → typed "08 43 14" and a title, shown in the
+card; the title box on the heading reads STOREFRONTS → "Storefronts"; the number box reads
+08 43 13 on 1 of 4 pages and puts it back; the cut link appears. `changedoc.test.ts` +3.
+Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 12:20 CST (Addendum 2: Cash Allowances read; "Set Introduction")
 
 Jacob, with UCA Addendum 2: project manual pages still missed — Cash Allowances did not make it

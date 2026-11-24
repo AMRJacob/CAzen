@@ -8,7 +8,9 @@ import { useProject } from '../lib/project'
 import { useFirm } from '../lib/firm'
 import { db } from '../lib/supabase'
 import { splitDrawingSet, type SplitSheet } from '../lib/pdf/splitSet'
-import { pageBody } from '../lib/pdf/pageText'
+import { pageBody, type Region } from '../lib/pdf/pageText'
+import { sectionInRegion, titleInRegion } from '../lib/pdf/specRead'
+import { RegionPicker } from '../components/RegionPicker'
 import { DEFAULT_DPI } from '../lib/pdf/shrink'
 import { bundleName, bundleSheets, saveBundle, type BundleSheet } from '../lib/pdf/bundle'
 import { PageThumb } from '../components/PageThumb'
@@ -32,7 +34,7 @@ import { joinPages } from '../lib/pdf/bundle'
 import { putFile, SECTIONS } from '../lib/files'
 import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
 import { classifyPages, countOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
-import { ChangeManual, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
+import { ChangeManual, type ManualEdit, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
 import { UPLOADED, useUploads } from '../lib/uploadHost'
 import { reopenIssuance, takeAwayMoved, type Origin, type Reopened } from '../lib/resort'
@@ -1254,6 +1256,14 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
     [specKey],  // eslint-disable-line react-hooks/exhaustive-deps
   )
   const [manualPlan, setManualPlan] = useState<ManualPlan | null>(null)
+  // Section numbers and titles typed or read from a box, here or in the manual card.
+  const [manualEdits, setManualEdits] = useState<Record<string, ManualEdit>>({})
+  const editSection = (key: string, patch: ManualEdit) => setManualEdits((es) => ({ ...es, [key]: { ...es[key], ...patch } }))
+  // A box drawn round the section number that every manual page in this upload is cut by.
+  const [cutBox, setCutBox] = useState<Region | null>(null)
+  // Drawing a box on one manual page to read its section's number or title from.
+  const [boxing, setBoxing] = useState<{ at: number; what: 'number' | 'title'; box: Region | null } | null>(null)
+  const [lastNumberBox, setLastNumberBox] = useState<Region | null>(null)
   const sections = specPages.length ? manualPlan?.sections ?? [] : []
   const manualProblem = specPages.length ? (manualPlan ? manualPlan.problem : 'Reading the manual pages…') : null
 
@@ -1567,6 +1577,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div>
             {specPages.length > 0 ? (
               <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
+                edits={manualEdits} onEdits={setManualEdits} cutBox={cutBox}
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
                 onDrawings={(ats) => pagesTo(ats, 'sheet')}
                 picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })}
@@ -1771,14 +1782,44 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                 <label className="pv-field pv-role">Part
                   <RolePick value={d.role} onChange={(r) => setRole(i, r)} label="What this page is" />
                 </label>
-                <label className="pv-field pv-number">Sheet no.
-                  <input className="mono" value={d.role === 'sheet' ? d.number : ''} disabled={d.role !== 'sheet'} placeholder="A-201"
-                    onChange={(e) => type(i, 'number', e.target.value)} />
-                </label>
-                <label className="pv-field pv-title">Title
-                  <input value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet'}
-                    onChange={(e) => type(i, 'title', e.target.value)} />
-                </label>
+                {d.role === 'spec' && d.origin?.t !== 'spec' ? (() => {
+                  // A manual page: the fields are its section's, the same as in the manual card.
+                  const sec = sections.find((x) => x.ats.includes(d.pageIndex))
+                  const e = sec ? manualEdits[sec.key] ?? {} : {}
+                  return (
+                    <>
+                      <label className="pv-field pv-number">Section no.
+                        <input className="mono" value={sec ? e.number ?? sec.number : ''} disabled={!sec} placeholder="09 91 00"
+                          onChange={(ev) => sec && editSection(sec.key, { number: ev.target.value })} aria-label="Section number of this page" />
+                      </label>
+                      <label className="pv-field pv-title">Section title
+                        <input value={sec ? e.title ?? sec.title : ''} disabled={!sec}
+                          onChange={(ev) => sec && editSection(sec.key, { title: ev.target.value })} aria-label="Section title of this page" />
+                      </label>
+                      <div className="pv-boxes">
+                        <button className="link small" disabled={!sec} onClick={() => setBoxing({ at: d.pageIndex, what: 'number', box: null })}
+                          title="Draw a box round the section number on this page — in the header, the footer or the heading">Box the number</button>
+                        <button className="link small" disabled={!sec} onClick={() => setBoxing({ at: d.pageIndex, what: 'title', box: null })}
+                          title="Draw a box round the section title on this page">Box the title</button>
+                        {cutBox
+                          ? <button className="link small" onClick={() => setCutBox(null)} title="Go back to reading each page's header and footer">Stop cutting by the box</button>
+                          : lastNumberBox && <button className="link small" onClick={() => setCutBox(lastNumberBox)}
+                              title="Read the section number of every manual page in this upload from the box drawn last">Cut every manual page by that box</button>}
+                      </div>
+                    </>
+                  )
+                })() : (
+                  <>
+                    <label className="pv-field pv-number">Sheet no.
+                      <input className="mono" value={d.role === 'sheet' ? d.number : ''} disabled={d.role !== 'sheet'} placeholder="A-201"
+                        onChange={(e) => type(i, 'number', e.target.value)} />
+                    </label>
+                    <label className="pv-field pv-title">Title
+                      <input value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet'}
+                        onChange={(e) => type(i, 'title', e.target.value)} />
+                    </label>
+                  </>
+                )}
                 <label className="pv-field pv-rev">Rev. mark
                   <input value={d.role === 'sheet' ? d.revision : ''} disabled={d.role !== 'sheet'}
                     onChange={(e) => type(i, 'revision', e.target.value)} />
@@ -1794,6 +1835,34 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           })()}
         />
       )}
+      {boxing && (() => {
+        const page = drafts.find((d) => d.pageIndex === boxing.at)
+        const sec = sections.find((x) => x.ats.includes(boxing.at))
+        if (!page || !sec) return null
+        const readOn = (at: number) => {
+          const t = drafts.find((d) => d.pageIndex === at)?.page.text
+          if (!t || !boxing.box) return null
+          return boxing.what === 'number' ? sectionInRegion(t, boxing.box) : titleInRegion(t, boxing.box) || null
+        }
+        // The number box is checked against every manual page, since it may be used for all of them;
+        // the title box against this section's pages.
+        const over = boxing.what === 'number' ? specPages.map((p) => p.at) : sec.ats
+        const here = readOn(boxing.at)
+        return (
+          <RegionPicker bytes={page.page.bytes} value={boxing.box}
+            reads={{ here, across: over.filter((a) => readOn(a)).length, total: over.length }}
+            onChange={(box) => setBoxing({ ...boxing, box })}
+            onClose={() => {
+              if (here) editSection(sec.key, boxing.what === 'number' ? { number: here } : { title: niceTitle(here) })
+              if (boxing.what === 'number' && boxing.box && here) setLastNumberBox(boxing.box)
+              setBoxing(null)
+            }}
+            label={`Page ${boxing.at + 1} · ${boxing.what === 'number' ? 'the section number' : 'the section title'}`}
+            hint={boxing.what === 'number'
+              ? 'Draw a box round the section number — in the header, the footer or the heading. Done puts it on this section.'
+              : 'Draw a box round the section title — the heading or the footer. Done puts it on this section.'} />
+        )
+      })()}
       {error && <div className="notice error">{error}</div>}
     </div>
     </>

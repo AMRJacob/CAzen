@@ -28,7 +28,9 @@ export interface SpecPageIn {
   bytes: Uint8Array
 }
 
-interface Edit { number?: string; title?: string; include?: boolean; action?: SpecAction }
+/** What has been typed or chosen for one section, kept by the place of its first page in the upload. */
+export interface ManualEdit { number?: string; title?: string; include?: boolean; action?: SpecAction }
+type Edit = ManualEdit
 interface OldRead { status: 'loading' | 'ready' | 'failed'; error?: string; bytes?: Uint8Array; places?: ReturnType<typeof placeOnPage>[]; bodies?: string[] }
 
 export interface PlannedSection {
@@ -36,6 +38,8 @@ export interface PlannedSection {
   number: string
   title: string
   action: SpecAction
+  /** Its pages, by their place in the upload. */
+  ats: number[]
   /** What the section becomes, built only when it is saved. */
   build: () => Promise<SectionToSave>
 }
@@ -57,7 +61,12 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, onJoin }: {
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, onJoin, edits: given, onEdits, cutBox }: {
+  /** The edits, when the upload screen keeps them (so its page preview can change a section too). */
+  edits?: Record<string, ManualEdit>
+  onEdits?: (fn: (es: Record<string, ManualEdit>) => Record<string, ManualEdit>) => void
+  /** A box drawn on this upload's pages where the section number is: every page is cut by it. */
+  cutBox?: Region | null
   /** Pages (by their place in the upload) that start a section of their own, whatever the footers say. */
   splits?: Set<number>
   /** Put a section started that way back with the one before it. */
@@ -81,10 +90,13 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
 }) {
   const [current, setCurrent] = useState<CurrentSpec[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [edits, setEdits] = useState<Record<string, Edit>>({})
+  const [ownEdits, setOwnEdits] = useState<Record<string, Edit>>({})
+  const edits = given ?? ownEdits
+  const setEdits = onEdits ?? setOwnEdits
   const [olds, setOlds] = useState<Record<string, OldRead>>({})
   // Where the manual upload was told the section number sits; used here only if it reads more.
-  const [box] = usePref<Region | null>(PREFS.manualNumberBox, null)
+  const [savedBox] = usePref<Region | null>(PREFS.manualNumberBox, null)
+  const box = cutBox ?? savedBox
 
   useEffect(() => {
     listManual(project.id).then(setCurrent).catch((e) => { setLoadError(message(e)); setCurrent([]) })
@@ -96,7 +108,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
     const mp: ManualPage[] = pages.map((p, i) => ({ index: i, text: p.text, found: null, declares: false, at: null, of: null, ends: false }))
     const auto = detectSections(mp, null)
     const boxed = box ? mp.filter((p) => sectionInRegion(p.text, box)).length : 0
-    const read = box && boxed > auto.pages.filter((p) => p.found).length ? detectSections(mp, box) : auto
+    const read = cutBox ? detectSections(mp, cutBox) : box && boxed > auto.pages.filter((p) => p.found).length ? detectSections(mp, box) : auto
     if (!splits?.size) return read
     // A page split off by hand starts a section of its own, with its number to be given.
     const sections = read.sections.flatMap((s) => {
@@ -110,12 +122,14 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
       return out
     })
     return { ...read, sections }
-  }, [pages, box, splits])
+  }, [pages, box, cutBox, splits])
 
   const rows = useMemo(() => cut.sections.map((s) => {
     const key = String(pages[s.pages[0]]?.at ?? s.pages[0])
     const e = edits[key] ?? {}
-    const number = (e.number ?? (s.number === FRONT ? '' : s.number)).trim()
+    // As typed (so a space can be typed), and as used.
+    const typed = e.number ?? (s.number === FRONT ? '' : s.number)
+    const number = typed.trim()
     const cur = current?.find((c) => c.number === number) ?? null
     // A plain page number as the section reader settled it (a misread scan mended by its
     // neighbours); a lettered one as printed.
@@ -130,7 +144,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
     const title = e.title ?? (niceTitle(s.title) || (cur?.title ?? ''))
     const old = cur ? olds[cur.revision_id] : undefined
     const splice: Splice | null = action === 'pages' && old?.status === 'ready' ? splicePages(old.places!, places) : null
-    return { s, key, number, title, include: e.include ?? true, cur, places, suggested, action, old, splice }
+    return { s, key, typed, number, title, include: e.include ?? true, cur, places, suggested, action, old, splice }
   }), [cut, pages, edits, current, olds])
 
   // The current section is read only when its pages are to be put into it.
@@ -163,16 +177,16 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
     else if (chosen.some((r) => r.action === 'pages' && r.old?.status === 'loading')) problem = 'Reading the current sections…'
     else if (chosen.some((r) => r.action === 'pages' && !r.splice)) problem = 'A section can’t take its pages by number. Replace it whole, or leave it out.'
     const sections = chosen.map((r): PlannedSection => ({
-      key: r.key, number: r.number, title: r.title, action: r.action,
+      key: r.key, number: r.number, title: r.title.trim(), action: r.action, ats: r.s.pages.map((i) => pages[i].at),
       build: async () => {
         const newBytes = r.s.pages.map((i) => pages[i].bytes)
         const newBodies = r.s.pages.map((i) => pageBody(pages[i].text))
         if (r.action === 'pages' && r.splice && r.old?.bytes) {
           const bytes = await assemble(r.old.bytes, newBytes, r.splice.order)
           const bodies = r.splice.order.map((o) => (o.from === 'old' ? r.old!.bodies![o.i] : newBodies[o.i]))
-          return { number: r.number, title: r.title, revisionLabel, pages: r.splice.order.length, bytes, body: bodies.join('\n') }
+          return { number: r.number, title: r.title.trim(), revisionLabel, pages: r.splice.order.length, bytes, body: bodies.join('\n') }
         }
-        return { number: r.number, title: r.title, revisionLabel, pages: newBytes.length, bytes: await joinPages(newBytes), body: newBodies.join('\n') }
+        return { number: r.number, title: r.title.trim(), revisionLabel, pages: newBytes.length, bytes: await joinPages(newBytes), body: newBodies.join('\n') }
       },
     }))
     return { sections, problem }
@@ -206,7 +220,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
             return (
               <Fragment key={r.key}>
               <tr className={r.include ? '' : 'skipped'}>
-                <td><input className={`cell mono ${r.include && (!r.number || twice.has(r.number)) ? 'bad' : ''}`} value={r.number} placeholder="09 91 00"
+                <td><input className={`cell mono ${r.include && (!r.number || twice.has(r.number)) ? 'bad' : ''}`} value={r.typed} placeholder="09 91 00"
                   onChange={(e) => edit(r.key, { number: e.target.value })} aria-label="Section number" /></td>
                 <td><input className="cell" value={r.title} onChange={(e) => edit(r.key, { title: e.target.value })} aria-label={`Title of ${r.number}`} /></td>
                 <td className="small nowrap">

@@ -3766,3 +3766,4 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 @media (prefers-reduced-motion: reduce) { .upload-bar.busy span { animation: none; width: 100%; opacity: .4; } }
 .upload-min { position: sticky; float: right; top: 4px; margin-right: 14px; }
 @media (max-width: 620px) { .upload-chip { left: 12px; right: 12px; width: auto; top: calc(10px + env(safe-area-inset-top)); } }
+.pv-strip .pv-boxes { display: flex; gap: 12px; align-items: center; padding-bottom: 8px; white-space: nowrap; }
