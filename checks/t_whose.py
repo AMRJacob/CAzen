@@ -17,5 +17,4 @@ with sync_playwright() as p:
     print('verdict:',pg.inner_text('.pay-verdict'))
     for t in pg.locator('.pay-why').all_inner_texts(): print('  ',t.replace('\n',' | ')[:260])
     pg.locator('.pay-against').screenshot(path='whose.png')
-    pg.click('text=Use the PDF’s period and date'); pg.wait_for_timeout(800)
     print('patched:',patched,'| errors:',errs); b.close()

@@ -36,8 +36,8 @@ export async function loadContract(contractId: string): Promise<LoadedContract> 
       .from('pay_app_lines').select('*').in('pay_app_id', applications.map((x) => x.id))
     if (error) throw error
     for (const app of applications) billed.set(app.id, new Map())
-    for (const r of (rows ?? []) as { pay_app_id: string; sov_line_id: string; this_period: number; stored: number }[]) {
-      billed.get(r.pay_app_id)?.set(r.sov_line_id, { this_period: Number(r.this_period), stored: Number(r.stored) })
+    for (const r of (rows ?? []) as { pay_app_id: string; sov_line_id: string; this_period: number; stored: number; scheduled?: number | null }[]) {
+      billed.get(r.pay_app_id)?.set(r.sov_line_id, { this_period: Number(r.this_period), stored: Number(r.stored), scheduled: r.scheduled == null ? null : Number(r.scheduled) })
     }
   }
 
@@ -73,11 +73,16 @@ export async function newApplication(contractId: string, next: number, periodTo:
   return (data as { id: string }).id
 }
 
-/** What one line was billed this period. Zero on both means the row is removed rather than stored. */
+/**
+ * What one line was billed this period. Zero on both means the row is removed rather than stored —
+ * unless a scheduled value was set on it for this application, which stays.
+ */
 export async function setBilled(payAppId: string, sovLineId: string, value: Billed): Promise<void> {
   if (!value.this_period && !value.stored) {
-    const { error } = await db().from('pay_app_lines').delete().eq('pay_app_id', payAppId).eq('sov_line_id', sovLineId)
-    if (error) throw error
+    const gone = await db().from('pay_app_lines').delete().eq('pay_app_id', payAppId).eq('sov_line_id', sovLineId).is('scheduled', null)
+    if (gone.error) throw gone.error
+    const kept = await db().from('pay_app_lines').update({ this_period: 0, stored: 0 }).eq('pay_app_id', payAppId).eq('sov_line_id', sovLineId)
+    if (kept.error) throw kept.error
     return
   }
   const { error } = await db()
@@ -85,6 +90,21 @@ export async function setBilled(payAppId: string, sovLineId: string, value: Bill
     .upsert({ pay_app_id: payAppId, sov_line_id: sovLineId, this_period: value.this_period, stored: value.stored },
       { onConflict: 'pay_app_id,sov_line_id' })
   if (error) throw error
+}
+
+/**
+ * A line's scheduled value on one application (migration 0052), or null to go back to the value
+ * carried from the application before. Later applications carry it on until one sets its own.
+ */
+export async function setScheduledHere(payAppId: string, sovLineId: string, scheduled: number | null): Promise<void> {
+  const { error } = await db()
+    .from('pay_app_lines')
+    .upsert({ pay_app_id: payAppId, sov_line_id: sovLineId, scheduled }, { onConflict: 'pay_app_id,sov_line_id' })
+  if (error) throw error
+  if (scheduled == null) {
+    const tidy = await db().from('pay_app_lines').delete().eq('pay_app_id', payAppId).eq('sov_line_id', sovLineId).eq('this_period', 0).eq('stored', 0).is('scheduled', null)
+    if (tidy.error) throw tidy.error
+  }
 }
 
 /** Delete an application for payment; what was billed on it goes with it (the database cascades). */

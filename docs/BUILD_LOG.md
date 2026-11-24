@@ -3304,3 +3304,11 @@ pixel ratio; and frame timing under 6× CPU throttling.
 - Dates are checked: the PDF's period against the application's, and applications sharing a period end. A PDF read before dates were read can have its period read now ("Read the period from the PDF"); "Use the PDF's period and date" sets them on the application when the person chooses to.
 - The Summary table marks an application whose period end is the same as another's.
 - "Against the contractor's PDF" cut down to one table: a short heading per cause, one short factual line at most, then the figures (PDF | CAzen | difference). The "whose" tags and the long explanations are gone; the reasons are left to the person.
+
+## 2026-11-24 — Scheduled values per application; change orders as a plain total
+- Migration 0052 (applied): `pay_app_lines.scheduled`. Each application starts from the previous application's scheduled values; a value set on an application carries to the ones after it and never changes the ones before.
+- Column C shows the PDF's difference under the value ("PDF −$75,000") — click to take it on this application; right-click for the PDF's value, a typed value, or back to the carried one. A value set on the application is shown in burnt orange. Draft applications only.
+- The read window's choice is now "Use the PDF's values on this application" / "Keep the carried values"; the "Scheduled value" group on the comparison has the same button for all its lines.
+- A line that first appears on a later application is added at $0 with its value on that application.
+- A line CAzen has a value on that the PDF's lines don't include is flagged "not on PDF".
+- Change orders: line 2 is the total of the change order lines on that application; approval dates no longer decide anything. The summary's "this month" is the change from the previous application. The dates check is gone.

@@ -274,16 +274,16 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
 
                   {svRows.length > 0 && onSetScheduled && (
                     <div className={`pay-read-decide${svWaiting ? ' waiting' : ''}`}>
-                      <strong>The PDF shows different scheduled values than CAzen on {svRows.length} {svRows.length === 1 ? 'line' : 'lines'}</strong>
+                      <strong>Scheduled values differ from the previous application on {svRows.length} {svRows.length === 1 ? 'line' : 'lines'}</strong>
                       <span className="muted small">
                         {Math.abs(svNet) < 0.005
-                          ? ' — they net to $0, so the contractor moved money between lines; the contract sum is unchanged.'
+                          ? ' — net $0: money moved between lines.'
                           : ` — net ${svNet > 0 ? '+' : '−'}${money(Math.abs(svNet))}, which changes the contract sum.`}
                         {' '}<button className="link small" onClick={() => setSvOpen((o) => !o)}>{svOpen ? 'hide them' : 'show them'}</button>
                       </span>
                       {svOpen && (
                         <table className="pay-read-sv small">
-                          <thead><tr><th>Item</th><th>Description</th><th className="right">CAzen has</th><th></th><th className="right">PDF shows</th></tr></thead>
+                          <thead><tr><th>Item</th><th>Description</th><th className="right">Carried</th><th></th><th className="right">PDF shows</th></tr></thead>
                           <tbody>
                             {svRows.map((r) => {
                               const k = known.find((x) => x.id === r.id)!
@@ -298,12 +298,12 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                         </table>
                       )}
                       <div className="pay-read-choose">
-                        <button className={svChoice === 'pdf' ? 'on' : ''} onClick={() => setSvChoice('pdf')}>Change CAzen to the PDF’s values</button>
-                        <button className={svChoice === 'keep' ? 'on' : ''} onClick={() => setSvChoice('keep')}>Leave CAzen’s values as they are</button>
+                        <button className={svChoice === 'pdf' ? 'on' : ''} onClick={() => setSvChoice('pdf')}>Use the PDF’s values on this application</button>
+                        <button className={svChoice === 'keep' ? 'on' : ''} onClick={() => setSvChoice('keep')}>Keep the carried values</button>
                       </div>
                       <span className="muted small">{svChoice === 'pdf'
-                        ? 'The schedule of values in CAzen is updated to match. CAzen stores one scheduled value per line, so earlier applications are shown with the new values too.'
-                        : svChoice === 'keep' ? 'Nothing in CAzen changes. This application is checked against CAzen’s values, so these lines show as differences from the PDF.' : ''}</span>
+                        ? 'This application and the ones after it use the PDF’s values. Earlier applications keep theirs.'
+                        : svChoice === 'keep' ? 'The lines show as differences from the PDF, and can be changed one at a time on the sheet.' : ''}</span>
                     </div>
                   )}
 

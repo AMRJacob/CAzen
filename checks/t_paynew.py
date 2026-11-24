@@ -42,4 +42,4 @@ with sync_playwright() as p:
     pg.locator('.pay-read-new select').first.select_option('skip'); print('line 1 not added →',pg.inner_text('.pay-read-full button.primary'))
     pg.locator('.pay-read-new select').first.select_option('heading'); print('line 1 as a heading:',pg.locator('.pay-read-new.heading').count(),'row(s); its this-period box disabled:',pg.locator('.pay-read-new.heading input.cell').first.is_disabled())
     pg.click('.pay-read-full button.primary'); pg.wait_for_timeout(1200)
-    print('lines added:',[(l.get('item_no'),l['description'],l['scheduled_value'],l.get('is_heading',False)) for l in added]); print('billed:',[(x['this_period'],x['stored']) for x in billed],'| errors:',errs); b.close()
+    print('lines added:',[(l.get('item_no'),l['description'],l['scheduled_value'],l.get('is_heading',False)) for l in added]); print('billed:',[(x['this_period'],x['stored']) for x in billed if 'this_period' in x], '| on this application:',[x['scheduled'] for x in billed if 'scheduled' in x],'| errors:',errs); b.close()

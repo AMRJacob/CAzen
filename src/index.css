@@ -3521,6 +3521,9 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .pay-uncertify { display: flex; flex-direction: column; gap: 8px; }
 
 .pay-703 td.pay-pdf-diff { box-shadow: inset 0 -2px 0 #c0392b; background: rgba(192, 57, 43, 0.06); cursor: help; }
+.pay-703 td.pay-sv-here { color: #a0522d; font-weight: 600; }
+.pay-sv-diff { line-height: 1.1; }
+.pay-sv-diff button, .pay-sv-diff span { color: #c0392b; font-size: .72rem; padding: 0; }
 .pay-703 td.pay-pdf-diff.pay-rounded { background: rgba(47, 111, 176, 0.07); }
 .pay-against.has-diffs { border-color: rgba(192, 57, 43, 0.35); }
 .pay-against-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 6px 0 8px; }

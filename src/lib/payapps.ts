@@ -34,6 +34,11 @@ export interface Billed {
   this_period: number
   /** Column F: materials presently stored, not in D or E. */
   stored: number
+  /**
+   * Column C set on this application (migration 0052). Each application uses the latest value set
+   * on it or an application before it, and the schedule of values' own value before any was set.
+   */
+  scheduled?: number | null
 }
 
 export interface Contract {
@@ -125,6 +130,10 @@ export interface LineFigures {
   own?: Partial<Record<RoundColumn, CellWay>>
   /** The rate column I was figured at, so a row can say why it holds what it holds. */
   rate: number
+  /** Column C as the application before this one had it — what this one starts from. */
+  carried: number
+  /** Column C was set on this application itself. */
+  scheduledHere: boolean
   /** Column F on the previous application: what was sitting in storage a month ago. */
   storedBefore: number
   /**
@@ -219,9 +228,19 @@ export function figure(
    * undated one is taken to predate the applications, which is how a schedule entered before
    * anybody filled in approval dates keeps working.
    */
-  const onThisApplication = (l: SovLine): boolean =>
-    !l.change_order_id || !l.approved_on || l.approved_on <= application.period_to
-  const real = lines.filter((l) => !l.is_heading && onThisApplication(l))
+  /** Column C on application `upTo` (an index into earlier, or earlier.length for this one): the latest value set at or before it, or the schedule's own. */
+  const scheduledAt = (l: SovLine, upTo: number): number => {
+    const own = upTo === earlier.length ? billed.get(l.id)?.scheduled : undefined
+    if (own != null) return round(own)
+    for (let k = Math.min(upTo, earlier.length - 1); k >= 0; k--) {
+      const v = earlier[k].billed.get(l.id)?.scheduled
+      if (v != null) return round(v)
+    }
+    return l.scheduled_value
+  }
+  const carriedOf = new Map(lines.map((l) => [l.id, scheduledAt(l, earlier.length - 1)]))
+  // The line as it stands on this application, with its scheduled value as of this application.
+  const real = lines.filter((l) => !l.is_heading).map((l) => ({ ...l, scheduled_value: scheduledAt(l, earlier.length) }))
   const way = contract.rounding ?? {}
   // A cell's own way, where one is set on the application, then its column's.
   const wayAt = (cells: CellRounding | null | undefined, id: string, col: RoundColumn): CellWay | undefined => cells?.[id]?.[col] ?? way[col]
@@ -280,6 +299,7 @@ export function figure(
     const toDate = roundAs(exactToDate, wG)
     // A line held at its own rate ignores the step: that is what "variable rate" means.
     const rate = l.retainage_rate ?? workRate
+    const carried = carriedOf.get(l.id) ?? l.scheduled_value
     const exactPercent = l.scheduled_value > 0 ? (exactToDate / l.scheduled_value) * 100 : 0
     const exactBalance = round(l.scheduled_value - exactToDate)
     // Column I: the rate on work completed, and the stored rate on what is only stored.
@@ -301,6 +321,8 @@ export function figure(
       balance,
       retainage,
       rate,
+      carried,
+      scheduledHere: billed.get(l.id)?.scheduled != null,
       ...(Object.keys(exact).length ? { exact } : {}),
       ...(own ? { own } : {}),
     }
@@ -372,34 +394,20 @@ export function figure(
   const earnedLessRetainage = round(totals.toDate - retainageTotal)
 
   /**
-   * The change order summary at the foot of a G702.
-   *
-   * A change order counts as "this month" when the owner approved it inside this application's
-   * period — that is, after the previous application closed. A line with no approval date on
-   * it is taken to predate the applications, so it sits in the previous column from the second
-   * application on.
+   * The change order summary at the foot of a G702: what the change order lines came to on the
+   * application before this one, and what they have gained or lost since.
    */
-  const closedLast = last?.period_to ?? null
-  const coLines = real.filter((l) => l.change_order_id)   // already cut to this application
-  const inThisPeriod = (l: SovLine): boolean => {
-    if (!closedLast) return true
-    if (!l.approved_on) return false
-    return l.approved_on > closedLast && l.approved_on <= application.period_to
-  }
-  const add = (ls: SovLine[]) => sum(ls.filter((l) => l.scheduled_value > 0).map((l) => l.scheduled_value))
-  const take = (ls: SovLine[]) => round(-sum(ls.filter((l) => l.scheduled_value < 0).map((l) => l.scheduled_value)))
-  const soFar = coLines
-  const thisMonth = soFar.filter(inThisPeriod)
-  const before = soFar.filter((l) => !inThisPeriod(l))
+  const coPrevious = earlier.length ? sum(lines.filter((l) => !l.is_heading && l.change_order_id).map((l) => scheduledAt(l, earlier.length - 1))) : 0
+  const coMove = round(changeOrders - coPrevious)
   const changeOrderSummary = {
-    previousAdditions: add(before),
-    previousDeductions: take(before),
-    thisAdditions: add(thisMonth),
-    thisDeductions: take(thisMonth),
-    totalAdditions: add(soFar),
-    totalDeductions: take(soFar),
-    net: round(add(soFar) - take(soFar)),
+    previousAdditions: Math.max(0, coPrevious),
+    previousDeductions: Math.max(0, -coPrevious),
+    thisAdditions: Math.max(0, coMove),
+    thisDeductions: Math.max(0, -coMove),
+    totalAdditions: 0, totalDeductions: 0, net: changeOrders,
   }
+  changeOrderSummary.totalAdditions = round(changeOrderSummary.previousAdditions + changeOrderSummary.thisAdditions)
+  changeOrderSummary.totalDeductions = round(changeOrderSummary.previousDeductions + changeOrderSummary.thisDeductions)
 
   return {
     lines: figured,

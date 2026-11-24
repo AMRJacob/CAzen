@@ -13,12 +13,11 @@ import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { PdfPreview } from '../components/PdfPreview'
 import { putFile, readFile, safeName, SECTIONS } from '../lib/files'
-import { payText } from '../lib/pdf/payText'
 import { againstPdf, COL_SAYS, ownArithmetic, whyTheyDiffer, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
-  addSovLine, listContracts, loadContract, newApplication, removeApplication, setApplication, setBilled, setContract,
+  addSovLine, listContracts, loadContract, newApplication, removeApplication, setApplication, setBilled, setContract, setScheduledHere,
   setSovLine, setSteps,
   type LoadedContract,
 } from '../lib/payappsDb'
@@ -524,29 +523,8 @@ function checkAgainstPdf(data: LoadedContract, index: number, figures: Figures) 
     coDates: [...dates].map(([date, total]) => ({ date: date || null, total })),
     retainageFix: retainageFix ? { label: retainageFix.label } : null,
     own: ownArithmetic(pdf),
-    dates: datesTrouble(data, index),
   }
   return { diffs, why: whyTheyDiffer(diffs, ctx), retainageFix }
-}
-
-/**
- * What can't be right about an application's dates: a period that doesn't match the PDF's, or that
- * ends on or before the one before it (which is what several applications entered on one day all
- * ending that day looks like). The dates decide which change orders count on which application.
- */
-function datesTrouble(data: LoadedContract, index: number): string[] {
-  const app = data.applications[index]
-  const out: string[] = []
-  const pdfTo = app.pdf_read?.periodTo
-  if (pdfTo && pdfTo !== app.period_to) out.push(`Period on the PDF: ${usDate(pdfTo)}. In CAzen: ${usDate(app.period_to)}.`)
-  const same = data.applications.filter((a) => a.id !== app.id && a.period_to === app.period_to).map((a) => a.number)
-  if (same.length) out.push(`Same period end as Application${same.length === 1 ? '' : 's'} ${same.join(', ')} (${usDate(app.period_to)}).`)
-  else {
-    const before = data.applications[index - 1]
-    if (before && before.period_to > app.period_to) out.push(`Period ends before Application ${before.number}’s (${usDate(before.period_to)}).`)
-  }
-  if (app.pdf_read && !pdfTo) out.push('The PDF’s period hasn’t been read.')
-  return out
 }
 
 /** A cause in a word or two, for the table of applications. */
@@ -581,8 +559,7 @@ function PdfChecks({ data, all, onOpen }: { data: LoadedContract; all: Figures[]
             return (
               <tr key={a.id} onClick={() => onOpen(a.id)} className={a.pdf_read ? (ok ? 'ok' : 'off') : 'unread'}>
                 <td>{a.number}{a.status === 'draft' && <span className="tag">draft</span>}</td>
-                <td>{usDate(a.period_to)}{a.pdf_read?.periodTo && a.pdf_read.periodTo !== a.period_to && <span className="pay-read-warn small"> · PDF: {usDate(a.pdf_read.periodTo)}</span>}
-                  {data.applications.some((b) => b.id !== a.id && b.period_to === a.period_to) && <span className="pay-read-warn small" title="Another application has the same period end"> · same as another</span>}</td>
+                <td>{usDate(a.period_to)}{a.pdf_read?.periodTo && a.pdf_read.periodTo !== a.period_to && <span className="pay-read-warn small"> · PDF: {usDate(a.pdf_read.periodTo)}</span>}</td>
                 <td className="right mono">{asked != null ? money(asked) : '—'}</td>
                 <td className={`right mono${asked != null && Math.abs(asked - f.g702.due) >= 0.005 ? ' pay-read-warn' : ''}`}>{money(f.g702.due)}</td>
                 <td className={`right mono${certOff ? ' pay-read-warn' : ''}`} title={certOff ? `Certified at ${money(a.certified_sum!)}; the figures now work out to ${money(f.g702.due)}` : undefined}>{a.certified_sum != null ? money(a.certified_sum) : '—'}</td>
@@ -700,19 +677,6 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       onChanged()
     } catch (e) { onTrouble(`The PDF is open beside the figures but couldn’t be kept for next time: ${message(e)}`) }
   }
-  // A PDF read before CAzen read dates: read its period and date now, from the PDF kept with it.
-  // Only the reading is kept; the application's own dates are changed by the person, if at all.
-  const [readingDates, setReadingDates] = useState(false)
-  async function readDates() {
-    if (!pdf?.path || !project) return
-    setReadingDates(true)
-    try {
-      const { table } = await payText(await readFile(project, pdf.path))
-      if (!table.periodTo && !table.appliedOn) { onTrouble('CAzen couldn’t find a period or application date on the PDF.'); return }
-      await setApplication(app.id, { pdf_read: { ...pdf, periodTo: table.periodTo, appliedOn: table.appliedOn } } as never)
-      onChanged()
-    } catch (e) { onTrouble(message(e)) } finally { setReadingDates(false) }
-  }
   const { diffs, why, retainageFix } = useMemo(() => checkAgainstPdf(data, index, figures), [data, index, figures])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
@@ -753,6 +717,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     },
   })
   const [cellMenu, setCellMenu] = useState<{ lineId: string; col: RoundColumn; x: number; y: number } | null>(null)
+  // Column C on this application: right-click for the PDF's value, a value typed in, or the carried one.
+  const [svMenu, setSvMenu] = useState<{ lineId: string; x: number; y: number } | null>(null)
+  const [svEdit, setSvEdit] = useState<string | null>(null)
   const roundCell = (exact: number | undefined, pct = false, lineId: string | null = null, col?: PdfCol) => {
     const d = col ? diffAt(lineId, col) : undefined
     const rc = col === 'G' || col === 'pct' || col === 'H' || col === 'I' ? col : null
@@ -790,7 +757,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                     <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
                       {l.description}
                     </td>
-                    <td {...roundCell(undefined, false, l.id, 'C')} data-label="Scheduled value"><Money n={l.scheduled_value} /></td>
+                    <ScheduledCell f={f} diff={diffAt(l.id, 'C')} editable={editable} editing={svEdit === l.id} before={data.applications[index - 1]?.number}
+                      onMenu={(x, y) => setSvMenu({ lineId: l.id, x, y })}
+                      onSet={async (n) => { setSvEdit(null); try { await setScheduledHere(app.id, l.id, n); onChanged() } catch (e) { onTrouble(message(e)) } }}
+                      onCancel={() => setSvEdit(null)} />
                     <td {...roundCell(undefined, false, l.id, 'D')} data-label="From previous" data-nothing={f.previous ? undefined : ''}><Money n={f.previous} /></td>
                     <td className="right" data-label="This period" data-nothing={editable || f.thisPeriod ? undefined : ''}>
                       {editable
@@ -949,10 +919,11 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         onRoundRetainage={retainageFix ? async () => {
           try { await setContract(data.contract.id, { rounding: { ...(data.contract.rounding ?? {}), I: retainageFix.way } }); onChanged() } catch (e) { onTrouble(message(e)) }
         } : undefined}
-        readingDates={readingDates}
-        onReadDates={pdf.path && !pdf.periodTo ? () => void readDates() : undefined}
-        onUseDates={pdf.periodTo && pdf.periodTo !== app.period_to ? async () => {
-          try { await setApplication(app.id, { period_to: pdf.periodTo, ...(pdf.appliedOn ? { applied_on: pdf.appliedOn } : {}) } as never); onChanged() } catch (e) { onTrouble(message(e)) }
+        onScheduledFromPdf={editable ? async (rows) => {
+          try {
+            for (const d of rows) if (d.lineId && d.col === 'C') await setScheduledHere(app.id, d.lineId, d.pdf)
+            onChanged()
+          } catch (e) { onTrouble(message(e)) }
         } : undefined}
         onBeside={() => (beside ? setBeside(null) : void showBeside())} onAttach={(f) => void attachPdf(f)} onForget={async () => {
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
@@ -974,7 +945,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         )}
         {editable && (
           <PayRead
-            known={data.lines.map((l) => ({ id: l.id, item_no: l.item_no, description: l.description, scheduled: l.scheduled_value,
+            known={data.lines.map((l) => ({ id: l.id, item_no: l.item_no, description: l.description,
+              scheduled: figures.lines.find((x) => x.line.id === l.id)?.line.scheduled_value ?? l.scheduled_value,
               previous: figures.lines.find((x) => x.line.id === l.id)?.previous ?? 0, heading: l.is_heading }))}
             current={valueOf}
             number={app.number}
@@ -983,11 +955,17 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             periodTo={app.period_to}
             onAddLines={async (lines) => {
               const ids: string[] = []
-              for (const [k, l] of lines.entries()) ids.push(await addSovLine(data.contract.id, { ...l, sort: nextSort + k }))
+              // A line that first shows up on a later application is $0 on the ones before it: its value
+              // goes on this application, and carries on from here.
+              for (const [k, l] of lines.entries()) {
+                const id = await addSovLine(data.contract.id, { ...l, sort: nextSort + k, ...(index ? { scheduled_value: 0 } : {}) })
+                if (index && l.scheduled_value) await setScheduledHere(app.id, id, l.scheduled_value)
+                ids.push(id)
+              }
               return ids
             }}
             onSetScheduled={async (changes) => {
-              for (const c of changes) await setSovLine(c.id, { scheduled_value: c.scheduled_value })
+              for (const c of changes) await setScheduledHere(app.id, c.id, c.scheduled_value)
             }}
             onKeep={async (rows, pdf, bytes) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
@@ -1153,6 +1131,18 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               }} />
           )
         })()}
+        {svMenu && (() => {
+          const f = figures.lines.find((x) => x.line.id === svMenu.lineId)
+          if (!f) return null
+          const d = diffAt(svMenu.lineId, 'C')
+          const set = async (n: number | null) => { setSvMenu(null); try { await setScheduledHere(app.id, svMenu.lineId, n); onChanged() } catch (e) { onTrouble(message(e)) } }
+          const items: { label: string; note?: string; run: () => void }[] = []
+          if (d) items.push({ label: `Use the PDF’s ${money(d.pdf)}`, note: `${signed(d.pdf - d.app)} on this application and the ones after it`, run: () => void set(d.pdf) })
+          items.push({ label: 'Enter a value for this application…', run: () => { setSvMenu(null); setSvEdit(svMenu.lineId) } })
+          if (f.scheduledHere) items.push({ label: `Back to ${money(f.carried)}`, note: index ? `carried from Application ${data.applications[index - 1].number}` : 'the schedule of values', run: () => void set(null) })
+          return <LineMenu at={svMenu} onClose={() => setSvMenu(null)} title={`${[f.line.item_no, f.line.description].filter(Boolean).join(' ')} — scheduled value on Application ${app.number}`}
+            items={items} onPick={(i) => items[i].run()} />
+        })()}
         {cellMenu && (() => {
           const l = data.lines.find((x) => x.id === cellMenu.lineId)
           const mine = app.rounding?.[cellMenu.lineId]?.[cellMenu.col]
@@ -1197,12 +1187,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage, onReadDates, onUseDates, readingDates }: {
-  /** Read the period and date off a PDF read before CAzen read them. */
-  onReadDates?: () => void
-  readingDates?: boolean
-  /** Give the application the period and date the PDF has. */
-  onUseDates?: () => void
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage, onScheduledFromPdf }: {
+  /** Take the PDF's scheduled values onto this application, for the lines given. */
+  onScheduledFromPdf?: (rows: Discrepancy[]) => void
   /** Line 2 as CAzen has it: the change order lines on this application. */
   coHere: number
   /** The differences sorted by what causes them. */
@@ -1256,8 +1243,7 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
                       {grp.detail && <span className="muted small"> — {grp.detail}</span>}
                       {grp.follow > 0 && <span className="muted small"> (+{grp.follow} {grp.follow === 1 ? 'figure' : 'figures'} carried from {grp.rows.length === 1 ? 'it' : 'these'})</span>}
                       {grp.key === 'retainage' && onRoundRetainage && <button className="primary-lite small" onClick={onRoundRetainage}>Round retainage the PDF’s way</button>}
-                      {grp.key === 'dates' && onReadDates && <button className="primary-lite small" onClick={onReadDates} disabled={readingDates}>{readingDates ? 'Reading the PDF…' : 'Read the period from the PDF'}</button>}
-                      {grp.key === 'dates' && onUseDates && <button className="primary-lite small" onClick={onUseDates}>Use the PDF’s period{pdf.appliedOn ? ' and date' : ''}</button>}
+                      {grp.key === 'scheduled' && onScheduledFromPdf && <button className="primary-lite small" onClick={() => onScheduledFromPdf(grp.rows)}>Use the PDF’s values on this application</button>}
                     </td>
                   </tr>
                   {grp.rows.map((d, i) => (
@@ -1286,6 +1272,58 @@ const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: 
 const CELL_SAYS: Record<CellWay, string> = { exact: 'Left exact', nearest: 'Rounded to the nearest whole', up: 'Rounded up', down: 'Rounded down', period: 'Each application’s retainage rounded, then added up' }
 
 /** Right-click on a line of the schedule of values. */
+const signed = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })
+
+/**
+ * Column C on one application. It starts from the previous application's value; where the PDF
+ * read for this application has another, the difference shows under it with a button to take it.
+ */
+function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCancel }: {
+  f: import('../lib/payapps').LineFigures
+  diff?: Discrepancy
+  editable: boolean
+  editing: boolean
+  before?: number
+  onMenu: (x: number, y: number) => void
+  onSet: (n: number) => void
+  onCancel: () => void
+}) {
+  const [typed, setTyped] = useState('')
+  const value = f.line.scheduled_value
+  const from = before ? `Application ${before}` : 'the schedule of values'
+  const title = [
+    f.scheduledHere ? `Set on this application. Carried from ${from}: ${money(f.carried)}.` : `Carried from ${from}.`,
+    diff ? (diff.missing ? 'This line isn’t on the PDF.' : `PDF: ${money(diff.pdf)} (${signed(diff.pdf - diff.app)}).`) : '',
+    editable ? 'Right-click to change it on this application.' : '',
+  ].filter(Boolean).join('\n')
+  if (editing) {
+    return (
+      <td className="right" data-label="Scheduled value">
+        <MoneyInput className="cell mono right" value={typed || String(value)} autoFocus
+          onChange={(raw) => setTyped(raw)}
+          onBlur={() => (typed ? onSet(Number(typed) || 0) : onCancel())}
+          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          aria-label={`Scheduled value for ${f.line.description}`} />
+      </td>
+    )
+  }
+  return (
+    <td className={`right mono${diff ? ' pay-pdf-diff' : ''}${f.scheduledHere ? ' pay-sv-here' : ''}`} data-label="Scheduled value" title={title}
+      onContextMenu={editable ? (e) => { e.preventDefault(); onMenu(e.clientX, e.clientY) } : undefined}>
+      <Money n={value} />
+      {diff && (
+        <div className="pay-sv-diff">
+          {editable
+            ? <button className="link small" onClick={(e) => { e.stopPropagation(); onSet(diff.pdf) }} title={`Use the PDF’s ${money(diff.pdf)} on this application`}>
+                {diff.missing ? 'not on PDF' : `PDF ${signed(diff.pdf - diff.app)}`}
+              </button>
+            : <span className="small">{diff.missing ? 'not on PDF' : `PDF ${signed(diff.pdf - diff.app)}`}</span>}
+        </div>
+      )}
+    </td>
+  )
+}
+
 function LineMenu({ at, title, items, onPick, onClose }: {
   at: { x: number; y: number }
   title: string

@@ -25,6 +25,8 @@ export interface Discrepancy {
   col: PdfCol | G702Key | CoKey
   pdf: number
   app: number
+  /** The line isn't on the PDF at all. */
+  missing?: boolean
 }
 
 export const COL_SAYS: Record<PdfCol, string> = {
@@ -73,6 +75,14 @@ export function againstPdf(figures: Figures, pdf: PdfRead): Discrepancy[] {
     const o = ours(f)
     for (const [c, v] of Object.entries(p) as [PdfCol, number][]) {
       if (v != null && !agrees(c, v, o[c])) out.push({ where: 'line', lineId: f.line.id, label: [f.line.item_no, f.line.description].filter(Boolean).join(' '), col: c, pdf: v, app: o[c] })
+    }
+  }
+  // A line CAzen has a value on that the PDF doesn't list, where the PDF's lines were read.
+  if (Object.keys(pdf.lines).length) {
+    for (const f of figures.lines) {
+      if (!pdf.lines[f.line.id] && Math.abs(f.line.scheduled_value) >= 0.005) {
+        out.push({ where: 'line', lineId: f.line.id, label: [f.line.item_no, f.line.description].filter(Boolean).join(' '), col: 'C', pdf: 0, app: f.line.scheduled_value, missing: true })
+      }
     }
   }
   if (pdf.total) {
@@ -186,7 +196,6 @@ export interface WhyContext {
 
 const near = (a: number, b: number, by = 0.5) => Math.abs(a - b) < by
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-const usDay = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}`
 
 /**
  * Differences sorted by what causes them, so twenty red figures that come from one change order
@@ -219,7 +228,6 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     // The same figures, where they also differ from CAzen, are shown here and not again.
     for (const s of unexplained) for (const d of diffs) if (s.key && d.col === s.key) used.add(d)
   }
-  if (ctx.dates?.length) groups.push({ key: 'dates', whose: 'cazen', rows: [], follow: 0, title: 'Dates', detail: ctx.dates.join(' ') })
 
   // Change orders: line 2, and what line 2 carries into lines 3 and 9 and the sheet's totals.
   const theirs = diffs.find((d) => !used.has(d) && d.col === 'changeOrders')
@@ -232,12 +240,10 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
       (d.where === 'total' && (d.col === 'C' || d.col === 'H') && near(d.app - d.pdf, coGap, 2)) ||
       (d.where === 'total' && d.col === 'pct')))
     follows.forEach((d) => used.add(d))
-    const dated = ctx.coDates.filter((c) => Math.abs(c.total) > 0.005)
-    const when = dated.map((c) => `${usd(c.total)} ${c.date ? `approved ${usDay(c.date)}` : 'with no approval date'}`).join(', ')
     take({
-      key: 'co', rows, follow: follows.length, whose: ctx.dates?.length ? 'cazen' : 'either',
+      key: 'co', rows, follow: follows.length, whose: 'either',
       title: 'Change orders',
-      detail: when ? `Counted from the approval date: ${when}.` : undefined,
+      detail: 'CAzen’s line 2 is the total of the lines marked as change order lines.',
     })
   }
 
@@ -258,7 +264,7 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
   }
   take({ key: 'scheduled', whose: 'contractor', rows: roots.C, follow: followers.C,
     title: 'Scheduled value',
-    detail: 'The PDF’s schedule of values differs from CAzen’s.' })
+    detail: 'Each application starts from the previous one’s values; right-click a value on the sheet to change it on this application.' })
   take({ key: 'previous', whose: 'either', rows: roots.D, follow: followers.D,
     title: 'From previous',
     detail: 'Compared with what CAzen’s earlier applications billed.' })
