@@ -11,6 +11,30 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:05 CST (a Set Introduction zone, in order)
+
+Jacob, 10:35: a "Set Introduction" zone at the beginning, like the project manual and the
+drawings, where its pages can be put in order.
+
+- **The upload's review now has three zones**: *Set Introduction*, then *Project manual pages*,
+  then the drawings. The Set Introduction card lists its pages in filing order — order number,
+  picture (opens the preview), the page's place in the upload, and its first line of text (the
+  firm, a discipline's heading) — with ↑ ↓ to move each. Shown for a change document, or for any
+  upload that has such pages; otherwise an empty zone says what goes there.
+- **Pages marked Set Introduction are no longer listed among the drawings.** Rows in the zone are
+  chosen and right-clicked like the others (Move to drawings, Move to the project manual, Drawing
+  cover sheet, Remove from the upload); the chosen-pages bar works across all three.
+- **The set introduction's file is put together in that order** (`introOrder`; pages not yet
+  placed follow in upload order). Reopening a saved document and only reordering its
+  introduction counts as a change and rebuilds the file.
+
+`checks/t_intro.py` (change_doc.pdf): two introduction pages listed apart from the one drawing;
+page 2 moved up; the saved cover file is page 2 then page 1. `t_changedoc`, `t_resort`,
+`t_coversheet` updated to find those pages in the zone; they and `t_split`, `t_upload_bg`,
+`t_secbox` pass. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 10:50 CST (a manual page's section named from its preview; boxes for number and title)
 
 Jacob, 10:27–10:28, with the preview of Addendum 2's Cash Allowances page: change the section

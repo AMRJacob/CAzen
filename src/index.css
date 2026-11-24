@@ -3769,3 +3769,9 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .upload-min { position: sticky; float: right; top: 4px; margin-right: 14px; }
 @media (max-width: 620px) { .upload-chip { left: 12px; right: 12px; width: auto; top: calc(10px + env(safe-area-inset-top)); } }
 .pv-strip .pv-boxes { display: flex; gap: 12px; align-items: center; padding-bottom: 8px; white-space: nowrap; }
+.change-intro .intro-table { width: 100%; }
+.change-intro .intro-table td { vertical-align: middle; }
+.change-intro .intro-n { width: 28px; font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+.change-intro .thumb-cell { width: 70px; }
+.change-intro .intro-head { width: 100%; }
+.change-intro .intro-move button { padding: 2px 8px; }

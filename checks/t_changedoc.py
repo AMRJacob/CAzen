@@ -55,7 +55,8 @@ with sync_playwright() as p:
     pg.locator('.upload-panel').screenshot(path='changedoc.png')
     # a page moved by hand: the drawing marked as cover, then back
     pg.locator('select.role-cell').last.select_option('cover'); pg.wait_for_timeout(300)
-    print('drawing as cover → save:',pg.inner_text(btn)); pg.locator('select.role-cell').last.select_option('sheet'); pg.wait_for_timeout(300)
+    print('drawing as cover → save:',pg.inner_text(btn),'| intro rows:',pg.locator('.change-intro .intro-table tr').count())
+    pg.locator('.change-intro .intro-table tr').last.locator('td.intro-n').click(button='right'); pg.click('.pick-menu button:has-text("Move to drawings")'); pg.wait_for_timeout(300)
     # The drawing chosen by its page number and made a manual page with the bar, then its section
     # made drawings again ("They're drawings").
     dr=lambda: pg.locator('.upload-panel table:not(.change-manual-table) > tbody > tr')

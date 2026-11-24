@@ -33,7 +33,7 @@ import { useClickAway } from '../lib/clickAway'
 import { joinPages } from '../lib/pdf/bundle'
 import { putFile, SECTIONS } from '../lib/files'
 import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
-import { classifyPages, countOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
+import { classifyPages, countOf, linesOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
 import { ChangeManual, type ManualEdit, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
 import { UPLOADED, useUploads } from '../lib/uploadHost'
@@ -1046,6 +1046,20 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   // the drawings list or in a manual section's page list, then moved at once with the bar that
   // appears or a right-click. Kept by each page's place in the upload, so the choice spans both.
   const [sel, setSel] = useState<Set<number>>(new Set())
+  // The set introduction's pages in the order they are to be filed (by place in the upload); a
+  // page not yet placed follows in its upload order.
+  const [introOrder, setIntroOrder] = useState<number[]>([])
+  const inIntroOrder = (ds: Draft[]) => {
+    const rank = (d: Draft) => { const k = introOrder.indexOf(d.pageIndex); return k < 0 ? introOrder.length + d.pageIndex : k }
+    return ds.filter((d) => d.include && d.role === 'cover').sort((a, b) => rank(a) - rank(b))
+  }
+  const moveIntro = (at: number, by: -1 | 1) => {
+    const order = inIntroOrder(drafts).map((d) => d.pageIndex)
+    const k = order.indexOf(at), j = k + by
+    if (k < 0 || j < 0 || j >= order.length) return
+    ;[order[k], order[j]] = [order[j], order[k]]
+    setIntroOrder(order)
+  }
   const lastSel = useRef<number | null>(null)
   const pickPage = (at: number, e: React.MouseEvent, list: number[]) => {
     setSel((cur) => {
@@ -1244,7 +1258,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   // The date column only appears when a template is looking for one, since most sheets take
   // the set's date and a column of empty boxes is a column in the way.
   const datesRead = templates.some((t) => t.regions.date) || drafts.some((d) => d.date)
-  const covers = drafts.filter((d) => d.include && d.role === 'cover')
+  const covers = inIntroOrder(drafts)
   const chosen = drafts.filter((d) => d.include && d.role === 'sheet')
   // The manual pages, remade only when which pages they are changes: typing a sheet number must
   // not re-cut the manual.
@@ -1287,7 +1301,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
     const keptSheets = chosen.filter((d) => d.origin?.t === 'sheet')
     const drop = drafts.filter((d) => d.origin?.t === 'sheet' && !(d.include && d.role === 'sheet')).map((d) => (d.origin as { revId: string }).revId)
     const specsOut = keptSpecs.filter((k) => k.keep < k.rev.pages)
-    const coverNow = drafts.filter((d) => d.include && d.role === 'cover')
+    const coverNow = covers
     const coverWas = drafts.filter((d) => d.origin?.t === 'cover')
     const coverChanged = coverNow.length !== coverWas.length || coverNow.some((d, k) => d !== coverWas[k])
     const left = keptSheets.length + newSheets.length + sections.length + keptSpecs.reduce((n, k) => n + (k.keep ? 1 : 0), 0)
@@ -1574,6 +1588,36 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               <button className="link" onClick={() => setSel(new Set())}>Clear</button>
             </div>
           )}
+          {(covers.length > 0 || !!DOCUMENT_FOR[kind]) && <div className="card change-intro">
+            <h3>Set Introduction <span className="muted small">{covers.length} {covers.length === 1 ? 'page' : 'pages'}</span></h3>
+            <p className="muted small">The change document’s own pages and any cover sheets or narratives from the disciplines, filed together as the document in this order.</p>
+            {covers.length ? (
+              <table className="intro-table">
+                <tbody>
+                  {covers.map((d, k) => {
+                    const i = drafts.indexOf(d)
+                    const head = linesOf(d.page.text).map((l) => l.str.trim()).find((t) => (t.match(/[A-Za-z]/g) ?? []).length >= 4) ?? ''
+                    return (
+                      <tr key={d.pageIndex} className={`page-row${sel.has(d.pageIndex) ? ' picked' : ''}`}
+                        onClick={(e) => { if (!onControl(e)) pickPage(d.pageIndex, e, covers.map((x) => x.pageIndex)) }}
+                        onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(d.pageIndex) }) }}>
+                        <td className="intro-n">{k + 1}</td>
+                        <td className="thumb-cell"><PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} /></td>
+                        <td className="small nowrap">Upload page {d.pageIndex + 1}</td>
+                        <td className="intro-head">{head ? (head.length > 80 ? head.slice(0, 78) + '…' : head) : <span className="muted">no text</span>}</td>
+                        <td className="intro-move nowrap">
+                          <button className="icon" disabled={k === 0} onClick={() => moveIntro(d.pageIndex, -1)} aria-label={`Move upload page ${d.pageIndex + 1} up`} title="Earlier">↑</button>
+                          <button className="icon" disabled={k === covers.length - 1} onClick={() => moveIntro(d.pageIndex, 1)} aria-label={`Move upload page ${d.pageIndex + 1} down`} title="Later">↓</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="drop-empty muted small">Set introduction pages go here — the cover, a narrative, a discipline’s cover sheet. Choose pages below and make them Set Introduction.</div>
+            )}
+          </div>}
           {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div>
             {specPages.length > 0 ? (
               <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
@@ -1651,18 +1695,20 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           </div>
 
           <div>
-          <p className="muted small drop-hint">Drawings and cover pages. Click a row to choose it — Shift-click for a run, Ctrl-click for one more — then right-click, or use the bar above, to move or remove them.</p>
+          <p className="muted small drop-hint">Drawings. Click a row to choose it — Shift-click for a run, Ctrl-click for one more — then right-click, or use the bar above, to move or remove them.</p>
           <table>
             <thead><tr>
               <th>Page</th><th>View</th><th title="A drawing; the set introduction — the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Revision date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
-                const listed = drafts.filter((x) => !(x.role === 'spec' && x.include && x.origin?.t !== 'spec')).map((x) => x.pageIndex)
+                const listed = drafts.filter((x) => !(x.role === 'spec' && x.include && x.origin?.t !== 'spec') && !(x.role === 'cover' && x.include)).map((x) => x.pageIndex)
                 // Manual pages are with the project manual above, not here among the drawings.
                 // (Re-sorting a saved document, its pages already in the manual are listed here too, so
                 // each can be moved on its own.)
                 if (d.role === 'spec' && d.include && d.origin?.t !== 'spec') return null
+                // The set introduction's pages are in their own zone above.
+                if (d.role === 'cover' && d.include) return null
                 return (
                   <tr key={d.pageIndex} className={`page-row${d.include ? '' : ' skipped'}${sel.has(d.pageIndex) ? ' picked' : ''}`}
                     // A click on the row, outside its boxes and buttons, chooses it: Shift for a run,
