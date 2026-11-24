@@ -16,9 +16,9 @@ from it.
 Ten asks from Jacob, 15:27–15:54, straight after a site meeting. Test browser only throughout.
 
 **One report from several pages — page groups** (three UCA sites on one trip). A group is the
-pages sharing `group_id`, each carrying `group_name`; **migration `0054_page_groups` (two columns)
-is written and NOT applied** — refused from this session without an OK in chat, as before; until it
-is, grouping is not offered (`canGroupPages`). On the contents page: Ctrl/Cmd-click picks a page,
+pages sharing `group_id`, each carrying `group_name`; migration `0054_page_groups` (two columns)
+**applied at 16:15 with Jacob's OK in chat**, and checked. A device notices the columns the next
+time the app is opened with signal (`canGroupPages`). On the contents page: Ctrl/Cmd-click picks a page,
 Shift-click a run; right-click → *Group these N pages*. On a phone: corner menu → *Group pages*,
 tap the pages, *Group*. The group is a heading over its pages — its name (double-click to rename),
 how many and when, and *Make the field report* (or the meeting notes). Right-click a grouped page:
