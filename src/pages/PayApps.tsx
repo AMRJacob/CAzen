@@ -159,7 +159,7 @@ export default function PayApps() {
           </div>
 
           {tab === 'summary' && latest && (
-            <Summary data={data} figures={latest} all={figured} onChanged={load} onTrouble={setError} />
+            <Summary data={data} figures={latest} all={figured} onChanged={load} onTrouble={setError} onOpen={setTab} />
           )}
           {tab !== 'summary' && (() => {
             const i = data.applications.findIndex((a) => a.id === tab)
@@ -233,7 +233,8 @@ function NewApplication({ number, busy, onFile, onBlank, onCancel, onTrouble }: 
 
 // ---------- Summary ----------
 
-function Summary({ data, figures, all, onChanged, onTrouble }: {
+function Summary({ data, figures, all, onChanged, onTrouble, onOpen }: {
+  onOpen: (id: string) => void
   data: LoadedContract
   figures: Figures
   all: Figures[]
@@ -269,6 +270,7 @@ function Summary({ data, figures, all, onChanged, onTrouble }: {
         </p>
       </div>
 
+      {data.applications.some((a) => a.pdf_read) && <PdfChecks data={data} all={all} onOpen={onOpen} />}
       <AgainstTheSchedule data={data} figures={figures} />
       <details className="pay-more">
         <summary>By trade, and retainage</summary>
@@ -495,6 +497,84 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
 
 // ---------- One application ----------
 
+/**
+ * One application set against the contractor's PDF read for it: the figures that differ, sorted by
+ * cause, and a way of rounding retainage that would make it agree, if there is one.
+ */
+function checkAgainstPdf(data: LoadedContract, index: number, figures: Figures) {
+  const app = data.applications[index]
+  const pdf = app.pdf_read ?? null
+  if (!pdf) return { diffs: [] as Discrepancy[], why: [] as ReturnType<typeof whyTheyDiffer>, retainageFix: null as { way: RoundWay; label: string } | null }
+  const diffs = againstPdf(figures, pdf)
+  let retainageFix: { way: RoundWay; label: string } | null = null
+  const iDiffs = (f: Figures) => againstPdf(f, pdf).filter((d) => d.col === 'I' || d.col === 'retainageTotal').length
+  if (iDiffs(figures)) {
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding }))
+    for (const way of ['period', 'nearest', 'up', 'down'] as RoundWay[]) {
+      if (way === data.contract.rounding?.I) continue
+      const f = figure({ ...data.contract, rounding: { ...(data.contract.rounding ?? {}), I: way } }, data.lines, app, history[index].billed, history.slice(0, index), data.steps)
+      if (!iDiffs(f)) { retainageFix = { way, label: ROUND_SAYS[way] }; break }
+    }
+  }
+  const dates = new Map<string, number>()
+  for (const f of figures.lines) if (f.line.change_order_id) dates.set(f.line.approved_on ?? '', (dates.get(f.line.approved_on ?? '') ?? 0) + f.line.scheduled_value)
+  const ctx: WhyContext = {
+    coHere: figures.g702.changeOrders, periodTo: app.period_to, pdfPeriodTo: pdf.periodTo,
+    coDates: [...dates].map(([date, total]) => ({ date: date || null, total })),
+    retainageFix: retainageFix ? { label: retainageFix.label } : null,
+  }
+  return { diffs, why: whyTheyDiffer(diffs, ctx), retainageFix }
+}
+
+/** A cause in a word or two, for the table of applications. */
+const CAUSE_SHORT: Record<string, string> = {
+  co: 'Change orders', previous: '“From previous”', scheduled: 'Scheduled values', entered: 'This period or stored',
+  retainage: 'Retainage rounding', other: 'Completed or balance', cover: 'Cover sheet totals',
+}
+
+/**
+ * Every application against the contractor's PDF read for it, in one table: what the contractor
+ * asked for, what CAzen works out, what was certified, and — where they part — why, in a word.
+ */
+function PdfChecks({ data, all, onOpen }: { data: LoadedContract; all: Figures[]; onOpen: (id: string) => void }) {
+  const rows = data.applications.map((a, i) => ({ a, f: all[i], c: checkAgainstPdf(data, i, all[i]) }))
+  const off = rows.filter((r) => r.a.pdf_read && r.c.diffs.length).length
+  const unread = rows.filter((r) => !r.a.pdf_read).length
+  return (
+    <div className="card pay-checks">
+      <h3>Against the contractor’s PDFs</h3>
+      <p className="muted small">
+        {off ? <><strong className="pay-read-warn">{off} of {rows.length - unread}</strong> applications read from a PDF {off === 1 ? 'differs' : 'differ'} from CAzen’s arithmetic.</> : rows.length - unread ? 'Every application read from a PDF agrees with CAzen’s arithmetic.' : ''}
+        {unread ? ` ${unread} ${unread === 1 ? 'has' : 'have'} no PDF read to check against.` : ''} Click one to open it.
+      </p>
+      <table className="pay-checks-table">
+        <thead><tr><th>Application</th><th>Period to</th><th className="right">Contractor asked</th><th className="right">CAzen works out</th><th className="right">Certified</th><th>Checked against the PDF</th></tr></thead>
+        <tbody>
+          {rows.map(({ a, f, c }) => {
+            const asked = a.pdf_read?.g702?.due
+            const ok = a.pdf_read && !c.diffs.length
+            const certOff = a.certified_sum != null && Math.abs(a.certified_sum - f.g702.due) >= 0.005
+            return (
+              <tr key={a.id} onClick={() => onOpen(a.id)} className={a.pdf_read ? (ok ? 'ok' : 'off') : 'unread'}>
+                <td>{a.number}{a.status === 'draft' && <span className="tag">draft</span>}</td>
+                <td>{usDate(a.period_to)}{a.pdf_read?.periodTo && a.pdf_read.periodTo !== a.period_to && <span className="pay-read-warn small"> · PDF: {usDate(a.pdf_read.periodTo)}</span>}</td>
+                <td className="right mono">{asked != null ? money(asked) : '—'}</td>
+                <td className={`right mono${asked != null && Math.abs(asked - f.g702.due) >= 0.005 ? ' pay-read-warn' : ''}`}>{money(f.g702.due)}</td>
+                <td className={`right mono${certOff ? ' pay-read-warn' : ''}`} title={certOff ? `Certified at ${money(a.certified_sum!)}; the figures now work out to ${money(f.g702.due)}` : undefined}>{a.certified_sum != null ? money(a.certified_sum) : '—'}</td>
+                <td>
+                  {!a.pdf_read ? <span className="muted">No PDF read</span>
+                    : ok ? <span className="pay-read-ok">✓ Agrees</span>
+                      : <span className="pay-read-warn">✗ {c.why.filter((w) => w.key !== 'cover' || c.why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}</span>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble, start, onStarted }: {
   onRemoved: () => void
   start?: File | null
@@ -595,32 +675,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       onChanged()
     } catch (e) { onTrouble(`The PDF is open beside the figures but couldn’t be kept for next time: ${message(e)}`) }
   }
-  // A way of rounding retainage that would make every retainage figure agree with the PDF.
-  const retainageFix = useMemo(() => {
-    if (!pdf) return null
-    const iDiffs = (f: Figures) => againstPdf(f, pdf).filter((d) => d.col === 'I' || d.col === 'retainageTotal').length
-    const now = iDiffs(figures)
-    if (!now) return null
-    const i = data.applications.findIndex((a) => a.id === app.id)
-    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding }))
-    for (const way of ['period', 'nearest', 'up', 'down'] as RoundWay[]) {
-      if (way === data.contract.rounding?.I) continue
-      const f = figure({ ...data.contract, rounding: { ...(data.contract.rounding ?? {}), I: way } }, data.lines, app, history[i].billed, history.slice(0, i), data.steps)
-      if (!iDiffs(f)) return { way, label: ROUND_SAYS[way] }
-    }
-    return null
-  }, [pdf, figures, data, app])
-  const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
-  const why = useMemo(() => {
-    const dates = new Map<string, number>()
-    for (const f of figures.lines) if (f.line.change_order_id) dates.set(f.line.approved_on ?? '', (dates.get(f.line.approved_on ?? '') ?? 0) + f.line.scheduled_value)
-    const ctx: WhyContext = {
-      coHere: figures.g702.changeOrders, periodTo: app.period_to, pdfPeriodTo: pdf?.periodTo,
-      coDates: [...dates].map(([date, total]) => ({ date: date || null, total })),
-      retainageFix: retainageFix ? { label: retainageFix.label } : null,
-    }
-    return whyTheyDiffer(diffs, ctx)
-  }, [diffs, figures, app.period_to, retainageFix, pdf?.periodTo])
+  const { diffs, why, retainageFix } = useMemo(() => checkAgainstPdf(data, index, figures), [data, index, figures])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
   // The register's change orders, for adding lines to.
@@ -772,6 +827,15 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             detail={`Period to ${usDate(app.period_to)}${app.status === 'certified' ? ' — certified' : ''}. Everything entered on it for this period goes with it. The schedule of values and the other applications are not touched.`}
             onCancel={() => setDeleting(false)}
             onConfirm={async () => { await removeApplication(app.id); setDeleting(false); onRemoved() }} />
+        )}
+        {pdf && (
+          // The verdict first, in one line: does this application agree with the contractor's PDF?
+          <button className={`pay-verdict ${diffs.length ? 'off' : 'ok'}`}
+            onClick={() => document.querySelector('.pay-against')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            {diffs.length
+              ? <><strong>✗ Differs from the contractor’s PDF</strong> — {why.filter((w) => w.key !== 'cover' || why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}<span className="muted"> · see why below</span></>
+              : <><strong>✓ Agrees with the contractor’s PDF</strong>{pdf.g702?.due != null && <> — {money(pdf.g702.due)} due on both</>}</>}
+          </button>
         )}
         <p className="pay-702-preamble">
           Application is made for payment, as shown below, in connection with the contract.

@@ -11,6 +11,25 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:05 CST (every application against its PDF, at a glance)
+
+Checked production's UCA CW Loop applications (read-only): the billing on all five is what the
+contractor's PDFs say, line by line. What is off is dates and rounding — every period ends
+11/23/2026 and CO 1 is approved 11/23/2026, so CO 1 lands on Applications 1–4; and retainage is
+rounded per line, where Kinco rounds it per application. Locally, with the PDFs' dates and
+retainage per application, Applications 3, 4 and 5 agree with their PDFs to the cent.
+
+- **Summary: "Against the contractor's PDFs".** One row per application: period, what the
+  contractor asked, what CAzen works out, what was certified, and the verdict — ✓ Agrees, ✗ and
+  the causes in a word or two (Change orders · Retainage rounding …), or "No PDF read". Amounts that
+  differ are in red; a certified amount the figures no longer work out to is red with both on
+  hover. A row opens its application.
+- **On each application:** one line above the G702 — "✓ Agrees with the contractor's PDF — $X due
+  on both", or "✗ Differs from the contractor's PDF — Change orders · Retainage rounding", which
+  scrolls to the explanation.
+- A dollar or two on the amount due alone now counts as retainage rounding (an earlier
+  application's, carried through line 7). `checkAgainstPdf` in PayApps.tsx is shared by both.
+
 # Checkpoint — 2026-11-24, 09:40 CST (download a change document whole)
 
 Each change document in the register that has a PDF or arrived with sheets has a Download link: one

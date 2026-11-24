@@ -3689,3 +3689,15 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .pay-why-title { font-weight: 600; }
 .pay-why-detail { margin: 3px 0 6px; color: var(--ink); max-width: 80ch; }
 .pay-why-follow { margin: 0 0 4px; }
+
+/* Against the contractor's PDFs: the verdict on an application, and the table of all of them. */
+.pay-verdict { display: block; width: 100%; text-align: left; margin: 8px 0 10px; padding: 9px 12px; border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer; border: 1px solid; }
+.pay-verdict.ok { background: #eef4ee; border-color: rgba(95, 122, 97, 0.35); color: #3e5a40; }
+.pay-verdict.off { background: #fbf0ec; border-color: rgba(181, 83, 28, 0.35); color: #8a3d14; }
+.pay-checks-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pay-checks-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.pay-checks-table th.right, .pay-checks-table td.right { text-align: right; }
+.pay-checks-table td { padding: 8px; border-bottom: 1px solid var(--line); }
+.pay-checks-table tbody tr { cursor: pointer; }
+.pay-checks-table tbody tr:hover td { background: var(--wash); }
+.pay-checks-table tr.unread td { color: var(--muted); }

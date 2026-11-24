@@ -179,7 +179,9 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
   // (an older reading), the retainage figures on the cover sheet and totals row say the same.
   if (!roots.I.length) {
     const lone = diffs.filter((d) => !used.has(d) && Math.abs(d.pdf - d.app) <= 3 && ((d.where === 'total' && d.col === 'I') || (d.where === 'g702' && ['retainageTotal', 'earnedLessRetainage', 'previousCertificates', 'due'].includes(String(d.col)))))
-    if (lone.some((d) => d.col === 'I' || d.col === 'retainageTotal' || d.col === 'previousCertificates')) roots.I.push(...lone)
+    // A dollar or two on the amount due alone, with everything else agreeing, is retainage rounded
+    // another way on an earlier application, carried through line 7.
+    if (lone.length) roots.I.push(...lone)
   }
   const small = roots.I.every((d) => Math.abs(d.pdf - d.app) <= 3)
   const retFollow = diffs.filter((d) => !used.has(d) && !roots.I.includes(d) && roots.I.length && small && (
