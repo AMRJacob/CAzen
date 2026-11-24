@@ -34,6 +34,8 @@ import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
 import { classifyPages, countOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
 import { ChangeManual, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
+import { reopenIssuance, takeAwayMoved, type Origin, type Reopened } from '../lib/resort'
+import { setFolderName } from '../lib/sheets'
 import { useColumnWidths } from '../components/ResizableColumns'
 
 /** The drawings register's columns, in order, for the widths a person can set by hand. */
@@ -67,6 +69,8 @@ export default function Documents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  // A saved set or change document opened again to sort its pages (from Sets and revisions).
+  const [resorting, setResorting] = useState<string | null>(null)
   const [params, setParams] = useSearchParams()
   useEffect(() => {
     if (params.get('upload') === null) return
@@ -217,6 +221,18 @@ export default function Documents() {
       {/* Whether the copy on this device is still the job. Silent unless it isn't. */}
       <FieldSync project={current} onSynced={load} />
 
+      {resorting && firm && !uploading && (
+        <UploadIssuance
+          key={resorting}
+          reopen={resorting}
+          project={current}
+          firmId={firm.id}
+          order={order}
+          existingNumbers={new Set(sheets.map((s) => s.number))}
+          onDone={() => { setResorting(null); load() }}
+          onCancel={() => setResorting(null)}
+        />
+      )}
       {uploading && firm && (
         <UploadIssuance
           project={current}
@@ -261,7 +277,8 @@ export default function Documents() {
       </div>
 
       {view === 'sets' ? (
-        <SetsList project={current} order={order} isAdmin={isAdmin} onChanged={load} />
+        <SetsList project={current} order={order} isAdmin={isAdmin} onChanged={load}
+          onResort={(id) => setResorting(id)} reloadKey={resorting} />
       ) : (
         <>
           <div className="toolbar">
@@ -671,7 +688,12 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
   )
 }
 
-function SetsList({ project, order, isAdmin, onChanged }: { project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void }) {
+function SetsList({ project, order, isAdmin, onChanged, onResort, reloadKey }: {
+  project: Project; order: Discipline[]; isAdmin: boolean; onChanged: () => void
+  /** Open a set's pages again in the upload screen, to move them between drawings, cover and manual. */
+  onResort?: (issuanceId: string) => void
+  reloadKey?: unknown
+}) {
   const [rows, setRows] = useState<IssuanceRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -680,7 +702,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
   const [problem, setProblem] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const reload = useCallback(() => { listIssuances(project.id).then(setRows).catch((e) => setError(message(e))) }, [project.id])
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => { reload() }, [reload, reloadKey])
   const setBox = useRef<HTMLDivElement>(null)
   const cols = useColumnWidths(SET_COLUMNS)
   useClickAway(setBox, () => { if (!saving) setEditing(null) }, !!editing)
@@ -726,6 +748,7 @@ function SetsList({ project, order, isAdmin, onChanged }: { project: Project; or
                       setEditing({ id: r.id, kind: r.kind, number: r.number ?? '', title: r.title ?? '', issuedOn: r.issued_on.slice(0, 10) })
                     }}>Rename</button>
                   )}
+                  {isAdmin && onResort && <> <button className="link" title="Open its pages again to move them between drawings, cover and project manual" onClick={() => onResort(r.id)}>Pages</button></>}
                   {isAdmin && <> <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button></>}
                 </td>
               </tr>
@@ -827,6 +850,8 @@ interface Draft {
    */
   role: PageRole
   roleByHand?: boolean
+  /** Where the page is filed now, when a saved change document is opened again to be re-sorted. */
+  origin?: Origin
   number: string
   title: string
   revision: string
@@ -866,9 +891,11 @@ function RolePick({ value, onChange, label }: { value: PageRole; onChange: (r: P
   )
 }
 
-export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel }: {
+export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel, reopen }: {
   project: Project
   initialFiles?: File[]
+  /** A change document already saved, opened again as its pages to be sorted again. */
+  reopen?: string
   firmId: string
   order: Discipline[]
   existingNumbers: Set<string>
@@ -911,6 +938,36 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
 
   useEffect(() => { listTemplates(firmId).then(setTemplates).catch((e) => setError(message(e))) }, [firmId])
 
+  // A saved change document opened again: its pages, each in the part it is filed under now.
+  const [reopened, setReopened] = useState<Reopened | null>(null)
+  useEffect(() => {
+    if (!reopen) return
+    let live = true
+    setStep('splitting'); setProgress('')
+    reopenIssuance(project, reopen, (what) => setProgress(`reading ${what}`)).then((r) => {
+      if (!live) return
+      setReopened(r)
+      setKind(r.issuance.kind); setNumber(r.issuance.number ?? ''); setNamedByHand(true)
+      setIssuedOn(r.issuance.issued_on.slice(0, 10)); setSubject(r.issuance.title ?? '')
+      setByHand({ kind: true, date: true, subject: true })
+      setDrafts(r.pages.map(({ origin, page }): Draft => ({
+        pageIndex: page.pageIndex, page, include: true, origin, roleByHand: true,
+        role: origin.t === 'cover' ? 'cover' : origin.t === 'spec' ? 'spec' : 'sheet',
+        number: origin.t === 'sheet' ? origin.number : '', title: origin.t === 'sheet' ? origin.title ?? '' : '',
+        revision: origin.t === 'sheet' ? origin.label ?? '' : '', date: origin.t === 'sheet' ? origin.date ?? '' : '',
+        templateId: null, pinned: 'none', touched: { number: true, title: true, revision: true, date: true },
+      })))
+      setStep('review')
+    }).catch((e) => { if (live) { setError(message(e)); setStep('pick') } })
+    return () => { live = false }
+  }, [reopen, project])
+  // The sections this document already put in the manual, and how many of their pages stay there.
+  const keptSpecs = (reopened?.specRevs ?? []).map((rev) => ({
+    rev,
+    keep: drafts.filter((d) => d.origin?.t === 'spec' && d.origin.revId === rev.revId && d.include && d.role === 'spec').length,
+  }))
+
+
   // Re-read every page when the templates or the preferred one change; hand edits stay.
   const reread = useCallback((list: Draft[], tpls: TitleblockTemplate[], pref: string) => list.map((d) => {
     if (d.pinned === 'none') return { ...d, templateId: null, unsure: false }
@@ -942,6 +999,27 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   const pagesTo = (ats: number[], role: PageRole) =>
     setDrafts((ds) => ds.map((d) => (ats.includes(d.pageIndex) ? { ...d, role, roleByHand: true, include: true } : d)))
   const dragPages = (ats: number[]) => (e: React.DragEvent) => { e.dataTransfer.setData(DRAG, JSON.stringify(ats)); e.dataTransfer.effectAllowed = 'move' }
+
+  // Pages chosen together — click the page number; Shift-click a run, Ctrl-click one more — to be
+  // moved at once, by right-click or by dragging any of them.
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  const lastSel = useRef<number | null>(null)
+  const pickRow = (i: number, e: React.MouseEvent) => {
+    setSel((cur) => {
+      const n = new Set(e.ctrlKey || e.metaKey || e.shiftKey ? cur : [])
+      if (e.shiftKey && lastSel.current != null) {
+        const [a, b] = [Math.min(lastSel.current, i), Math.max(lastSel.current, i)]
+        for (let k = a; k <= b; k++) n.add(k)
+      } else if (cur.has(i) && (e.ctrlKey || e.metaKey)) n.delete(i)
+      else if (cur.has(i) && cur.size === 1 && !e.shiftKey) n.delete(i)
+      else n.add(i)
+      return n
+    })
+    lastSel.current = i
+  }
+  /** The pages (by their place in the upload) a right-click or a drag on row i acts on. */
+  const pagesFor = (i: number) => (sel.has(i) ? [...sel].sort((a, b) => a - b) : [i]).map((k) => drafts[k].pageIndex)
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
   const dropZone = (where: 'manual' | 'drawings', role: PageRole) => ({
     onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setDropOn(where) } },
     onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) setDropOn(null) },
@@ -1133,9 +1211,11 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   const chosen = drafts.filter((d) => d.include && d.role === 'sheet')
   // The manual pages, remade only when which pages they are changes: typing a sheet number must
   // not re-cut the manual.
-  const specKey = drafts.filter((d) => d.include && d.role === 'spec').map((d) => `${d.pageIndex}:${d.page.bytes.length}`).join(',')
+  // Manual pages to file: those already in a section of this document (re-sorting) stay where they are.
+  const isNewSpec = (d: Draft) => d.include && d.role === 'spec' && d.origin?.t !== 'spec'
+  const specKey = drafts.filter(isNewSpec).map((d) => `${d.pageIndex}:${d.page.bytes.length}`).join(',')
   const specPages = useMemo<SpecPageIn[]>(
-    () => drafts.filter((d) => d.include && d.role === 'spec').map((d) => ({ at: d.pageIndex, text: d.page.text, bytes: d.page.bytes })),
+    () => drafts.filter(isNewSpec).map((d) => ({ at: d.pageIndex, text: d.page.text, bytes: d.page.bytes })),
     [specKey],  // eslint-disable-line react-hooks/exhaustive-deps
   )
   const [manualPlan, setManualPlan] = useState<ManualPlan | null>(null)
@@ -1152,7 +1232,54 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   const tplName = (id: string | null) => templates.find((t) => t.id === id)?.name
   const firstUnread = drafts.findIndex((d) => d.include && !d.templateId)
 
+  /**
+   * Save a re-sorted change document: what moved in is filed first (so the document is never
+   * empty part-way), then what moved out is taken away. Pages left where they were are untouched.
+   */
+  async function saveResort(r: Reopened) {
+    const id = r.issuance.id
+    const newSheets = chosen.filter((d) => d.origin?.t !== 'sheet')
+    const keptSheets = chosen.filter((d) => d.origin?.t === 'sheet')
+    const drop = drafts.filter((d) => d.origin?.t === 'sheet' && !(d.include && d.role === 'sheet')).map((d) => (d.origin as { revId: string }).revId)
+    const specsOut = keptSpecs.filter((k) => k.keep < k.rev.pages)
+    const coverNow = drafts.filter((d) => d.include && d.role === 'cover')
+    const coverWas = drafts.filter((d) => d.origin?.t === 'cover')
+    const coverChanged = coverNow.length !== coverWas.length || coverNow.some((d, k) => d !== coverWas[k])
+    const left = keptSheets.length + newSheets.length + sections.length + keptSpecs.reduce((n, k) => n + (k.keep ? 1 : 0), 0)
+    if (!left) { setError('That would leave this document with no drawings and no manual pages, and CAzen removes a set with nothing in it. Keep at least one page as a drawing or a manual page.'); return }
+    setStep('saving'); setError(null)
+    try {
+      const head = { kind, number, issuedOn, title: subject }
+      if (kind !== r.issuance.kind || number !== (r.issuance.number ?? '') || issuedOn !== r.issuance.issued_on.slice(0, 10) || subject !== (r.issuance.title ?? '')) {
+        setProgress('renaming'); await renameIssuance(id, { kind, number, title: subject, issuedOn })
+      }
+      if (newSheets.length) {
+        const out: SheetToSave[] = sortSheets(newSheets, (d) => d.number, order).map((d) => ({
+          number: d.number, title: d.title, revisionLabel: d.revision || setRev || number, sheetDate: d.date || null,
+          bytes: d.page.bytes, body: pageBody(d.page.text),
+        }))
+        await saveIssuance(project, head, out, (done, total) => setProgress(`drawings ${done} of ${total}`), id)
+      }
+      if (sections.length) {
+        const built = []
+        for (const [k, sec] of sections.entries()) { setProgress(`putting together ${sec.number} (${k + 1} of ${sections.length})`); built.push(await sec.build()) }
+        await saveManual(project, { kind, number, issuedOn }, built, (done, total, sec) => setProgress(`manual ${done} of ${total}${sec ? ` · ${sec}` : ''}`), id)
+      }
+      await takeAwayMoved(project, {
+        issuanceId: id, setFolder: setFolderName(head), dropSheets: drop,
+        specs: specsOut.map((k) => ({ rev: k.rev, keep: drafts.filter((d) => d.origin?.t === 'spec' && d.origin.revId === k.rev.revId && d.include && d.role === 'spec').map((d) => d.page) })),
+        cover: coverChanged ? coverNow.map((d) => d.page) : undefined,
+        onProgress: (what) => setProgress(`tidying ${what}`),
+      })
+      onDone()
+    } catch (e) {
+      setError(`Part of the re-sort may have gone in before this stopped: ${message(e)}`)
+      setStep('review')
+    }
+  }
+
   async function save() {
+    if (reopened) return saveResort(reopened)
     setStep('saving')
     setError(null)
     try {
@@ -1247,9 +1374,10 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
     {(step === 'review' || step === 'saving') && <div className="upload-backdrop" aria-hidden="true" />}
     <div className={`card upload-panel${step === 'review' || step === 'saving' ? ' wide' : ''}`} role={step === 'review' || step === 'saving' ? 'dialog' : undefined} aria-label="Upload">
       {(step === 'review' || step === 'saving') && <button className="link upload-close" onClick={onCancel} disabled={step === 'saving'} aria-label="Cancel the upload">×</button>}
-      <h2>Upload a set, revised sheets or a change document</h2>
-      <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.
-        A change document can come as one PDF — cover, project manual pages and drawings — and each page is sorted into its part.</p>
+      <h2>{reopen ? `Pages of ${reopened ? issuanceText(reopened.issuance.kind, reopened.issuance.number) : 'this set'}` : 'Upload a set, revised sheets or a change document'}</h2>
+      {reopen && <p className="muted small">Each page is shown where it is filed now. Move one by its Part, by right-clicking it, or by dragging it between the project manual and the drawings; Shift- or Ctrl-click page numbers to move several. Saving files what moved and leaves the rest as it is.</p>}
+      {!reopen && <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.
+        A change document can come as one PDF — cover, project manual pages and drawings — and each page is sorted into its part.</p>}
       <div className="form four">
         <label>Issued as
           <select value={kind} onChange={(e) => { setByHand((b) => ({ ...b, kind: true })); setKind(e.target.value as IssuanceKind) }}>
@@ -1306,6 +1434,35 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
 
       {(step === 'review' || step === 'saving') && (
         <>
+          {rowMenu && (
+            <div className="pick-menu-shade" onClick={() => setRowMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowMenu(null) }}>
+              <div className="pick-menu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 220), top: Math.min(rowMenu.y, window.innerHeight - 170) }} onClick={(e) => e.stopPropagation()}>
+                <div className="muted small pick-menu-title">{rowMenu.ats.length === 1 ? `Page ${rowMenu.ats[0] + 1}` : `${rowMenu.ats.length} pages`} — file as</div>
+                {(['sheet', 'cover', 'spec'] as PageRole[]).map((r) => {
+                  const all = rowMenu.ats.every((a) => drafts.find((d) => d.pageIndex === a)?.role === r)
+                  return (
+                    <button key={r} role="menuitem" disabled={all} onClick={() => { pagesTo(rowMenu.ats, r); setRowMenu(null); setSel(new Set()) }}>
+                      {r === 'sheet' ? 'Drawings' : r === 'cover' ? 'Cover' : 'Project manual'}{all ? ' (already)' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {reopened && keptSpecs.length > 0 && (
+            <div className="card change-manual">
+              <h3>In the project manual from this document</h3>
+              <p className="small">
+                {keptSpecs.map((k) => (
+                  <span key={k.rev.revId} className="kept-spec">
+                    <span className="mono">{k.rev.number}</span> {k.rev.title ?? ''} · {k.keep} of {k.rev.pages} pages
+                    {k.keep < k.rev.pages && <span className="pay-read-warn"> — {k.keep ? `put together again from the ${k.keep} left` : 'this revision is removed'}</span>}
+                  </span>
+                ))}
+              </p>
+              <p className="muted small">Its pages are listed with the drawings below, marked Manual, so each can be moved on its own.</p>
+            </div>
+          )}
           {/* The project manual's pages first, with the manual's own tools; the drawings below. */}
           {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div className={`drop-area${dropOn === 'manual' ? ' on' : ''}`} {...dropZone('manual', 'spec')}>
             {specPages.length > 0 ? (
@@ -1395,9 +1552,16 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
                 // Manual pages are with the project manual above, not here among the drawings.
-                if (d.role === 'spec' && d.include) return null
+                // (Re-sorting a saved document, its pages already in the manual are listed here too, so
+                // each can be moved on its own.)
+                if (d.role === 'spec' && d.include && d.origin?.t !== 'spec') return null
                 return (
-                  <tr key={d.pageIndex} className={d.include ? '' : 'skipped'} draggable onDragStart={dragPages([d.pageIndex])} title="Drag to the project manual above to make it a manual page">
+                  <tr key={d.pageIndex} className={`${d.include ? '' : 'skipped'}${sel.has(i) ? ' picked' : ''}`} draggable onDragStart={(e) => dragPages(pagesFor(i))(e)}
+                    title="Drag to the project manual above to make it a manual page; right-click for Drawings, Cover or Project manual"
+                    onContextMenu={(e) => {
+                      if ((e.target as HTMLElement).closest('input, select, textarea')) return
+                      e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(i) })
+                    }}>
                     <td>
                       {/* onClick rather than onChange: it carries the shift key, and by the time it
                           runs the box already holds its new value. */}
@@ -1405,7 +1569,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                         onClick={(e) => tick(i, (e.target as HTMLInputElement).checked, e.shiftKey)}
                         aria-label={`Include page ${d.pageIndex + 1}`} />
                     </td>
-                    <td>{d.pageIndex + 1}</td>
+                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => pickRow(i, e)}>{d.pageIndex + 1}</td>
                     <td className="thumb-cell">
                       <PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} />
                     </td>
@@ -1413,9 +1577,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                       <RolePick value={d.role} onChange={(r) => setRole(i, r)} label={`What page ${d.pageIndex + 1} is`} />
                     </td>
                     <td><input className={`cell mono ${d.include && d.role === 'sheet' && (!n || duplicates.has(n)) ? 'bad' : ''}`} value={d.role === 'sheet' ? d.number : ''}
-                      disabled={d.role !== 'sheet'} onChange={(e) => type(i, 'number', e.target.value)} placeholder={d.role === 'sheet' ? 'A-201' : ''} /></td>
-                    <td><input className="cell" value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet'} onChange={(e) => type(i, 'title', e.target.value)} /></td>
-                    <td><input className="cell mono rev-cell" value={d.role === 'sheet' ? d.revision : ''} disabled={d.role !== 'sheet'}
+                      disabled={d.role !== 'sheet' || d.origin?.t === 'sheet'} onChange={(e) => type(i, 'number', e.target.value)} placeholder={d.role === 'sheet' ? 'A-201' : ''} /></td>
+                    <td><input className="cell" value={d.role === 'sheet' ? d.title : ''} disabled={d.role !== 'sheet' || d.origin?.t === 'sheet'} onChange={(e) => type(i, 'title', e.target.value)} /></td>
+                    <td><input className="cell mono rev-cell" value={d.role === 'sheet' ? d.revision : ''} disabled={d.role !== 'sheet' || d.origin?.t === 'sheet'}
                       onChange={(e) => type(i, 'revision', e.target.value)} aria-label={`Revision mark on page ${d.pageIndex + 1}`} /></td>
                     {datesRead && (
                       <td><input className="cell date-cell" type="date" value={d.role === 'sheet' ? d.date : ''} disabled={d.role !== 'sheet'}
@@ -1468,6 +1632,15 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
           </table>
           </div>
           <div className="actions">
+            {reopened ? (
+              <button className="primary" onClick={save} disabled={step === 'saving' || sheetTrouble || !!manualProblem}>
+                {step === 'saving' ? `Saving ${progress}…` : (() => {
+                  const was = (d: Draft) => (d.origin?.t === 'cover' ? 'cover' : d.origin?.t === 'spec' ? 'spec' : 'sheet')
+                  const moved = drafts.filter((d) => !d.include || d.role !== was(d)).length
+                  return moved ? `Save — ${moved} ${moved === 1 ? 'page' : 'pages'} moved` : 'Save'
+                })()}
+              </button>
+            ) : (
             <button className="primary" onClick={save} disabled={step === 'saving' || sheetTrouble || nothing || !!manualProblem}>
               {step === 'saving' ? `Saving ${progress}…` : `Save ${[
                 chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '',
@@ -1475,6 +1648,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                 covers.length && !chosen.length && !sections.length ? 'the cover' : '',
               ].filter(Boolean).join(' and ')}`}
             </button>
+            )}
             <button onClick={onCancel} disabled={step === 'saving'}>Cancel</button>
             {manualProblem && step !== 'saving' && <span className="muted small">{manualProblem}</span>}
             {chosen.length > 0 && <span className="muted small">{chosen.filter((d) => existingNumbers.has(d.number.trim().toUpperCase())).length} replace current sheets · {chosen.filter((d) => d.number.trim() && !existingNumbers.has(d.number.trim().toUpperCase())).length} new</span>}

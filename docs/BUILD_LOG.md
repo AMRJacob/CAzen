@@ -11,6 +11,47 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:05 CST (moving pages: right-click and several at once; a saved document's pages opened again)
+
+Jacob, 09:06: allow pages to be moved in the upload screen, and let the upload screen be
+reopened for an individual change document. (Built alongside the other session's 08:54 change —
+manual pages up top, drawings below, drag between them — and merged onto it.)
+
+**In the upload screen**, in addition to dragging between the manual and the drawings:
+- **Right-click a page** → *file as* Drawings / Cover / Project manual. This is the way to make
+  a page part of the cover.
+- **Choose several**: click a page number; Shift-click for a run, Ctrl-click for one more. A
+  right-click or a drag on a chosen page moves all of them.
+
+**A saved document's pages, opened again** — Drawings → Sets and revisions → **Pages** on any set
+(admins, as Delete is). `src/lib/resort.ts`:
+- `reopenIssuance` puts the document back together as pages, each marked with where it is filed
+  now: the cover's pages from the set's cover file, each manual section revision's pages, each
+  drawing's sheet revision — in the order a change document is bound, in the same screen, with
+  the set's name, category, date and subject (which can be changed there too). Pages already in
+  the manual are listed with the drawings, marked Manual, so each can be moved on its own; a card
+  at the top says how many of each section's pages stay.
+- Drawings already filed show their number and title but are not renamed here (that is the sheet
+  list's Rename).
+- **Saving touches only what moved**, in this order so the document is never empty part-way: what
+  moved **in** is filed first (new sheet revisions under the same set — `saveIssuance(…, into)`;
+  new manual pages through the same reader and choices as an upload — `saveManual(…, into)`);
+  then what moved **out** is taken away (`takeAwayMoved`): a section revision that lost pages is
+  put together again from the pages left (new file, page count, search words), or deleted if
+  none are left (with its section, if that was its only revision); the cover is made again from
+  the pages now marked cover, or cleared, and the change register entry follows it; last, a
+  drawing moved away has its sheet revision deleted with the same function as Delete. A re-sort
+  that would leave no drawing and no manual page is refused, because CAzen removes an empty set.
+
+`checks/t_resort.py`: a new upload — right-click a drawing into the manual, Shift-click two
+cover pages and make them drawings, drag a manual section down to the drawings; then a saved
+Addendum 1 (two-page cover, 09 91 00 of five pages, A-201, A-202) opened again: 09 91 00 page 5
+to Drawings as A-203, A-202 to Cover → A-203 filed, 09 91 00 rebuilt with 4 pages, cover rebuilt
+with 3 pages and the register entry pointed at it, A-202's revision deleted last. Test browser and
+the stand-in only; not run against the real project.
+
+---
+
 # Checkpoint — 2026-11-24, 10:30 CST (the change upload: manual pages up top, drag between, wide)
 
 - **Letter pages are manual pages.** A letter-size page among large sheets is taken as a project

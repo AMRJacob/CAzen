@@ -176,33 +176,44 @@ export const openStoredPdf = (project: ProjectStore, path: string) => openFile(p
  * Sheets that already exist get their next revision number; new sheet numbers become new sheets.
  * Nothing is overwritten: each revision is its own file.
  */
+/** In a project folder, each upload round gets its own folder: "2026-02-10 Addendum 1". */
+export function setFolderName(issuance: { kind: IssuanceKind; number?: string | null; issuedOn: string }): string {
+  const kindLabel: Record<IssuanceKind, string> = { bid_set: 'Bid Set', conformed_set: 'Conformed Set', addendum: 'Addendum', asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', pr: 'PR', other: 'Revision' }
+  return `${issuance.issuedOn} ${issuance.number || kindLabel[issuance.kind]}`
+}
+
 export async function saveIssuance(
   project: ProjectStore,
   issuance: IssuanceInput,
   sheets: SheetToSave[],
   onProgress?: (done: number, total: number) => void,
+  /** Add the sheets to an issuance already made — a change document whose pages are re-sorted. */
+  into?: string,
 ): Promise<{ id: string; setFolder: string }> {
   const client = db()
   const projectId = project.id
   const { data: userData } = await client.auth.getUser()
   const userId = userData.user?.id
-  // In a project folder, each upload round gets its own folder: "2026-02-10 Addendum 1".
-  const kindLabel: Record<IssuanceKind, string> = { bid_set: 'Bid Set', conformed_set: 'Conformed Set', addendum: 'Addendum', asi: 'ASI', bulletin: 'Bulletin', ccd: 'CCD', change_order: 'Change Order', pr: 'PR', other: 'Revision' }
-  const setFolder = `${issuance.issuedOn} ${issuance.number || kindLabel[issuance.kind]}`
+  const setFolder = setFolderName(issuance)
 
-  const { data: iss, error: issErr } = await client
-    .from('issuances')
-    .insert({
-      project_id: projectId,
-      kind: issuance.kind,
-      number: issuance.number || null,
-      title: issuance.title || null,
-      issued_on: issuance.issuedOn,
-      created_by: userId,
-    })
-    .select()
-    .single()
-  if (issErr) throw issErr
+  let iss: { id: string }
+  if (into) iss = { id: into }
+  else {
+    const made = await client
+      .from('issuances')
+      .insert({
+        project_id: projectId,
+        kind: issuance.kind,
+        number: issuance.number || null,
+        title: issuance.title || null,
+        issued_on: issuance.issuedOn,
+        created_by: userId,
+      })
+      .select()
+      .single()
+    if (made.error) throw made.error
+    iss = made.data as { id: string }
+  }
 
   let done = 0
   for (const s of sheets) {
