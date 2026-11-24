@@ -81,7 +81,7 @@ async function canvasToJpeg(canvas: AnyCanvas, quality: number): Promise<Uint8Ar
 }
 
 /** An image the sheet draws, wherever in the file it was reached from. */
-interface PageImage {
+export interface PageImage {
   ref: PDFRef
   dict: PDFDict
   raw: Uint8Array
@@ -90,6 +90,8 @@ interface PageImage {
   filter: string | null
   /** How wide it is actually drawn, in points. Zero when the content stream didn't say. */
   drawnWidth: number
+  /** How tall it is drawn, in points, at its largest appearance. */
+  drawnHeight: number
 }
 
 type Matrix = [number, number, number, number, number, number]
@@ -191,14 +193,15 @@ function walk(
           const height = Number(dict.lookup(PDFName.of('Height'))?.toString() ?? 0)
           if (!width || !height) break
           const drawnWidth = Math.hypot(ctm[0], ctm[1])
+          const drawnHeight = Math.hypot(ctm[2], ctm[3])
           const key = String(ref)
           const seen = found.get(key)
           // The same image drawn more than once needs enough pixels for its largest appearance.
-          if (seen) seen.drawnWidth = Math.max(seen.drawnWidth, drawnWidth)
+          if (seen) { seen.drawnWidth = Math.max(seen.drawnWidth, drawnWidth); seen.drawnHeight = Math.max(seen.drawnHeight, drawnHeight) }
           else found.set(key, {
             ref: ref as PDFRef, dict, raw: stream.contents, width, height,
             filter: dict.lookup(PDFName.of('Filter'))?.toString() ?? null,
-            drawnWidth,
+            drawnWidth, drawnHeight,
           })
         } else if (subtype === '/Form') {
           // CAD exporters routinely wrap a sheet's content in a form, with the images in the
@@ -217,7 +220,7 @@ function walk(
 }
 
 /** Every image this sheet draws, with how large it is drawn. */
-function imagesOnPage(doc: PDFDocument, pageIndex: number): PageImage[] {
+export function imagesOnPage(doc: PDFDocument, pageIndex: number): PageImage[] {
   const page = doc.getPage(pageIndex)
   const found = new Map<string, PageImage>()
   walk(doc, streamText(doc, page.node.Contents()), page.node.Resources(), IDENTITY, found, 0)

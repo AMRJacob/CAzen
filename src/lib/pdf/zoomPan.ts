@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist'
 
 const MIN_ZOOM = 0.25
-const MAX_ZOOM = 8
+import { MAX_ZOOM } from "./sharpness"
+export { MAX_ZOOM }
 export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
 /** How much of the sheet must stay on screen, so it can't be flung out of sight. */
@@ -448,7 +449,9 @@ export function useDetailRender(
       if (!c || !area || !v) return
 
       const base = page.getViewport({ scale: 1 })
-      const ratio = Math.min(window.devicePixelRatio || 1, 2)
+      // The detail is only what is on screen, so it can afford a phone's full 3x density; the
+      // whole-page canvas below stays at 2x to keep within what a phone will hold.
+      const ratio = Math.min(window.devicePixelRatio || 1, 3)
       const pageScale = cssWidth / base.width            // CSS px per PDF point at 100%
       const wanted = pageScale * v.zoom * ratio          // device px per PDF point now
       // At or below what the whole page was drawn at, it is already as sharp as the screen shows.

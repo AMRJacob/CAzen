@@ -7,6 +7,8 @@ import { readFile, type ProjectStore } from '../lib/files'
 import { getDocument } from '../lib/pdf/pdfjs'
 import { readPageText, type PageText, type PageWord } from '../lib/pdf/pageText'
 import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
+import { sheetSharpness } from '../lib/pdf/sheetSharpness'
+import { percent, sharpZoom, type Sharpness } from '../lib/pdf/sharpness'
 import { readGeometry, Snapper } from '../lib/pdf/geometry'
 import { openStoredPdf } from '../lib/sheets'
 import { isMissingTable, message } from '../lib/errors'
@@ -123,6 +125,8 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
   const pdfRef = useRef<Awaited<ReturnType<typeof getDocument>['promise']> | null>(null)
   const [page, setPage] = useState<PDFPageProxy | null>(null)
   const [aspect, setAspect] = useState(1.5)
+  /** The sheet's pictures, measured from its file: how far it can be zoomed and stay sharp. */
+  const [sharp, setSharp] = useState<Sharpness | null>(null)
 
   const pageEl = useRef<HTMLDivElement>(null)
   const { zoom, width, height, fit, zoomAbout, showPoint, view } = usePageZoom(scroller, pageEl, aspect)
@@ -266,7 +270,11 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
     setText(null)
     ;(async () => {
       try {
-        const pdf = await getDocument({ data: await readFile(project, sheet.filePath) }).promise
+        const bytes = await readFile(project, sheet.filePath)
+        setSharp(null)
+        // Measured from a copy: pdf.js takes the bytes it is given for its worker.
+        sheetSharpness(bytes.slice()).then((r) => { if (!cancelled) setSharp(r) })
+        const pdf = await getDocument({ data: bytes }).promise
         if (cancelled) return
         pdfRef.current?.loadingTask.destroy()
         pdfRef.current = pdf
@@ -757,6 +765,15 @@ export function SheetViewer({ project, sheets, start, highlight, onClose, onShee
           {stale} of these markups {stale === 1 ? 'was' : 'were'} drawn on an earlier revision of this sheet.
         </div>
       )}
+      {(() => {
+        // Past this zoom a sheet drawn as a picture is being enlarged; nothing can draw it finer.
+        const at = sharp ? sharpZoom(sharp, width * Math.min(window.devicePixelRatio || 1, 2)) : Infinity
+        return sharp?.dpi != null && zoom > at * 1.15 && (
+          <div className="sv-hint sv-soft" role="status">
+            This sheet’s drawing is a picture at {sharp.dpi} dpi, not linework: it is as sharp as the file allows up to about {percent(at)}.
+          </div>
+        )
+      })()}
       {linkMode && <div className="sv-hint">Drag a box over a detail tag or note, then choose the sheet it should open. Click × on a link you drew to remove it.</div>}
       <div className="sv-body">
         {said && (

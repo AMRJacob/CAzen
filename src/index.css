@@ -388,6 +388,7 @@ mark { background: #f3e7b8; color: var(--ink); border-radius: 2px; padding: 0 1p
 .sv-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
 .sv-find { font: inherit; font-size: 13px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; width: 160px; }
 .sv-hint { padding: 7px 14px; font-size: 13px; background: var(--moss-soft); color: #3f5541; }
+.sv-hint.sv-soft { background: #fbf1e3; color: #7a4a10; }
 /* Correcting a sheet's name without leaving it: a strip under the bar, like the scale prompt. */
 .sv-details { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 8px 14px; }
 .sv-details label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); min-width: 0; }
@@ -3901,3 +3902,5 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 .nb-fix label { display: grid; gap: 4px; font-size: 13px; color: #5c625d; }
 .nb-fix input { font-size: 15px; }
 .nb-names li { -webkit-touch-callout: none; }
+/* A drawing that is a picture and will go soft before the deepest zoom (upload review, viewer). */
+.soft-note { color: #9a5b12; font-size: 11.5px; white-space: nowrap; }

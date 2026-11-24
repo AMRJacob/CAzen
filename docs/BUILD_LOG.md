@@ -3633,3 +3633,12 @@ pixel ratio; and frame timing under 6× CPU throttling.
 
 ## 2026-11-24 — Change discipline for several sheets at once
 - Drawings → select sheets (Ctrl/Shift-click, or a discipline heading) → right-click → **Change discipline ▸**: the project's disciplines in sheet order, and "Where each one's number puts it". Every selected sheet is filed there; numbers are unchanged, and a sheet whose number already puts it there is stored as filed by its number (no "filed" tag). The discipline all the selected sheets are under is ticked. `fileSheetsUnder` in `sheets.ts`; `checks/t_filed.py`. Test browser only.
+
+## 2026-11-24 — Sheets drawn as pictures: measured, warned about at upload, said in the viewer
+Jacob, 16:00: UCA's drawings look pixelated, as CAW's did before the viewer fix; fix site wide; warn at upload when the resolution won't hold at the deepest zoom.
+- The viewer fix that made CAW sharp (the detail layer, re-drawing what is on screen from the file's vectors) is in place and used by the sheet viewer. UCA's sheets all have full text layers (none are scans). What the viewer cannot sharpen is linework stored in the file as a picture, as some CAD/MEP exports and flattened PDFs do, or a picture lowered by Reduce. **Not confirmed against UCA's files** — they could not be opened from here.
+- `lib/pdf/sharpness.ts` (pure, `checks/sharpness.test.ts`) and `sheetSharpness.ts`: the pictures that take in 15% or more of a sheet are taken as the drawing; their lowest resolution gives the zoom past which one picture pixel is more than one screen pixel on this screen (fit width as the viewer fits it, density capped at 2). The image walker in `shrink.ts` now records drawn height and is exported.
+- Upload review: a sheet that will go soft before 800% says "picture 100 dpi · sharp to 280%" under its size, and a notice above lists them, the range, and the dpi 800% would take. It is measured again after Reduce.
+- Sheet viewer: zoomed more than 15% past that point, a line under the bar says the drawing is a picture at N dpi and is as sharp as the file allows up to about N%.
+- The detail layer now draws at up to 3× density (it was 2×), so iPhones get their full resolution when zoomed; the whole-page canvas stays at 2×.
+- `checks/t_soft.py` with `soft_set.pdf` / `soft_sheet.pdf` (`make_soft_set.py`). Test browser only.

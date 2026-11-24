@@ -17,6 +17,8 @@ import { PageThumb } from '../components/PageThumb'
 import { PdfPreview } from '../components/PdfPreview'
 import { FieldSync } from '../components/FieldSync'
 import { ShrinkPool } from '../lib/pdf/shrinkPool'
+import { sheetSharpness } from '../lib/pdf/sheetSharpness'
+import { dpiForMaxZoom, fitPixelsHere, MAX_ZOOM, percent, sharpZoom, type Sharpness } from '../lib/pdf/sharpness'
 import {
   deleteIssuance, deleteRevision, existingSets, listCurrentSheets, localCurrentSheets, listIssuances, listRevisions, listSheetsAsOf, renameIssuance, renameSheet, saveIssuance, searchSheets, setIssuanceCover, suggestSetName,
   type IssuanceRow, type SearchHit, type SheetToSave,
@@ -998,6 +1000,12 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const [reduceNote, setReduceNote] = useState<Record<number, string>>({})
   const [run, setRun] = useState<{ done: number; total: number; sheet: string; stage: string } | null>(null)
   const [dpi, setDpi] = useState(DEFAULT_DPI)
+  /**
+   * How sharp each drawing can be shown, measured from its own file (see lib/pdf/sharpness.ts).
+   * Keyed by the page's bytes, so a sheet that is reduced — new bytes — is measured again.
+   */
+  const sharpOf = useRef(new WeakMap<Uint8Array, Sharpness | null>())
+  const [sharpSeen, setSharpSeen] = useState(0)
   // The page being looked at full size while the set is named.
   const [peek, setPeek] = useState<number | null>(null)
 
@@ -1277,6 +1285,33 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const dropSmall = () => setDrafts((ds) => ds.map((d, j) => (smallPages.some(([i]) => i === j) ? { ...d, include: false } : d)))
 
   const heavy = (d: Draft) => d.page.bytes.length > 5 * MB
+
+  // Measure each drawing's pictures, one sheet at a time behind the review, so the table can say
+  // which sheets will go soft before the deepest zoom.
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      for (const d of drafts) {
+        if (!live) return
+        if (d.role !== 'sheet' || sharpOf.current.has(d.page.bytes)) continue
+        const bytes = d.page.bytes
+        sharpOf.current.set(bytes, await sheetSharpness(bytes))
+        if (live) setSharpSeen((n) => n + 1)
+        await new Promise((r) => setTimeout(r, 0))
+      }
+    })()
+    return () => { live = false }
+  }, [drafts])
+  /** How far this sheet stays sharp on this screen, when its drawing is a picture; null when vector or not measured yet. */
+  const softAt = (d: Draft): { zoom: number; dpi: number; need: number } | null => {
+    void sharpSeen
+    const s = sharpOf.current.get(d.page.bytes)
+    if (!s || s.dpi === null) return null
+    const fit = fitPixelsHere(d.page.text.width, d.page.text.height, window)
+    const zoom = sharpZoom(s, fit)
+    return zoom >= MAX_ZOOM ? null : { zoom, dpi: s.dpi, need: dpiForMaxZoom(s.pageWidth, fit) }
+  }
+  const soft = drafts.filter((d) => d.include && d.role === 'sheet').map((d) => [d, softAt(d)] as const).filter((x): x is readonly [Draft, NonNullable<ReturnType<typeof softAt>>] => !!x[1])
 
   /**
    * Reduce every heavy sheet. They go to the pool together and come back as they finish, several
@@ -1760,6 +1795,19 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               )}
             </div>
           )}
+          {soft.length > 0 && (
+            <div className="notice warn">
+              {soft.length === 1 ? 'One sheet carries' : `${soft.length} sheets carry`} {soft.length === 1 ? 'its' : 'their'} drawing as a picture, not as linework, and will look pixelated before the deepest zoom ({percent(MAX_ZOOM)}) on this screen:{' '}
+              {(() => {
+                const zs = soft.map(([, s]) => s.zoom), ds = soft.map(([, s]) => s.dpi)
+                const lo = Math.min(...zs), hi = Math.max(...zs)
+                return <>sharp to about {lo === hi ? percent(lo) : `${percent(lo)}–${percent(hi)}`}, at {Math.min(...ds) === Math.max(...ds) ? Math.min(...ds) : `${Math.min(...ds)}–${Math.max(...ds)}`} dpi. Staying sharp at {percent(MAX_ZOOM)} would take about {Math.max(...soft.map(([, s]) => s.need))} dpi. Sheets drawn as linework stay sharp at every zoom.</>
+              })()}
+              <div className="notice-actions">
+                <span className="muted small">Sheets: {soft.map(([d]) => d.number || `page ${d.pageIndex + 1}`).join(', ')}</span>
+              </div>
+            </div>
+          )}
           {smallLetter.length > 0 && (
             <div className="notice">
               {smallLetter.length} of {drafts.length} pages are {sizeOf(smallLetter[0][1])}, much smaller than the{' '}
@@ -1848,6 +1896,10 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                           {reduceNote[i] && <span className="muted"> {reduceNote[i]}</span>}
                         </>
                       )}
+                      {d.role === 'sheet' && (() => {
+                        const z = softAt(d)
+                        return z && <div className="soft-note" title={`The drawing on this sheet is a picture at ${z.dpi} dpi. It stays sharp to about ${percent(z.zoom)} on this screen; ${percent(MAX_ZOOM)} would take about ${z.need} dpi.`}>picture {z.dpi} dpi · sharp to {percent(z.zoom)}</div>
+                      })()}
                     </td>
                     <td className="small read-by">
                       {d.role !== 'sheet' ? <span className="muted">{d.role === 'cover' ? 'filed as the document' : 'filed into its section, below'}</span> : d.page.text.words.length === 0 ? <span className="muted">scan, no text</span> : templates.length === 0 ? (
