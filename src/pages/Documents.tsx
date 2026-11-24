@@ -22,7 +22,7 @@ import {
   type IssuanceRow, type SearchHit, type SheetToSave,
 } from '../lib/sheets'
 import { anchorsFrom, COVER, listTemplates, readPage, readWith, saveTemplate, type TitleblockTemplate } from '../lib/titleblocks'
-import { listIssuanceSheets, setNameFor } from '../lib/sheets'
+import { fileSheetsUnder, listIssuanceSheets, setNameFor } from '../lib/sheets'
 import { byNumberLabel, disciplineFor } from '../lib/disciplines'
 import { effectiveOrder, groupByDiscipline, sortSheets, type Discipline } from '../lib/disciplines'
 import { ISSUANCE_LABELS, type CurrentSheet, type IssuanceKind, type Project, type SheetRevision } from '../lib/types'
@@ -95,7 +95,8 @@ export default function Documents() {
   /** Sheets chosen with Ctrl- or Shift-click, to do something to several at once. */
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const lastPick = useRef<string | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; filing?: boolean } | null>(null)
+  const [filing, setFiling] = useState(false)
   const [rereading, setRereading] = useState(false)
   /** In this mode a plain click on a sheet selects it instead of opening it. */
   const [selecting, setSelecting] = useState(false)
@@ -198,6 +199,21 @@ export default function Documents() {
     return q ? ordered.filter((s) => s.number.includes(q) || s.number.replace(/-/g, '').includes(q.replace(/-/g, '')) || (s.title ?? '').toUpperCase().includes(q)) : ordered
   }, [ordered, query])
   const groups = useMemo(() => groupByDiscipline(visible, (s) => s.number, order, (s) => s.filed_under), [visible, order])
+  /** The selected sheets, for the right-click menu. */
+  const chosen = sheets.filter((s) => picked.has(s.sheet_id))
+  /** File the selected sheets under one discipline (null: where each number puts it). Numbers stay as they are. */
+  async function fileUnder(code: string | null) {
+    setFiling(true)
+    try {
+      await fileSheetsUnder(chosen.map((s) => ({ id: s.sheet_id, number: s.number })), code, (n) => disciplineFor(n, order).discipline?.code)
+      setMenu(null)
+      await load()
+    } catch (e) {
+      setError(message(e))
+    } finally {
+      setFiling(false)
+    }
+  }
   const cols = useColumnWidths(REGISTER_COLUMNS)
 
   if (!current) {
@@ -414,9 +430,26 @@ export default function Documents() {
 
       {menu && (
         <div className="pick-menu-shade" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
-          <div className="pick-menu" style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.min(menu.y, window.innerHeight - 110) }}>
-            <button onClick={() => { setMenu(null); setRereading(true) }}>Re-read title and date from {picked.size === 1 ? 'the sheet' : `these ${picked.size} sheets`}</button>
-            <button onClick={() => { setMenu(null); setPicked(new Set()) }}>Clear the selection</button>
+          <div className="pick-menu" role="menu" onClick={(e) => e.stopPropagation()}
+            style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.filing ? 470 : 150))) }}>
+            {!menu.filing ? (
+              <>
+                <button role="menuitem" onClick={() => setMenu({ ...menu, filing: true })}>Change discipline ▸</button>
+                <button role="menuitem" onClick={() => { setMenu(null); setRereading(true) }}>Re-read title and date from {picked.size === 1 ? 'the sheet' : `these ${picked.size} sheets`}</button>
+                <button role="menuitem" onClick={() => { setMenu(null); setPicked(new Set()) }}>Clear the selection</button>
+              </>
+            ) : (
+              <>
+                <button role="menuitem" className="pick-menu-back" onClick={() => setMenu({ ...menu, filing: false })}>◂ File {picked.size === 1 ? 'the sheet' : `these ${picked.size} sheets`} under</button>
+                <div className="pick-menu-list">
+                  <button role="menuitem" disabled={filing} onClick={() => fileUnder(null)}>Where {picked.size === 1 ? 'its number puts it' : 'each one’s number puts it'}</button>
+                  {order.map((d) => {
+                    const here = chosen.length > 0 && chosen.every((s) => (disciplineFor(s.number, order, s.filed_under).discipline?.code ?? '') === d.code)
+                    return <button role="menuitem" key={d.code} disabled={filing} className={here ? 'pick-menu-here' : undefined} onClick={() => fileUnder(d.code)}>{d.code} · {d.name}{here ? ' ✓' : ''}</button>
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

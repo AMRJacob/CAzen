@@ -35,3 +35,4 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     node --experimental-strip-types sov.test.ts   # the schedule-of-values reader
 
 Needs Python Playwright and Chrome. Screenshots are written beside the scripts and are not kept.
+    python3 t_filed.py         # several sheets chosen, right-click → Change discipline, and back by number

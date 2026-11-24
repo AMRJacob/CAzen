@@ -111,6 +111,27 @@ export async function listSheetsAsOf(projectId: string, date: string) {
 export const disciplineOf = (number: string) => (number.trim().match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase() || null
 
 /**
+ * File several sheets under one discipline at once, without touching their numbers. `code` null
+ * files each by its number again. A sheet whose number already puts it under `code` is stored
+ * as filed by its number, so it carries no "filed" tag for a choice that changes nothing.
+ * `ownCode` gives the discipline a number puts a sheet under in the order in force.
+ */
+export async function fileSheetsUnder(
+  sheets: { id: string; number: string }[],
+  code: string | null,
+  ownCode: (number: string) => string | null | undefined,
+): Promise<void> {
+  const want = code?.trim().toUpperCase() || null
+  const byNumber = sheets.filter((s) => !want || ownCode(s.number)?.toUpperCase() === want).map((s) => s.id)
+  const moved = sheets.filter((s) => want && ownCode(s.number)?.toUpperCase() !== want).map((s) => s.id)
+  for (const [ids, value] of [[byNumber, null], [moved, want]] as const) {
+    if (!ids.length) continue
+    const { error } = await db().from('sheets').update({ filed_under: value }).in('id', ids)
+    if (error) throw error
+  }
+}
+
+/**
  * Correct a sheet's number or title after the fact — a typo at upload, a titleblock read wrong.
  *
  * The number and title live on the sheet, and each revision also keeps the title it carried when
