@@ -34,7 +34,7 @@ import { joinPages } from '../lib/pdf/bundle'
 import { putFile, SECTIONS } from '../lib/files'
 import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
 import { classifyPages, countOf, linesOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
-import { ChangeManual, type ManualEdit, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
+import { ChangeManual, type ManualEdit, type ManualPlan, type SectionMenu, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
 import { UPLOADED, useUploads } from '../lib/uploadHost'
 import { reopenIssuance, takeAwayMoved, type Origin, type Reopened } from '../lib/resort'
@@ -1053,6 +1053,13 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
     const rank = (d: Draft) => { const k = introOrder.indexOf(d.pageIndex); return k < 0 ? introOrder.length + d.pageIndex : k }
     return ds.filter((d) => d.include && d.role === 'cover').sort((a, b) => rank(a) - rank(b))
   }
+  const [introOpen, setIntroOpen] = useState(false)
+  // The set introduction read straight through, opened at one of its pages.
+  const [introPeek, setIntroPeek] = useState<{ at?: number } | null>(null)
+  const [introBytes, setIntroBytes] = useState<{ ats: string; bytes: Uint8Array } | null>(null)
+  const introSeen = useRef(1)
+  /** The first line of words on a page: what tells one introduction page from another. */
+  const introHead = (d: Draft) => linesOf(d.page.text).map((l) => l.str.trim()).find((t) => (t.match(/[A-Za-z]/g) ?? []).length >= 4) ?? ''
   const moveIntro = (at: number, by: -1 | 1) => {
     const order = inIntroOrder(drafts).map((d) => d.pageIndex)
     const k = order.indexOf(at), j = k + by
@@ -1077,7 +1084,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   }
   /** The pages (by their place in the upload) a right-click on a page acts on: the chosen ones, if it is one of them. */
   const pagesFor = (at: number) => (sel.has(at) ? [...sel].sort((a, b) => a - b) : [at])
-  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[]; section?: SectionMenu; introGroup?: boolean } | null>(null)
   // Project manual pages split off by hand to start a section of their own (by their place in the upload).
   const [specSplits, setSpecSplits] = useState<Set<number>>(new Set())
   // Sections folded into the one before them by hand, by their first page's place in the upload.
@@ -1289,6 +1296,14 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const [boxing, setBoxing] = useState<{ at: number; what: 'number' | 'title'; box: Region | null } | null>(null)
   const [lastNumberBox, setLastNumberBox] = useState<Region | null>(null)
   const sections = specPages.length ? manualPlan?.sections ?? [] : []
+  const introAts = introPeek ? covers.map((d) => d.pageIndex).join(',') : ''
+  useEffect(() => {
+    if (!introAts) return
+    let stop = false
+    const want = introAts.split(',').map((a) => drafts.find((d) => d.pageIndex === Number(a))?.page.bytes).filter((b): b is Uint8Array => !!b)
+    joinPages(want).then((bytes) => { if (!stop) setIntroBytes({ ats: introAts, bytes }) }, () => {})
+    return () => { stop = true }
+  }, [introAts])  // eslint-disable-line react-hooks/exhaustive-deps
   // The open section's pages as one PDF, made again when its pages change (a join, a split).
   const secAts = secPeek ? sections.find((x) => x.key === secPeek.key)?.ats.join(',') ?? '' : ''
   useEffect(() => {
@@ -1540,15 +1555,40 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         <>
           {rowMenu && (
             <div className="pick-menu-shade" onClick={() => setRowMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowMenu(null) }}>
-              <div className="pick-menu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 220), top: Math.min(rowMenu.y, window.innerHeight - 170) }} onClick={(e) => e.stopPropagation()}>
+              <div className="pick-menu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 220), top: Math.min(rowMenu.y, window.innerHeight - 300) }} onClick={(e) => e.stopPropagation()}>
                 {(() => {
                   const ds = rowMenu.ats.map((a) => drafts.find((d) => d.pageIndex === a)).filter((d): d is Draft => !!d)
                   const done = () => { setRowMenu(null); setSel(new Set()) }
                   const some = (r: PageRole) => ds.some((d) => d.role !== r || !d.include)
                   const out = ds.some((d) => !d.include), inn = ds.some((d) => d.include)
+                  const sec = rowMenu.section
+                  if (sec) return (
+                    <>
+                      <div className="muted small pick-menu-title">{sec.number || 'Section'} · {sec.ats.length} {sec.ats.length === 1 ? 'page' : 'pages'}</div>
+                      <button role="menuitem" onClick={() => { setSecPeek({ key: sec.key }); done() }}>View</button>
+                      {sec.joinUp != null && <button role="menuitem" title="This section is really part of the one above" onClick={() => { joinAt(sec.joinUp!); done() }}>Join up</button>}
+                      {sec.joinDown != null && <button role="menuitem" title="The section below is really part of this one" onClick={() => { joinAt(sec.joinDown!); done() }}>Join down</button>}
+                      <button role="menuitem" onClick={() => { pagesTo(sec.ats, 'sheet'); done() }}>Move to drawings</button>
+                      <button role="menuitem" onClick={() => { pagesTo(sec.ats, 'cover'); done() }}>Make part of the set introduction</button>
+                      <button role="menuitem" onClick={() => { sec.setInclude(!sec.include); done() }}>{sec.include ? 'Leave out' : 'Put back'}</button>
+                    </>
+                  )
+                  if (rowMenu.introGroup) return (
+                    <>
+                      <div className="muted small pick-menu-title">Set Introduction · {covers.length} {covers.length === 1 ? 'page' : 'pages'}</div>
+                      <button role="menuitem" onClick={() => { setIntroPeek({}); done() }}>View</button>
+                      <button role="menuitem" onClick={() => { setIntroOpen((o) => !o); done() }}>{introOpen ? 'Fold the pages away' : 'Show the pages'}</button>
+                    </>
+                  )
+                  const introAt = ds.length === 1 && ds[0].include && ds[0].role === 'cover' ? covers.indexOf(ds[0]) : -1
                   return (
                     <>
                       <div className="muted small pick-menu-title">{ds.length === 1 ? `Page ${ds[0].pageIndex + 1}` : `${ds.length} pages`}</div>
+                      {introAt >= 0 && <>
+                        <button role="menuitem" onClick={() => { setIntroPeek({ at: ds[0].pageIndex }); done() }}>View</button>
+                        {introAt > 0 && <button role="menuitem" onClick={() => { moveIntro(ds[0].pageIndex, -1); done() }}>Move earlier</button>}
+                        {introAt < covers.length - 1 && <button role="menuitem" onClick={() => { moveIntro(ds[0].pageIndex, 1); done() }}>Move later</button>}
+                      </>}
                       {some('spec') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'spec'); done() }}>Move to the project manual</button>}
                       {some('sheet') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'sheet'); done() }}>Move to drawings</button>}
                       {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the set introduction</button>}
@@ -1611,25 +1651,31 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           )}
           {(covers.length > 0 || !!DOCUMENT_FOR[kind]) && <div className="card change-intro">
             <h3>Set Introduction <span className="muted small">{covers.length} {covers.length === 1 ? 'page' : 'pages'}</span></h3>
-            <p className="muted small">The change document’s own pages and any cover sheets or narratives from the disciplines, filed together as the document in this order.</p>
+            <p className="muted small">The change document’s own pages and any cover sheets or narratives from the disciplines, filed together as the document in this order. These pages often have no header or footer, so their order is set here: right-click a page to move it earlier or later.</p>
             {covers.length ? (
               <table className="intro-table">
                 <tbody>
-                  {covers.map((d, k) => {
-                    const i = drafts.indexOf(d)
-                    const head = linesOf(d.page.text).map((l) => l.str.trim()).find((t) => (t.match(/[A-Za-z]/g) ?? []).length >= 4) ?? ''
+                  <tr className="intro-group" title="Right-click for view"
+                    onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: covers.map((d) => d.pageIndex), introGroup: true }) }}>
+                    <td className="intro-name"><strong>Set Introduction</strong></td>
+                    <td className="small nowrap">
+                      <button className="link small cm-fold" aria-expanded={introOpen} onClick={() => setIntroOpen((o) => !o)}>
+                        {introOpen ? '▾' : '▸'} {covers.length} {covers.length === 1 ? 'page' : 'pages'} · upload {covers.map((d) => d.pageIndex + 1).join(', ')}
+                      </button>
+                    </td>
+                    <td className="intro-head muted small">{covers.map(introHead).filter(Boolean).slice(0, 3).join(' · ')}</td>
+
+                  </tr>
+                  {introOpen && covers.map((d, k) => {
+                    const head = introHead(d)
                     return (
-                      <tr key={d.pageIndex} className={`page-row${sel.has(d.pageIndex) ? ' picked' : ''}`}
+                      <tr key={d.pageIndex} className={`cm-page page-row${sel.has(d.pageIndex) ? ' picked' : ''}`}
                         onClick={(e) => { if (!onControl(e)) pickPage(d.pageIndex, e, covers.map((x) => x.pageIndex)) }}
                         onContextMenu={(e) => { e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(d.pageIndex) }) }}>
                         <td className="intro-n">{k + 1}</td>
-                        <td className="thumb-cell"><PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} /></td>
-                        <td className="small nowrap">Upload page {d.pageIndex + 1}</td>
-                        <td className="intro-head">{head ? (head.length > 80 ? head.slice(0, 78) + '…' : head) : <span className="muted">no text</span>}</td>
-                        <td className="intro-move nowrap">
-                          <button className="icon" disabled={k === 0} onClick={() => moveIntro(d.pageIndex, -1)} aria-label={`Move upload page ${d.pageIndex + 1} up`} title="Earlier">↑</button>
-                          <button className="icon" disabled={k === covers.length - 1} onClick={() => moveIntro(d.pageIndex, 1)} aria-label={`Move upload page ${d.pageIndex + 1} down`} title="Later">↓</button>
-                        </td>
+                        <td className="thumb-cell"><PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setIntroPeek({ at: d.pageIndex })} /></td>
+                        <td className="intro-head"><span className="muted small">Upload page {d.pageIndex + 1} · </span>{head ? (head.length > 80 ? head.slice(0, 78) + '…' : head) : <span className="muted">no text</span>}</td>
+
                       </tr>
                     )
                   })}
@@ -1646,7 +1692,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
                 onDrawings={(ats) => pagesTo(ats, 'sheet')}
                 picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })}
-                splits={specSplits} joins={specJoins} onJoin={joinAt} onPeekSection={(key, at) => setSecPeek({ key, at })} />
+                splits={specSplits} joins={specJoins} onJoin={joinAt} onPeekSection={(key, at) => setSecPeek({ key, at })}
+                onSectionMenu={(e, section) => setRowMenu({ x: e.clientX, y: e.clientY, ats: section.ats, section })} />
             ) : (
               <div className="drop-empty muted small">Project manual pages go here. Choose pages in the drawings below (click their page numbers) and make them Project manual.</div>
             )}
@@ -1902,6 +1949,30 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           })()}
         />
       )}
+      {/* The set introduction read straight through; the page in view can be moved earlier or later. */}
+      {introPeek && introBytes && introBytes.ats === introAts && covers.length > 0 && (() => {
+        const order = covers.map((d) => d.pageIndex)
+        const start = introPeek.at != null && order.includes(introPeek.at) ? order.indexOf(introPeek.at) + 1 : 1
+        const moveSeen = (by: -1 | 1) => {
+          const at = order[introSeen.current - 1]
+          if (at == null) return
+          moveIntro(at, by)
+          setIntroPeek({ at })
+        }
+        return (
+          <PdfPreview key={introAts} flow bytes={introBytes.bytes} startPage={start}
+            onPageSeen={(n) => { introSeen.current = n }}
+            title={`Set Introduction · ${order.length} ${order.length === 1 ? 'page' : 'pages'}`}
+            onClose={() => { setIntroPeek(null); setIntroBytes(null) }}
+            extra={(
+              <span className="pv-joins">
+                <span className="muted small">The page in view:</span>
+                <button onClick={() => moveSeen(-1)} title="Move the page in view earlier in the set introduction">Move earlier</button>
+                <button onClick={() => moveSeen(1)} title="Move the page in view later in the set introduction">Move later</button>
+              </span>
+            )} />
+        )
+      })()}
       {/* A manual section read straight through, with its fields and joins to hand: where a
           section ends is decided by looking at its pages. */}
       {secPeek && (() => {

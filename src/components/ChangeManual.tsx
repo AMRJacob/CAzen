@@ -44,6 +44,19 @@ export interface PlannedSection {
   build: () => Promise<SectionToSave>
 }
 
+/** What a right-click on a section's row can do. */
+export interface SectionMenu {
+  key: string
+  number: string
+  ats: number[]
+  include: boolean
+  /** Its first page, to join it to the section above; absent for the first section. */
+  joinUp?: number
+  /** The next section's first page, to join that one to this; absent for the last. */
+  joinDown?: number
+  setInclude: (include: boolean) => void
+}
+
 export interface ManualPlan {
   sections: PlannedSection[]
   /** Something that stops the save, said in a line. */
@@ -61,9 +74,11 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, joins, onJoin, onPeekSection, edits: given, onEdits, cutBox }: {
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, joins, onJoin, onPeekSection, onSectionMenu, edits: given, onEdits, cutBox }: {
   /** Pages (by their place in the upload) whose section is folded into the one before it. */
   joins?: Set<number>
+  /** A right-click on a section's row: the screen's menu, with the section's own choices. */
+  onSectionMenu?: (e: React.MouseEvent, s: SectionMenu) => void
   /** Open a section to read straight through, at one of its pages if given. */
   onPeekSection?: (key: string, at?: number) => void
   /** The edits, when the upload screen keeps them (so its page preview can change a section too). */
@@ -219,7 +234,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
       </p>
       {loadError && <div className="notice error">Couldn’t read the project manual: {loadError}</div>}
       <table className="change-manual-table">
-        <thead><tr><th>Section</th><th>Title</th><th>Upload pages</th><th>Footer pages</th><th>Goes in as</th><th>Result</th><th></th></tr></thead>
+        <thead><tr><th>Section</th><th>Title</th><th>Upload pages</th><th>Footer pages</th><th>Goes in as</th><th>Result</th>{!onSectionMenu && <th></th>}</tr></thead>
         <tbody>
           {rows.map((r, ri) => {
             const ats = r.s.pages.map((i) => pages[i].at)
@@ -229,7 +244,17 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
             const trouble = r.s.trouble.filter((t) => r.action !== 'pages' || !partial.has(t.kind)).map(troubleText)
             return (
               <Fragment key={r.key}>
-              <tr className={r.include ? '' : 'skipped'}>
+              <tr className={`cm-section${r.include ? '' : ' skipped'}`} title={onSectionMenu ? 'Right-click for view, join up, join down, leave out and more' : undefined}
+                onContextMenu={(e) => {
+                  if (!onSectionMenu || (e.target as HTMLElement).closest('input, select, textarea')) return
+                  e.preventDefault()
+                  onSectionMenu(e, {
+                    key: r.key, number: r.number, ats, include: r.include,
+                    joinUp: ri > 0 ? ats[0] : undefined,
+                    joinDown: ri < rows.length - 1 ? pages[rows[ri + 1].s.pages[0]].at : undefined,
+                    setInclude: (include) => edit(r.key, { include }),
+                  })
+                }}>
                 <td><input className={`cell mono ${r.include && (!r.number || twice.has(r.number)) ? 'bad' : ''}`} value={r.typed} placeholder="09 91 00"
                   onChange={(e) => edit(r.key, { number: e.target.value })} aria-label="Section number" /></td>
                 <td><input className="cell" value={r.title} onChange={(e) => edit(r.key, { title: e.target.value })} aria-label={`Title of ${r.number}`} /></td>
@@ -263,13 +288,15 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
                       </>}
                   {r.include && trouble.length > 0 && <div className="muted">{trouble.join(' · ')}</div>}
                 </td>
-                <td className="small nowrap change-manual-acts">
+                {!onSectionMenu && (
+                  <td className="small nowrap change-manual-acts">
                   <button className="link small" onClick={() => edit(r.key, { include: !r.include })}>{r.include ? 'Leave out' : 'Put back'}</button>
                   {onDrawings && <button className="link small" onClick={() => onDrawings(ats)} title="Move these pages down to the drawings">They’re drawings</button>}
                   {onPeekSection && <button className="link small" onClick={() => onPeekSection(r.key)} title="Read the section's pages straight through">view</button>}
                   {onJoin && ri > 0 && <button className="link small" onClick={() => onJoin(ats[0])} title="This section is really part of the one above">join up</button>}
                   {onJoin && ri < rows.length - 1 && <button className="link small" onClick={() => onJoin(pages[rows[ri + 1].s.pages[0]].at)} title="The section below is really part of this one">join down</button>}
                 </td>
+                )}
               </tr>
               {unfolded.has(r.key) && r.s.pages.map((pi, k) => {
                 const at = pages[pi].at

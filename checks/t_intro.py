@@ -49,10 +49,13 @@ with sync_playwright() as p:
     print('kind:',pg.eval_on_selector('.upload-panel .form select','s=>s.value'),'| name:',f('.upload-panel .form label:has-text("Set name") input'),
           '| date:',f('.upload-panel .form input[type=date]'),'| subject:',f('.upload-panel .form label:has-text("Subject") input'))
     print('cover note:',pg.inner_text('.upload-cover-note'))
-    intro=lambda: pg.evaluate("[...document.querySelectorAll('.change-intro .intro-table tr')].map(r=>r.children[2].innerText+' — '+r.querySelector('.intro-head').innerText.slice(0,40))")
+    intro=lambda: pg.evaluate("[...document.querySelectorAll('.change-intro .intro-table tr.cm-page')].map(r=>r.querySelector('.intro-head').innerText.slice(0,55))")
     print('intro:',intro())
     print('drawing rows:',pg.locator('.upload-panel table:not(.change-manual-table):not(.intro-table) tbody tr').count())
-    pg.locator('.change-intro button[aria-label="Move upload page 2 up"]').click(); pg.wait_for_timeout(300)
+    print('group:',pg.inner_text('.change-intro .intro-group'))
+    pg.locator('.change-intro .cm-fold').click(); pg.wait_for_timeout(300)
+    pg.locator('.change-intro tr.cm-page').nth(1).locator('td.intro-n').click(button='right'); print('menu:',pg.inner_text('.pick-menu').replace('\n',' | '))
+    pg.click('.pick-menu button:has-text("Move earlier")'); pg.wait_for_timeout(300)
     print('after moving page 2 up:',intro())
     btn='.upload-panel button.primary:has-text("Save")'
     pg.click(btn); pg.wait_for_selector('.upload-chip.done',timeout=60000)

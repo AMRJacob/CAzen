@@ -55,5 +55,5 @@ with sync_playwright() as p:
     print('menu:',pg.inner_text('.pick-menu').replace('\n',' | '))
     pg.click('.pick-menu button:has-text("Split to a new section")'); pg.wait_for_timeout(800)
     print('after split:',secs())
-    pg.locator('.change-manual-table .change-manual-acts').nth(1).locator('button:has-text("join up")').click(); pg.wait_for_timeout(800)
+    pg.locator('.change-manual-table > tbody > tr.cm-section').nth(1).locator('td').nth(2).click(button='right'); pg.click('.pick-menu button:has-text("Join up")'); pg.wait_for_timeout(800)
     print('after join:',secs(),'| errors:',errs); b.close()

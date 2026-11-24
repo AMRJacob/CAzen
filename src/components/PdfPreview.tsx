@@ -16,7 +16,9 @@ import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 /** The gap kept between a page's edge and the window's when reading through. */
 const EDGE = 10
 
-export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked, startPage }: {
+export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked, startPage, onPageSeen }: {
+  /** With flow: told the page being read (1-based) as it changes. */
+  onPageSeen?: (n: number) => void
   /** With flow: the page to open at (1-based). */
   startPage?: number
   /** Kept to the right of the page rather than over it, to read beside what is on the page. */
@@ -114,7 +116,9 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
   }, [pdf, number, onClose, step, flow])
 
   const pages = pdf?.numPages ?? 1
-  const seen = useCallback((n: number) => setNumber(n), [])
+  const seenRef = useRef(onPageSeen)
+  useEffect(() => { seenRef.current = onPageSeen })
+  const seen = useCallback((n: number) => { setNumber(n); seenRef.current?.(n) }, [])
   const toPage = (n: number) => { if (flow) setGoTo((g) => ({ page: n, ask: g.ask + 1 })); else setNumber(n) }
 
   // Reading through. The wheel moves the page instead of zooming it (Ctrl + wheel and a pinch

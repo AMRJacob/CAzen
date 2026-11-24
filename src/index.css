@@ -3788,3 +3788,8 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .change-intro .thumb-cell { width: 70px; }
 .change-intro .intro-head { width: 100%; }
 .change-intro .intro-move button { padding: 2px 8px; }
+.change-intro tr.cm-page td { background: var(--wash); padding-top: 3px; padding-bottom: 3px; }
+.change-intro tr.cm-page.picked td { background: var(--moss-soft); }
+.change-intro tr.cm-page { cursor: pointer; }
+.change-intro .intro-group td { vertical-align: middle; }
+.change-manual tr.cm-section { cursor: context-menu; }

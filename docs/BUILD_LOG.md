@@ -11,6 +11,32 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:45 CST (set introduction folded like a manual section; actions in the right-click menu)
+
+Jacob, 11:11: the set introduction as a collapsible group like the manual's sections, its pages
+reorderable since they often have no header or footer; then: put these options in the
+right-click menu (with a screenshot of the stacked Leave out / They're drawings / view / join up /
+join down links).
+
+- **Set Introduction** is one row — name, ▸ N pages with their upload numbers, the first lines of
+  its pages — folded by default. Unfolded, each page is a row (order, picture, upload page, first
+  line), chosen and right-clicked like any other. The picture opens the whole introduction as
+  one continuous strip at that page, with *Move earlier* / *Move later* for the page in view
+  (`PdfPreview` `onPageSeen`). The ↑ ↓ buttons are gone.
+- **Right-click menu**:
+  - an introduction page: *View*, *Move earlier*, *Move later*, then the usual moves and remove;
+  - the introduction's row: *View*, *Show the pages* / *Fold the pages away*;
+  - a manual section's row: *View*, *Join up*, *Join down*, *Move to drawings*, *Make part of the
+    set introduction*, *Leave out* / *Put back* (`onSectionMenu` on `ChangeManual`).
+  The links column on the manual card is gone (still shown where `ChangeManual` is used without
+  the menu).
+
+Checks updated (`t_intro`, `t_secview`, `t_split`, `t_changedoc`, `t_resort`, `t_coversheet`) and
+passing with `t_secbox`, `t_upload_bg`: introduction page 2 moved earlier by right-click and filed
+first; the section menu's Join down makes 09 91 00 pages 3–6. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 11:25 CST (change upload: join up / join down; a section read straight through)
 
 Jacob, 11:00: the manual tools of the project manual upload were missing from the change

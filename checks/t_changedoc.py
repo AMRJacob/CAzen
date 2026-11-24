@@ -41,7 +41,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/documents')
     pg.click('button:has-text("Upload a set")'); pg.set_input_files('.upload-panel input[type=file]','change_doc.pdf')
-    pg.wait_for_selector('.change-manual tbody tr',timeout=30000); pg.wait_for_timeout(2500)
+    pg.wait_for_selector('.change-manual tbody tr',timeout=30000); pg.locator('.change-intro .cm-fold').click() if pg.locator('.change-intro .cm-fold').count() else None; pg.wait_for_timeout(2500)
     parts=pg.evaluate("[...document.querySelectorAll('.upload-panel > table tbody tr, .upload-panel table:not(.change-manual-table) tbody tr')].map(r=>r.querySelector('select.role-cell')?.value)")
     print('parts:',parts)
     f=lambda sel: pg.input_value(sel)
@@ -55,19 +55,19 @@ with sync_playwright() as p:
     pg.locator('.upload-panel').screenshot(path='changedoc.png')
     # a page moved by hand: the drawing marked as cover, then back
     pg.locator('select.role-cell').last.select_option('cover'); pg.wait_for_timeout(300)
-    print('drawing as cover → save:',pg.inner_text(btn),'| intro rows:',pg.locator('.change-intro .intro-table tr').count())
-    pg.locator('.change-intro .intro-table tr').last.locator('td.intro-n').click(button='right'); pg.click('.pick-menu button:has-text("Move to drawings")'); pg.wait_for_timeout(300)
+    print('drawing as cover → save:',pg.inner_text(btn),'| intro rows:',pg.locator('.change-intro .intro-table tr.cm-page').count())
+    pg.locator('.change-intro .intro-table tr.cm-page').last.locator('td.intro-n').click(button='right'); pg.click('.pick-menu button:has-text("Move to drawings")'); pg.wait_for_timeout(300)
     # The drawing chosen by its page number and made a manual page with the bar, then its section
     # made drawings again ("They're drawings").
-    dr=lambda: pg.locator('.upload-panel table:not(.change-manual-table) > tbody > tr')
+    dr=lambda: pg.locator('.upload-panel table:not(.change-manual-table):not(.intro-table) > tbody > tr')
     secs=lambda: pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').count()
     s0, d0 = secs(), dr().count()
     dr().last.locator('td.page-no').click(); pg.click('.pick-bar button:has-text("Project manual")'); pg.wait_for_timeout(2500)
     print('drawing made a manual page: manual sections', s0, '→', secs(), '| drawing rows', d0, '→', dr().count())
-    pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').last.locator('button:has-text("They’re drawings")').click(); pg.wait_for_timeout(1500)
+    pg.locator('.change-manual-table > tbody > tr.cm-section').last.locator('td').nth(5).click(button='right'); pg.click('.pick-menu button:has-text("Move to drawings")'); pg.wait_for_timeout(1500)
     print('section made drawings: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
     for _ in range(2):  # the two manual pages that came down with it, sent back up by their Part
-        dr().nth(2).locator('select.role-cell').select_option('spec'); pg.wait_for_timeout(1200)
+        dr().nth(0).locator('select.role-cell').select_option('spec'); pg.wait_for_timeout(1200)
     print('manual pages back by their Part: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
     print('wide pop-up:',pg.evaluate("(()=>{const e=document.querySelector('.upload-panel.wide');const r=e.getBoundingClientRect();return [Math.round(r.width),getComputedStyle(e).position]})()"))
     pg.screenshot(path='upload_wide.png')

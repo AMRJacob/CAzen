@@ -50,7 +50,7 @@ with sync_playwright() as p:
           '| date:',f('.upload-panel .form input[type=date]'),'| subject:',f('.upload-panel .form label:has-text("Subject") input'))
     print('cover note:',pg.inner_text('.upload-cover-note'))
     secs=lambda: pg.evaluate("[...document.querySelectorAll('.change-manual-table > tbody > tr:not(.cm-page)')].map(r=>r.querySelector('input.cell').value+' '+r.querySelectorAll('td')[2].innerText.trim())")
-    print('card:',secs(),'| links:',pg.inner_text('.change-manual-table > tbody > tr:not(.cm-page) .change-manual-acts').replace('\n',' '))
+    print('card:',secs())
     # a page in the section's list opens the section, at that page
     pg.locator('.change-manual-table .cm-fold').nth(1).click(); pg.wait_for_timeout(500)
     pg.locator('.change-manual-table tr.cm-page .page-thumb').nth(1).click(); pg.wait_for_selector('.ps-page'); pg.wait_for_timeout(1500)
@@ -64,6 +64,6 @@ with sync_playwright() as p:
     pg.locator('.change-manual-table .cm-fold').first.click(); pg.wait_for_timeout(300)
     pg.locator('.change-manual-table tr.cm-page').nth(2).click(button='right'); pg.click('.pick-menu button:has-text("Split to a new section")'); pg.wait_for_timeout(800)
     print('split again:',secs())
-    pg.locator('.change-manual-table .change-manual-acts').first.locator('button:has-text("join down")').click(); pg.wait_for_timeout(800)
+    pg.locator('.change-manual-table > tbody > tr.cm-section').nth(0).locator('td').nth(5).click(button='right'); print('section menu:',pg.inner_text('.pick-menu').replace('\n',' | ')); pg.click('.pick-menu button:has-text("Join down")'); pg.wait_for_timeout(800)
     print('join down in card:',secs())
     print('errors:',errs); b.close()
