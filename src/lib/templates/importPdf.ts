@@ -95,6 +95,12 @@ const SYNONYMS: Record<string, string[]> = {
   'ccd.amount': ['amount', 'proposed amount', 'cost'],
   'ccd.time': ['contract time', 'time', 'days'],
   'ccd.issued_by': ['issued by', 'architect', 'by'],
+  'addendum.number': ['addendum no', 'addendum #', 'addendum number', 'addendum'],
+  'addendum.title': ['subject', 're'],
+  'addendum.bid_date': ['bid date', 'bids due', 'date of bid opening'],
+  'addendum.description': ['changes', 'items', 'changes to the bidding documents'],
+  'addendum.sheets': ['attachments', 'sheets attached', 'attached'],
+  'addendum.issued_by': ['issued by', 'architect', 'by'],
   'fr.number': ['report no', 'report #', 'report number', 'field report no'],
   'fr.date': ['date', 'visit date', 'date of visit', 'meeting date'],
   'fr.time': ['time'],
@@ -113,7 +119,7 @@ function matchField(kind: FormKind, label: string, taken: Set<string>): string |
   const l = norm(label).replace(/#$/, ' #').replace(/\s+/g, ' ').trim()
   const keys = fieldsFor(kind).map((f) => f.key).filter((k) => !k.startsWith('firm.'))
   // Kind-specific keys first, then project/doc keys.
-  const prefix = { submittal_cover: 'sub.', asi: 'asi.', rfi_response: 'rfi.', pr: 'pr.', ccd: 'ccd.', field_report: 'fr.', meeting_notes: 'mn.', change_order: 'co.' }[kind]
+  const prefix = { submittal_cover: 'sub.', asi: 'asi.', rfi_response: 'rfi.', pr: 'pr.', ccd: 'ccd.', field_report: 'fr.', meeting_notes: 'mn.', change_order: 'co.', addendum: 'addendum.' }[kind]
   const ordered = [...keys.filter((k) => k.startsWith(prefix)), ...keys.filter((k) => !k.startsWith(prefix))]
   let best: { key: string; score: number } | null = null
   for (const key of ordered) {
@@ -528,7 +534,7 @@ export async function importPdf(bytes: Uint8Array, kind: FormKind, brand: Brand,
   }
 
   // C) Report body: everything under the last rule in the top half becomes one flowing outline field.
-  const flowKey = ({ field_report: 'fr.observations', asi: 'asi.description', rfi_response: 'rfi.response', pr: 'pr.description', ccd: 'ccd.description', submittal_cover: '' } as Record<FormKind, string>)[kind]
+  const flowKey = ({ field_report: 'fr.observations', addendum: 'addendum.description', asi: 'asi.description', rfi_response: 'rfi.response', pr: 'pr.description', ccd: 'ccd.description', submittal_cover: '' } as Record<FormKind, string>)[kind]
   if (flowKey && !taken.has(flowKey) && !fillable) {
     const upperRules = horiz.filter((s) => s.y0 < PAGE_H * 0.5 && s.x1 - s.x0 > PAGE_W * 0.4)
     const startY = upperRules.length ? Math.max(...upperRules.map((s) => s.y1)) + 2 : PAGE_H * 0.35

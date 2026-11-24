@@ -12,7 +12,7 @@ import {
   type ChoicesEl, type ColorRole, type El, type ElType, type FieldEl, type Layout, type TableEl, type TemplateKind,
 } from '../lib/templates/types'
 
-const KINDS: TemplateKind[] = ['general', 'submittal_cover', 'asi', 'rfi_response', 'pr', 'ccd', 'field_report']
+const KINDS: TemplateKind[] = ['general', 'submittal_cover', 'addendum', 'asi', 'rfi_response', 'pr', 'ccd', 'field_report']
 const GRID = 6
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 

@@ -31,6 +31,7 @@ const SECTION_FOR: Record<FormKind, string> = {
   pr: SECTIONS.prs, ccd: SECTIONS.ccds, field_report: SECTIONS.fieldReports,
   meeting_notes: SECTIONS.meetings,
   change_order: SECTIONS.changeOrders,
+  addendum: SECTIONS.addenda,
 }
 
 export async function saveIssued(project: ProjectStore, kind: FormKind, values: Record<string, string>, pdf: Uint8Array) {
@@ -39,7 +40,7 @@ export async function saveIssued(project: ProjectStore, kind: FormKind, values: 
   const { data: u } = await client.auth.getUser()
   const id = crypto.randomUUID()
   const number = Object.entries(values).find(([k]) => k.endsWith('.number') && !k.startsWith('project.'))?.[1] ?? null
-  const title = ['sub.title', 'asi.title', 'rfi.subject', 'pr.title', 'ccd.title', 'fr.date'].map((k) => values[k]).find(Boolean) ?? null
+  const title = ['sub.title', 'addendum.title', 'asi.title', 'rfi.subject', 'pr.title', 'ccd.title', 'fr.date'].map((k) => values[k]).find(Boolean) ?? null
   // In a project folder: "06 ASIs\ASI-003 Revised Storefront.pdf". Dates use dashes, which Windows allows.
   const label = [number, title].filter(Boolean).join(' ').replace(/\//g, '-') || id
   const path = await putFile(project, pdf, `${projectId}/forms/${kind}/${id}.pdf`, { dirs: [SECTION_FOR[kind]], name: `${label}.pdf` })
@@ -65,11 +66,12 @@ const PREFIX: Record<FormKind, string> = {
   submittal_cover: '', asi: 'ASI-', rfi_response: 'RFI-', pr: 'PR-', ccd: 'CCD-', field_report: 'FR-',
   meeting_notes: 'MN-',
   change_order: 'CO-',
+  addendum: 'Addendum ',
 }
 
 /** Next number after the last one used: "ASI-003" → "ASI-004", "09 30 00 - 001" → "09 30 00 - 002". */
 export function nextNumber(kind: FormKind, last: string | null | undefined): string {
-  if (!last) return `${PREFIX[kind]}001`
+  if (!last) return kind === 'addendum' ? 'Addendum 1' : `${PREFIX[kind]}001`
   const m = last.match(/^(.*?)(\d+)(\D*)$/)
   if (!m) return last
   const n = String(Number(m[2]) + 1).padStart(m[2].length, '0')
@@ -79,7 +81,8 @@ export function nextNumber(kind: FormKind, last: string | null | undefined): str
 // ---------- The register of clarifications and changes ----------
 
 /** The documents that change or clarify the Contract, in the order the story happened. */
-export const CHANGE_KINDS: FormKind[] = ['asi', 'rfi_response', 'pr', 'ccd', 'change_order']
+/** Addenda first: they come before the contract, and are kept here as a record of what was bid. */
+export const CHANGE_KINDS: FormKind[] = ['addendum', 'asi', 'rfi_response', 'pr', 'ccd', 'change_order']
 
 export interface RegisterRow extends IssuedForm {
   /** For a change order: the proposal requests it was issued with. */
@@ -138,12 +141,12 @@ export async function uncover(childIds: string[]): Promise<void> {
 /**
  * Which upload categories are also change documents.
  *
- * Only the four an architect actually issues as a cover sheet plus revised sheets. A bid set or
- * a conformed set is drawings and nothing else; an addendum has a cover, but it belongs to
- * bidding rather than to the record of changes during construction, so its cover is kept with
- * the set instead of becoming an entry in the tracker.
+ * The ones an architect issues as a cover sheet plus revised sheets. A bid set or a conformed set
+ * is drawings and nothing else. An addendum belongs to bidding rather than to construction, but
+ * it is kept in the register too, as the record of what the work was bid on.
  */
 export const DOCUMENT_FOR: Partial<Record<IssuanceKind, FormKind>> = {
+  addendum: 'addendum',
   asi: 'asi',
   pr: 'pr',
   ccd: 'ccd',

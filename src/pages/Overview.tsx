@@ -25,7 +25,7 @@ import { benchmarks, type Benchmark } from '../lib/benchmarks'
  */
 
 /** The order change documents are listed in: the ones that change the contract first. */
-const KINDS: FormKind[] = ['change_order', 'ccd', 'pr', 'asi', 'rfi_response', 'field_report', 'meeting_notes']
+const KINDS: FormKind[] = ['change_order', 'ccd', 'pr', 'asi', 'rfi_response', 'addendum', 'field_report', 'meeting_notes']
 
 interface Money_ { figures: Figures; application: Application; count: number }
 

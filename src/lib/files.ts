@@ -41,6 +41,7 @@ export const SECTIONS = {
   payApps: '11 Pay Applications',
   meetings: '12 Meeting Notes',
   changeOrders: '13 Change Orders',
+  addenda: '14 Addenda',
 } as const
 
 // --- File System Access API bits TypeScript doesn't describe yet ---

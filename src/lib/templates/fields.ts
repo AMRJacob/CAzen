@@ -34,6 +34,7 @@ export const FORM_LABELS: Record<TemplateKind, string> = {
   field_report: 'Field report',
   meeting_notes: 'Meeting notes',
   change_order: 'Change order',
+  addendum: 'Addendum',
 }
 
 /** Dates print as MM/DD/YYYY, as on US construction forms. */
@@ -83,6 +84,14 @@ const FORM_FIELDS: Record<FormKind, FieldDef[]> = {
     { key: 'sub.comments', label: 'Review comments', sample: 'PT-01 - White, vertical stacked, glossy\n\nTS-02 - Coordinate installation with tile and flooring installation.\n  - Color: Satin nickel anodized aluminum', multiline: true },
     { key: 'sub.action', label: 'Action', sample: 'approved_noted', choices: SUBMITTAL_ACTIONS },
     { key: 'sub.reviewer', auto: 'user', label: 'Reviewed by', sample: 'L. Duran' },
+  ],
+  addendum: [
+    { key: 'addendum.number', auto: 'next', label: 'Addendum no.', sample: 'Addendum 2' },
+    { key: 'addendum.title', label: 'Subject', sample: 'Revised door hardware; bid date unchanged' },
+    { key: 'addendum.bid_date', label: 'Bid date', sample: 'Unchanged' },
+    { key: 'addendum.description', label: 'Changes', sample: 'Item 1: Section 08 71 00 — replace with the attached section.\nItem 2: Sheet A-601 — revised door schedule, attached.', multiline: true },
+    { key: 'addendum.sheets', label: 'Sheets / sections attached', sample: 'A-601; 08 71 00', multiline: true },
+    { key: 'addendum.issued_by', auto: 'user', label: 'Issued by', sample: 'J. Smith, AIA' },
   ],
   asi: [
     { key: 'asi.number', auto: 'next', label: 'ASI no.', sample: 'ASI-003' },

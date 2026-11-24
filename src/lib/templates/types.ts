@@ -6,7 +6,7 @@
 export const PAGE_W = 612
 export const PAGE_H = 792
 
-export type FormKind = 'submittal_cover' | 'asi' | 'rfi_response' | 'pr' | 'ccd' | 'field_report' | 'meeting_notes' | 'change_order'
+export type FormKind = 'submittal_cover' | 'asi' | 'rfi_response' | 'pr' | 'ccd' | 'field_report' | 'meeting_notes' | 'change_order' | 'addendum'
 export type TemplateKind = 'general' | FormKind   // 'general' = the shared letterhead
 
 /** `light` is a pale grey for rules and bands — the grey bar under a form's title. */

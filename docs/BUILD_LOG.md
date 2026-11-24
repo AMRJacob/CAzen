@@ -11,6 +11,22 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 08:40 CST (retainage per application; addenda in the register)
+
+- **Retainage kept application by application.** Kinco rounds each application's retainage on
+  what it billed when it bills it, and column I is those amounts added up — a dollar or so from
+  rounding the line's total (UCA CW Loop line 2 through App 3: $4,102 printed; $4,101 rounded).
+  Column I's rounding menu has "Round each application's retainage, then add them up" (`'period'`
+  in `RoundWay`); line 7 of later applications is worked the same way. Tests in
+  `checks/rounding.test.ts`.
+- **Addenda in Change Documents.** A new form kind, `addendum`: listed first in the register's
+  "Write a new" and "Show" menus, numbered "Addendum 1, 2 …", with its own default template
+  (subject, bid date, the standard acknowledgement sentence, changes, sheets / sections attached)
+  and fields, kept in a new "14 Addenda" folder. An addendum uploaded with its drawings now gets
+  a register entry like an ASI or PR does. Migration 0051 (widens the allowed kinds on
+  `issued_forms` and `doc_templates`; no rows changed) is applied to production. Browser check
+  `checks/t_addendum.py`.
+
 # Checkpoint — 2026-11-23, 17:50 CST (reading a pay application: the PDF beside it, one decision for changed scheduled values)
 
 **UCA CW Loop, Pay App 6** (Jacob, 17:23, with the PDF and a screenshot: hard to make sense of;

@@ -220,6 +220,17 @@ const ASI = (): Layout => simpleForm("Architect's Supplemental Instruction", 'as
   ...signature(680, 'asi.issued_by', 'Issued:'),
 ])
 
+const ADDENDUM = (): Layout => simpleForm('Addendum', 'addendum', 'Addendum No.:', [
+  labeled(36, 176, 540, 'addendum.title', 'Subject:', 70, { bold: true }),
+  labeled(36, 192, 540, 'addendum.bid_date', 'Bid date:', 70),
+  text(36, 212, 540, 34, 'This Addendum forms a part of the Bidding Documents and modifies them as described below. Acknowledge receipt of this Addendum on the Bid Form; failure to do so may subject the bidder to disqualification.', { size: 8, color: 'muted' }),
+  heading(36, 254, 'Changes:'),
+  field(36, 270, 540, 250, 'addendum.description', { rich: true, flow: true }),
+  heading(36, 532, 'Sheets / Sections Attached:'),
+  field(36, 548, 540, 40, 'addendum.sheets'),
+  ...signature(680, 'addendum.issued_by', 'Issued:'),
+])
+
 const RFI = (): Layout => simpleForm('RFI Response', 'rfi', 'RFI #:', [
   labeled(36, 176, 540, 'rfi.subject', 'Subject:', 70, { bold: true }),
   labeled(36, 192, 330, 'rfi.from', 'From:', 70),
@@ -282,5 +293,6 @@ export function defaultLayout(kind: TemplateKind): Layout {
     case 'rfi_response': return RFI()
     case 'pr': return PR()
     case 'ccd': return CCD()
+    case 'addendum': return ADDENDUM()
   }
 }
