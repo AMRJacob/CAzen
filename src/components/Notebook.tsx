@@ -18,7 +18,8 @@ import {
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
 import { madeAt, onPage, pageOf } from '../lib/obsPages'
-import { defaultName, groupNames, groupNotes, groupPlaces, groupsOf, type GroupPage } from '../lib/pageGroups'
+import { defaultName, groupNames, groupNotes, groupPlaces, groupsOf, sectionTitle, type GroupPage } from '../lib/pageGroups'
+import { dropEmpty } from '../lib/noteBoard'
 import { ObsPicker } from './ObsPlaces'
 import { AgendaBlock } from './AgendaBlock'
 import { ZoomPhoto } from './ZoomPhoto'
@@ -422,8 +423,26 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
   types: ObservationType[]
   onBack: () => void
 }) {
-  const pages = group.pages
-  const first = pages[0], last = pages[pages.length - 1]
+  // The sections in written order to begin with; dragged into another order, remembered for the group.
+  const orderKey = `cazen.groupOrder.${group.id}`
+  const [order, setOrder] = useState<string[]>(() => {
+    try { const o = JSON.parse(localStorage.getItem(orderKey) ?? '[]') as string[]; return o.length ? o : [] } catch { return [] }
+  })
+  const pages = [...group.pages].sort((a, b) => {
+    const x = order.indexOf(a.id), y = order.indexOf(b.id)
+    return (x < 0 ? 1e6 + group.pages.indexOf(a) : x) - (y < 0 ? 1e6 + group.pages.indexOf(b) : y)
+  })
+  const reorder = (next: SiteVisit[]) => {
+    const ids = next.map((p) => p.id)
+    setOrder(ids)
+    try { localStorage.setItem(orderKey, JSON.stringify(ids)) } catch { /* fine */ }
+  }
+  const [dragging, setDragging] = useState<number | null>(null)
+  const byDate = [...pages].sort((a, b) => `${a.visited_on}${a.visited_at}`.localeCompare(`${b.visited_on}${b.visited_at}`))
+  const first = byDate[0], last = byDate[byDate.length - 1]
+  // Each page's empty categories left out, and named above the form.
+  const trimmed = pages.map((p) => ({ ...p, notes: dropEmpty(p.notes).notes }))
+  const emptyNamed = pages.flatMap((p) => dropEmpty(p.notes).empty.map((e) => `${sectionTitle(p)}: ${e}`))
   const own = kind === 'visit'
     ? observations.filter((o) => pages.some((p) => onPage(o, p.id, all, canLinkPages()))).sort((a, b) => madeAt(a) - madeAt(b))
     : []
@@ -432,7 +451,7 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
     const w = (p as SiteVisit).widgets
     return widgetsForReport(shownBlocks({ v: 1, blocks: [] }, w, 'desktop'), w, (p.notes ?? '').match(/^\d+\.\s/gm)?.length ?? 0)
   }
-  const notes = groupNotes(pages, extra)
+  const notes = groupNotes(trimmed, extra)
   const headings = notes.match(/^\d+\.\s/gm)?.length ?? 0
   const recorded = own.length
     ? `\n${headings + 1}. Observations recorded\n` + own.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
@@ -449,8 +468,26 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
         <button onClick={onBack}>Back to the book</button>
       </div>
       <p className="muted small">One report from {pages.length} pages: each is a section, under its title or place. Change anything here; the pages stay as they are.</p>
+      <div className="grp-order" aria-label="Order of the sections">
+        <span className="grp-order-h">Order of the sections — drag to change{order.length ? '' : ' (as written)'}</span>
+        <ol>
+          {pages.map((p, i) => (
+            <li key={p.id} draggable className={dragging === i ? 'dragging' : ''}
+              onDragStart={() => setDragging(i)} onDragEnd={() => setDragging(null)}
+              onDragOver={(e) => { e.preventDefault(); if (dragging === null || dragging === i) return; const next = [...pages]; const [m] = next.splice(dragging, 1); next.splice(i, 0, m); reorder(next); setDragging(i) }}>
+              <span className="grp-grip" aria-hidden="true">⠿</span>
+              <span className="grp-name">{sectionTitle(p)}</span>
+              <span className="muted small">{shortDay(p.visited_on)}{p.visited_at ? ` · ${clockTime(p.visited_at)}` : ''}</span>
+              <button disabled={i === 0} aria-label="Move up" onClick={() => { const next = [...pages]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; reorder(next) }}>↑</button>
+              <button disabled={i === pages.length - 1} aria-label="Move down" onClick={() => { const next = [...pages]; [next[i + 1], next[i]] = [next[i], next[i + 1]]; reorder(next) }}>↓</button>
+            </li>
+          ))}
+        </ol>
+        <span className="muted small">Changing the order fills the form again from the pages; changes typed into the form are lost.</span>
+      </div>
+      {emptyNamed.length > 0 && <p className="notice nb-empty-warn">Left out — nothing under: {emptyNamed.join('; ')}.</p>}
       {kind === 'visit' ? (
-        <IssueForm key={group.id} kind="field_report" sheetKey={`group:${group.id}`}
+        <IssueForm key={`${group.id}:${pages.map((p) => p.id).join(',')}`} kind="field_report" sheetKey={`group:${group.id}`}
           photos={[
             ...pages.flatMap((p) => p.photos.map((path) => ({ path, label: p.photo_labels?.[path] ?? '' }))),
             ...own.flatMap((o) => o.photos.map((path) => ({ path, label: o.title }))),
@@ -464,7 +501,7 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
             'fr.observations': notes + recorded,
           }} />
       ) : (
-        <IssueForm key={group.id} kind="meeting_notes" prefill={{
+        <IssueForm key={`${group.id}:${pages.map((p) => p.id).join(',')}`} kind="meeting_notes" prefill={{
           'mn.date': day,
           ...(first.visited_at ? { 'mn.time': clockTime(first.visited_at) } : {}),
           'mn.title': group.name,
@@ -827,8 +864,10 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   if (exporting) {
     // The added blocks follow the notes in the report, each a heading of its own — every one with
     // something in it on this page, whether or not it is in this person's layout.
-    const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen), page.widgets, notes.match(/^\d+\.\s/gm)?.length ?? 0)
-    const headings = (notes + added).match(/^\d+\.\s/gm)?.length ?? 0
+    // Categories with nothing under them are left out of the report, and named above it (Jacob, 11/24).
+    const { notes: printed, empty } = dropEmpty(notes)
+    const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen), page.widgets, printed.match(/^\d+\.\s/gm)?.length ?? 0)
+    const headings = (printed + added).match(/^\d+\.\s/gm)?.length ?? 0
     const recorded = own.length
       ? `\n${headings + 1}. Observations recorded\n` + own.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
       : ''
@@ -841,6 +880,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
           <button onClick={() => setExporting(false)}>Back to the page</button>
         </div>
         <p className="muted small">On your firm’s template, filled in from the page. Change anything here; the page stays as it is.</p>
+        {empty.length > 0 && <p className="notice nb-empty-warn">Left out — nothing under {empty.length === 1 ? 'this category' : 'these categories'}: {empty.join(', ')}.</p>}
         {visit ? (
           <IssueForm key={page.id} kind="field_report" sheetKey={page.id}
             photos={[
@@ -853,7 +893,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
             ...(page.weather ? { 'fr.weather': page.weather } : {}),
             ...(page.location ? { 'fr.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'fr.participants': who } : {}),
-            'fr.observations': notes + added + recorded,
+            'fr.observations': printed + added + recorded,
           }} />
         ) : (
           <IssueForm key={page.id} kind="meeting_notes" prefill={{
@@ -862,7 +902,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
             ...(page.title ? { 'mn.title': page.title } : {}),
             ...(page.location ? { 'mn.location': page.location.replace(/, (?![A-Z]{2}\b)/g, '\n') } : {}),
             ...(who ? { 'mn.participants': who } : {}),
-            'mn.notes': notes + added,
+            'mn.notes': printed + added,
           }} />
         )}
       </article>

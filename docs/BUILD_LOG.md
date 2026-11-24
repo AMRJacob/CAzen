@@ -11,6 +11,38 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 16:35 CST (AI review fixes, empty categories, report order, board reordering)
+
+Four asks from Jacob after testing on device. Test browser only throughout.
+
+**The AI review wouldn't accept on the phone; unrelated lines paired as "Reworded".** The review
+now opens inside the notebook frame (`InFrame`), as the other notebook overlays do. Every
+suggestion starts undecided; the bar reads "N changes · X accepted · Y to decide", each row shows
+✓ Accepted / Rejected plainly, and *Apply* stays off until something is accepted. The comparison
+(`src/lib/aiRevise.ts`) was rewritten: lines kept exactly are lined up first (ties keep old lines
+first); a removed and an added line are shown as one rewording only when their words are at least
+half alike, most alike first; otherwise they show as taken out and added. Applying follows a
+plan made region by region between kept lines, so a turned-down change leaves the notes as they
+were there and a turned-down heading keeps the lines under it. The word-by-word view splits on
+punctuation too. Could not reproduce "won't accept" in Chromium; the frame move is the likely
+fix. `checks/airevise.test.ts`, `checks/t_aicheck.py`, `checks/t_aicheck_phone.py`.
+
+**Empty categories left out of field reports, with a warning.** `dropEmpty` in
+`src/lib/noteBoard.ts` removes categories with no notes under them (at any depth) and returns
+their names; the page export and the group report both print without them and show a notice
+naming what was left out.
+
+**Group report: a default order, drag to reorder.** The report preview lists its sections (pages)
+in contents order; drag or ↑/↓ to change it. The order is kept on the device per group
+(`cazen.groupOrder.<id>`).
+
+**Rearranging the notes board.** Dropped near the top or bottom edge of a note, a note goes
+before or after it; a category dropped on the top of another category's heading (or the bottom of
+the box) goes before or after it. A note dropped on a category heading still files into it.
+`placeBeside` in `src/lib/noteBoard.ts`; `checks/t_reorder.py`.
+
+---
+
 # Checkpoint — 2026-11-24, 16:10 CST (after a site meeting: groups, phone tabs, photo zoom, AI check, and more)
 
 Ten asks from Jacob, 15:27–15:54, straight after a site meeting. Test browser only throughout.

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { apply, compare, forAi, readOutline, wordDiff, type Change } from '../lib/aiRevise'
+import { InFrame } from './PageGrid'
 
 /**
  * Checking a page's notes with an AI and bringing the suggestions back (Jacob, 11/24).
@@ -22,8 +23,10 @@ export function AiCheck({ notes, kind, onApply, onClose }: {
   const [edits, setEdits] = useState<Record<number, string>>({})
   const changes = useMemo<Change[]>(() => (reviewing ? compare(readOutline(notes), readOutline(reply)) : []), [reviewing, notes, reply])
   const open = changes.map((c, i) => (c.kind === 'same' ? -1 : i)).filter((i) => i >= 0)
-  // Every suggestion starts accepted; reject the ones not wanted.
-  const take = (i: number) => taken[i] ?? true
+  // Each suggestion starts undecided (Jacob, 11/24: started accepted, tapping Accept seemed to do
+  // nothing). Only those accepted are applied; one left undecided keeps the notes as they were.
+  const take = (i: number) => taken[i] === true
+  const decided = open.filter((i) => taken[i] !== undefined).length
 
   const copy = async () => {
     const text = forAi(notes, kind)
@@ -36,6 +39,8 @@ export function AiCheck({ notes, kind, onApply, onClose }: {
   const ind = (level: number) => ({ paddingLeft: `${level * 18}px` })
 
   return (
+    // Drawn in the notebook's frame, not inside the scrolling page (as the corner menus are, for iOS's sake).
+    <InFrame>
     <div className="take-ask" onClick={onClose}>
       <div className="take-card aic" role="dialog" aria-label="Check with AI" onClick={(e) => e.stopPropagation()}>
         <h3>Check with AI</h3>
@@ -61,19 +66,19 @@ export function AiCheck({ notes, kind, onApply, onClose }: {
         ) : (
           <>
             <div className="aic-bar">
-              <span>{open.length ? `${open.length} ${open.length === 1 ? 'change' : 'changes'} · ${open.filter(take).length} accepted` : 'No changes suggested.'}</span>
+              <span>{open.length ? `${open.length} ${open.length === 1 ? 'change' : 'changes'} · ${open.filter(take).length} accepted · ${open.length - decided} to decide` : 'No changes suggested.'}</span>
               <button className="link" onClick={() => setTaken(Object.fromEntries(open.map((i) => [i, true])))}>Accept all</button>
               <button className="link" onClick={() => setTaken(Object.fromEntries(open.map((i) => [i, false])))}>Reject all</button>
             </div>
             <ul className="aic-list">
               {changes.map((c, i) => {
                 if (c.kind === 'same') return <li key={i} className="aic-same" style={ind(c.old.level)}>{c.old.text}</li>
-                const on = take(i)
+                const on = take(i), state = taken[i] === undefined ? 'undecided' : on ? 'on' : 'off'
                 const level = c.kind === 'remove' ? c.old.level : c.new.level
                 const words = c.kind === 'change' ? wordDiff(c.old.text, edits[i] ?? c.new.text) : null
                 const moved = c.kind === 'change' && c.old.level !== c.new.level
                 return (
-                  <li key={i} className={`aic-ch aic-${c.kind}${on ? ' on' : ' off'}`} style={ind(level)}>
+                  <li key={i} className={`aic-ch aic-${c.kind} ${state}`} style={ind(level)}>
                     <span className="aic-tag">{c.kind === 'add' ? 'Added' : c.kind === 'remove' ? 'Taken out' : moved ? (c.new.level < c.old.level ? 'Moved out' : 'Moved in') : 'Reworded'}</span>
                     {c.kind === 'remove'
                       ? <span className="aic-text"><del>{c.old.text}</del></span>
@@ -82,15 +87,17 @@ export function AiCheck({ notes, kind, onApply, onClose }: {
                           <input value={edits[i] ?? c.new.text} onChange={(e) => setEdits({ ...edits, [i]: e.target.value })} aria-label="Suggested words" />
                         </span>}
                     <span className="aic-do">
-                      <button className={on ? 'on' : ''} onClick={() => setTaken({ ...taken, [i]: true })}>Accept</button>
-                      <button className={!on ? 'on' : ''} onClick={() => setTaken({ ...taken, [i]: false })}>Reject</button>
+                      <button type="button" className={state === 'on' ? 'on yes' : ''} aria-pressed={state === 'on'} onClick={() => setTaken({ ...taken, [i]: true })}>{state === 'on' ? '✓ Accepted' : 'Accept'}</button>
+                      <button type="button" className={state === 'off' ? 'on no' : ''} aria-pressed={state === 'off'} onClick={() => setTaken({ ...taken, [i]: false })}>{state === 'off' ? 'Rejected' : 'Reject'}</button>
                     </span>
                   </li>
                 )
               })}
             </ul>
             <div className="actions">
-              <button className="primary" onClick={() => onApply(apply(changes, (i) => ({ take: take(i), text: edits[i] })))}>Apply</button>
+              <button className="primary" disabled={!open.filter(take).length} onClick={() => onApply(apply(changes, (i) => ({ take: take(i), text: edits[i] })))}>
+                Apply {open.filter(take).length || ''} {open.filter(take).length === 1 ? 'change' : 'changes'}
+              </button>
               <button className="link" onClick={() => setReviewing(false)}>Back</button>
               <button className="link" onClick={onClose}>Cancel</button>
             </div>
@@ -98,5 +105,6 @@ export function AiCheck({ notes, kind, onApply, onClose }: {
         )}
       </div>
     </div>
+    </InFrame>
   )
 }

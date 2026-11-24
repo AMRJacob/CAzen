@@ -21,6 +21,9 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_people_groups.py
     python3 t_phone.py
     python3 t_aicheck.py
+    python3 t_aicheck_phone.py # the AI review on a phone: in the notebook frame, accept / reject / apply
+    python3 t_reorder.py       # rearranging the notes board: a category before another, a note beside a note
+    node --experimental-strip-types dropempty.test.ts  # reports leave out empty categories, and say which
     python3 t_neworder.py
     python3 t_boardmenu.py
     python3 t_pagephotos.py

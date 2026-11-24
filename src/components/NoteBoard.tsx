@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { addBox, addLoose, LOOSE, looseAt, move, nodeAt, readBoard, remove, rename, writeBoard, type Note, type Path } from '../lib/noteBoard'
+import { addBox, addLoose, LOOSE, looseAt, move, nodeAt, placeBeside, readBoard, remove, rename, writeBoard, type Note, type Path } from '../lib/noteBoard'
 
 /**
  * A page's notes, as things to be picked up and put somewhere.
@@ -52,7 +52,21 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       const p = pathOf(drop.dataset.drop)!
       // Not into itself, nor into anything inside itself.
       if (from.length <= p.length && from.every((v, i) => v === p[i])) continue
-      return drop.dataset.drop!
+      // Near the top or bottom edge of a note, or the top of a category's heading: beside it, not into it.
+      const k = drop.dataset.drop!
+      if (k && k !== 'tray' && p.length) {
+        const card = drop.classList.contains('nbd-card')
+        // A note held over a category goes into it; only a category is set beside another category.
+        const heldBox = !!root.current?.querySelector(`.nbd-box[data-drop="${from.join('.')}"]`)
+        if (!card && !heldBox) return k
+        const r = (card ? drop : drop.querySelector(':scope > .nbd-box-head') ?? drop).getBoundingClientRect()
+        const box = drop.getBoundingClientRect()
+        if (card && y < r.top + r.height * 0.3) return `before:${k}`
+        if (card && y > r.bottom - r.height * 0.3) return `after:${k}`
+        if (!card && y < r.top + r.height * 0.45) return `before:${k}`
+        if (!card && y > box.bottom - 10) return `after:${k}`
+      }
+      return k
     }
     return null
   }
@@ -112,6 +126,15 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       setHeld(null)
       if (over === null) return
       // The tray is the box named LOOSE, made on the spot if it has gone.
+      // Beside another: the line shows where it lands. Notes inside a box are shown newest first, so
+      // above one on screen is after it in the outline; categories at the top are shown as kept.
+      const beside = /^(before|after):(.*)$/.exec(over)
+      if (beside) {
+        const t = pathOf(beside[2])!
+        const shownTurned = t.length >= 2
+        set(placeBeside(board, p.path, t, (beside[1] === 'after') !== shownTurned))
+        return
+      }
       if (over === 'tray') {
         const i = looseAt(board)
         set(i >= 0 ? move(board, p.path, [i]) : move(addBox(board, [], LOOSE), p.path, [board.length]))
@@ -185,7 +208,7 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
     // A line with lines under it is a box; at the top of the board every line is one.
     if (node.kids.length || depth === 0 || fresh.includes(`${k}:${node.text}`) || (editing === k && fresh.includes(`${k}:`))) {
       return (
-        <div key={k} className={`nbd-box d${Math.min(depth, 2)}${held?.over === k ? ' over' : ''}${lifted ? ' lifted' : ''}`} data-drop={k} data-box={k}>
+        <div key={k} className={`nbd-box d${Math.min(depth, 2)}${held?.over === k ? ' over' : ''}${held?.over === `before:${k}` ? ' over-before' : ''}${held?.over === `after:${k}` ? ' over-after' : ''}${lifted ? ' lifted' : ''}`} data-drop={k} data-box={k}>
           <div className="nbd-box-head" {...grab(path, node.text)}>
             {words(path, node, "nbd-box-name")}
             <button className="nbd-x" aria-label={`Add a subcategory to ${node.text}`} title="Add a subcategory" onClick={() => { const at = key([...path, node.kids.length]); set(addBox(board, path, 'New category')); setFresh((f) => [...f, `${at}:`]); setEditing(at) }}>+</button>
@@ -202,7 +225,7 @@ export function NoteBoard({ notes, onChange }: { notes: string; onChange: (next:
       )
     }
     return (
-      <div key={k} className={`nbd-card${held?.over === k ? ' over' : ''}${lifted ? ' lifted' : ''}`} data-drop={k} {...grab(path, node.text)}>
+      <div key={k} className={`nbd-card${held?.over === k ? ' over' : ''}${held?.over === `before:${k}` ? ' over-before' : ''}${held?.over === `after:${k}` ? ' over-after' : ''}${lifted ? ' lifted' : ''}`} data-drop={k} {...grab(path, node.text)}>
         {words(path, node, "nbd-card-text")}
         <button className="nbd-x" aria-label="Remove this note" title="Remove" onClick={() => set(remove(board, path))}>×</button>
       </div>

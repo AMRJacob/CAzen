@@ -109,3 +109,30 @@ export function nodeAt(board: Note[], path: Path): Note | null {
   for (const i of path) { node = list[i] ?? null; if (!node) return null; list = node.kids }
   return node
 }
+
+/**
+ * The notes for a report without the categories that have nothing under them (Jacob, 11/24: an
+ * empty heading should not print, but say so). Returns what is left and the names left out.
+ */
+export function dropEmpty(notes: string | null): { notes: string; empty: string[] } {
+  const board = readBoard(notes)
+  const empty = board.filter((n) => !n.kids.length).map((n) => n.text)
+  return { notes: writeBoard(board.filter((n) => n.kids.length)), empty }
+}
+
+/**
+ * A note or category put beside another — before or after it, at the same level — rather than
+ * into it (Jacob, 11/24: rearrange categories and notes). Not beside anything inside itself.
+ */
+export function placeBeside(board: Note[], from: Path, target: Path, after: boolean): Note[] {
+  if (within(from, target)) return board
+  const next = copy(board)
+  const home = kidsAt(next, from.slice(0, -1))
+  const there = kidsAt(next, target.slice(0, -1))
+  const node = at(next, from), mark = at(next, target)
+  if (!home || !there || !node || !mark) return board
+  home.splice(home.indexOf(node), 1)
+  // Found before the splice: the same objects after it, wherever the indices moved.
+  there.splice(there.indexOf(mark) + (after ? 1 : 0), 0, node)
+  return next
+}

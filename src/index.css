@@ -3913,3 +3913,27 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 .nb-names li { -webkit-touch-callout: none; }
 /* A drawing that is a picture and will go soft before the deepest zoom (upload review, viewer). */
 .soft-note { color: #9a5b12; font-size: 11.5px; white-space: nowrap; }
+/* Each suggestion: undecided, accepted (green), rejected (faded, struck). */
+.aic-ch.undecided { background: #fbfaf3; }
+.aic-ch.on { background: #eaf5ec; box-shadow: inset 3px 0 0 #3d8a52; }
+.aic-ch.off { background: #f6f5f2; opacity: 0.6; }
+.aic-ch.off .aic-text input { text-decoration: line-through; }
+.aic-do button { min-height: 34px; }
+.aic-do button.on.yes { background: #3d8a52; border-color: #3d8a52; color: #fff; }
+.aic-do button.on.no { background: #8a8f8a; border-color: #8a8f8a; color: #fff; }
+
+/* A report's warning for categories left out because nothing is under them. */
+.nb-empty-warn { background: #fdf6e1; border: 1px solid #ecd9a2; color: #6d5a1e; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+/* A group report's sections, in the order they print: drag or ↑ ↓. */
+.grp-order { margin: 8px 0 12px; padding: 10px 12px; border: 1px solid #e1e4df; border-radius: 12px; background: #fff; }
+.grp-order-h { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6b736d; margin-bottom: 6px; }
+.grp-order ol { list-style: decimal inside; margin: 0 0 6px; padding: 0; }
+.grp-order li { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 8px; border-bottom: 1px solid #f0f1ee; cursor: grab; background: #fff; }
+.grp-order li.dragging { opacity: 0.5; background: var(--moss-soft); }
+.grp-grip { color: #8a918b; }
+.grp-name { flex: 1; min-width: 0; font-weight: 600; }
+.grp-order li button { border: none; background: #eef2ee; border-radius: 50%; width: 30px; height: 30px; padding: 0; }
+.grp-order li button:disabled { opacity: 0.3; }
+/* Where a held note or category lands beside another: a line above or below it. */
+.nbd-card.over-before, .nbd-box.over-before { box-shadow: 0 -3px 0 0 var(--moss); }
+.nbd-card.over-after, .nbd-box.over-after { box-shadow: 0 3px 0 0 var(--moss); }
