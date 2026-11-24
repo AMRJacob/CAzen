@@ -11,6 +11,38 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:40 CST (the drawing cover sheet: chosen by right-click, numbered as earlier sets have it)
+
+Jacob, 10:06: the drawing cover sheet has no ordinary title block and keeps being missed — a
+*drawing cover sheet* choice in the right-click menu, filled with the number and title from
+earlier sets; and *Split to a new section* for project manual pages.
+
+- **Split to a new section** (right-click a manual page, or several): the other session built it
+  (99fccbc) and reverted it two minutes later as belonging to this work (2abde7c); it is put back
+  as it was (299354a). One page: a new section starts there. Several: they become a section of
+  their own. The new section's number is typed in; *Join to the one above* puts it back.
+  `checks/t_split.py`: 09 91 00 pages 3–4 → split at 4 → "09 91 00 3" and an unnumbered "4" →
+  joined → "3–4".
+
+- **Right-click a page → Drawing cover sheet — G-000** (the number shown is what it will get).
+  The page becomes a drawing with the project's cover sheet number and title, as typed by hand
+  (they stay if the title blocks are read again).
+- **Which number and title**: the project's current sheet numbered COVER, or numbered like a
+  cover (G-000, G000, T-0, CS-0, A-000…), or titled with "cover" — its number and title. A project
+  with none gets **COVER / Cover Sheet**, which the drawings list files under Cover.
+- **Read automatically too**: a page the reader already takes for a cover sheet (no sheet number
+  in its title block and a list of other sheets on it) now gets that same number and title rather
+  than "COVER".
+
+`checks/t_coversheet.py`: with G-000 COVER SHEET in the project, the menu offers *Drawing cover
+sheet — G-000*, and the page becomes G-000 / Cover sheet, "replaces current". Test browser only.
+
+Note for UCA: its Construction Documents cover sheet was filed as the set's cover file, not as a
+sheet, so the project has no cover sheet to take the number from; until one is uploaded as a
+drawing, the choice gives COVER / Cover Sheet.
+
+---
+
 # Checkpoint — 2026-11-24, 11:20 CST (an upload carries on in the corner while other work is done)
 
 Jacob, 09:56: while sheets upload, collapse the upload screen to the top-right corner with a

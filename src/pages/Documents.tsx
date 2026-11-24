@@ -996,20 +996,34 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
 
 
   // Re-read every page when the templates or the preferred one change; hand edits stay.
+  /**
+   * The drawing cover sheet as the project already has it — its number and title from an earlier
+   * set — or, on a project that has none, COVER / Cover Sheet (which the drawings list files under
+   * Cover). A cover sheet has no ordinary title block, so it is recognised by what it carries (a
+   * list of the other sheets, readPage) or chosen by hand from the right-click menu.
+   */
+  const priorCover = useMemo(() => {
+    for (const [n, t] of existingTitles ?? []) {
+      if (n === COVER || /^(?:G|T|CS|A)[-\s.]?0{1,3}$/.test(n) || /\bCOVER\b/i.test(t)) return { number: n, title: niceTitle(t) || 'Cover Sheet' }
+    }
+    return { number: COVER, title: 'Cover Sheet' }
+  }, [existingTitles])
   const reread = useCallback((list: Draft[], tpls: TitleblockTemplate[], pref: string) => list.map((d) => {
     if (d.pinned === 'none') return { ...d, templateId: null, unsure: false }
     const pinnedTpl = d.pinned ? tpls.find((t) => t.id === d.pinned) : undefined
     const r = pinnedTpl ? readWith(d.page.text, pinnedTpl) : readPage(d.page.text, tpls, pref || null)
+    // Read as the cover sheet: the number and title the project's cover sheet already has.
+    const asCover = r.number === COVER
     return {
       ...d,
       templateId: r.templateId,
       unsure: !pinnedTpl && !!r.unsure,
-      number: d.touched.number ? d.number : r.number,
-      title: d.touched.title ? d.title : niceTitle(r.title),
+      number: d.touched.number ? d.number : asCover ? priorCover.number : r.number,
+      title: d.touched.title ? d.title : asCover ? priorCover.title : niceTitle(r.title),
       revision: d.touched.revision ? d.revision : r.revision,
       date: d.touched.date ? d.date : r.date,
     }
-  }), [])
+  }), [priorCover])
 
   useEffect(() => { setDrafts((ds) => sortRoles(reread(ds, templates, preferred))) }, [templates, preferred, reread])
   // Files dropped before the templates loaded are read with whatever is current when they finish.
@@ -1492,6 +1506,16 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                       {some('spec') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'spec'); done() }}>Move to the project manual</button>}
                       {some('sheet') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'sheet'); done() }}>Move to drawings</button>}
                       {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the cover</button>}
+                      {ds.length === 1 && (
+                        <button role="menuitem" title={`Files it as ${priorCover.number} — ${priorCover.title}, as the project's earlier sets have it`} onClick={() => {
+                          const at = ds[0].pageIndex
+                          setDrafts((all) => all.map((d) => (d.pageIndex === at ? {
+                            ...d, role: 'sheet' as PageRole, roleByHand: true, include: true, number: priorCover.number, title: priorCover.title,
+                            touched: { ...d.touched, number: true, title: true },
+                          } : d)))
+                          done()
+                        }}>Drawing cover sheet <span className="muted small">— {priorCover.number}</span></button>
+                      )}
                       {ds.length > 0 && ds.every((d) => d.role === 'spec' && d.include) && (
                         <button role="menuitem" onClick={() => {
                           // One page: a new section starts there. Several: they become a section of their own.
