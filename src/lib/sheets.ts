@@ -376,6 +376,17 @@ export async function listIssuances(projectId: string): Promise<IssuanceRow[]> {
   }))
 }
 
+/** The project manual sections one set or revision round brought in, with their issued files. */
+export async function listIssuanceSections(issuanceId: string): Promise<{ number: string; filePath: string }[]> {
+  const { data, error } = await db()
+    .from('spec_revisions')
+    .select('file_path, spec_sections(number)')
+    .eq('issuance_id', issuanceId)
+  if (error) throw error
+  type Raw = { file_path: string; spec_sections: { number: string } | null }
+  return ((data ?? []) as unknown as Raw[]).filter((r) => r.file_path).map((r) => ({ number: r.spec_sections?.number ?? '', filePath: r.file_path }))
+}
+
 /** The sheets one set or revision round brought in, for downloading that package. */
 // BundleSheet is defined with the bundler, since that is what consumes it.
 export async function listIssuanceSheets(issuanceId: string): Promise<BundleSheet[]> {

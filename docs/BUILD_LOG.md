@@ -11,6 +11,15 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 09:40 CST (download a change document whole)
+
+Each change document in the register that has a PDF or arrived with sheets has a Download link: one
+PDF of the cover sheet, then the project manual sections it replaced (in section order), then the
+drawing sheets it revised (in sheet order), named "2401 - Project - 2026-11-12 - ASI-003 Subject.pdf".
+Parts that can't be read are left out and named. New `assembleChangeDocument` (pdf/bundle.ts) and
+`listIssuanceSections` (sheets.ts). Browser check `checks/t_changedl.py` reads the downloaded file's
+pages back in order.
+
 # Checkpoint — 2026-11-24, 09:20 CST (pay app differences explained by cause; the PDF's dates)
 
 Jacob: the pay app screens still didn't make clear what was in error or why. Reproduced against

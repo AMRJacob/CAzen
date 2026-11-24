@@ -7,7 +7,10 @@ import { money as asMoney, NOTHING } from '../lib/money'
 import { money as readMoney } from '../lib/sovPaste'
 import { MoneyInput } from '../components/MoneyInput'
 import { openFile, type ProjectStore } from '../lib/files'
-import { listIssuanceSheets } from '../lib/sheets'
+import { listIssuanceSections, listIssuanceSheets } from '../lib/sheets'
+import { assembleChangeDocument, bundleName, saveBundle } from '../lib/pdf/bundle'
+import { effectiveOrder } from '../lib/disciplines'
+import { useFirm } from '../lib/firm'
 import type { BundleSheet } from '../lib/pdf/bundle'
 import { useProject } from '../lib/project'
 import { message } from '../lib/errors'
@@ -208,6 +211,35 @@ export default function CaLogs() {
 /** Days as the contract counts them: signed, so a credit of time reads as one. */
 const daysText = (n: number) => (n === 0 ? NOTHING : `${n > 0 ? '+' : '−'}${Math.abs(n)} ${Math.abs(n) === 1 ? 'day' : 'days'}`)
 
+/**
+ * The change document as one PDF to hand on: cover sheet, then the project manual sections it
+ * replaced, then the drawing sheets it revised.
+ */
+function DownloadChange({ row, project, onError }: { row: RegisterRow; project: ProjectStore & { number?: string | null; name?: string | null; discipline_order?: unknown }; onError: (m: string) => void }) {
+  const { firm } = useFirm()
+  const [busy, setBusy] = useState<string | null>(null)
+  async function go(e: React.MouseEvent) {
+    e.stopPropagation()
+    setBusy('gathering')
+    try {
+      const [sections, sheets] = row.issuance_id
+        ? await Promise.all([listIssuanceSections(row.issuance_id), listIssuanceSheets(row.issuance_id)])
+        : [[], []]
+      const order = effectiveOrder(firm?.discipline_order, (project as { discipline_order?: never }).discipline_order)
+      const b = await assembleChangeDocument(project, { cover: row.file_path ?? null, sections, sheets }, order, setBusy)
+      if (!b.cover && !b.sections && !b.sheets) { onError(`Nothing could be read for ${row.number ?? 'this document'}.`); return }
+      const label = [row.number ?? FORM_LABELS[row.kind], row.title].filter(Boolean).join(' ')
+      saveBundle(b.bytes, bundleName(project, label, row.issued_at?.slice(0, 10)))
+      if (b.missing.length) onError(`${row.number ?? 'The document'} was downloaded without ${b.missing.join(', ')}, which could not be read.`)
+    } catch (err) { onError(message(err)) } finally { setBusy(null) }
+  }
+  return (
+    <button className="link" onClick={go} disabled={!!busy} title="The cover sheet, the project manual sections and the drawing sheets, in one PDF">
+      {busy ? `Building… ${busy}` : 'Download'}
+    </button>
+  )
+}
+
 function Row({ row, project, loose, orders, onValues, attaching, onAttach, onChanged, onError }: {
   /** The project's change orders, for a proposal request to be rolled into. */
   orders: RegisterRow[]
@@ -298,6 +330,7 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
             </button>
           )}
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
+          {(row.file_path || row.issuance_id) && project && <> <DownloadChange row={row} project={project} onError={onError} /></>}
           {' '}<button className="link" onClick={(e) => { e.stopPropagation(); beginEdit() }}>Edit</button>
         </td>
       </tr>

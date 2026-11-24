@@ -71,6 +71,8 @@ As of 2026-11-19. The running record of how each piece was built is `docs/BUILD_
 | Outlined schedules read from a scan (levels, summary rows, contractor IDs), with handwriting and coloured ink filtered out; levels fold on the Gantt | Live (2026-11-23); checked in a test browser with a Kinco scan |
 | Schedule benchmarks (punch list, completion, dry-in, inspections, milestones) on the project Overview | Live (2026-11-23); checked in a test browser only |
 | Pay applications: New application from a dropped PDF; schedule of values set up from the PDF when there is none; columns rounded as the contractor rounds them (blue, exact on hover); every figure on the contractor's PDF (lines, totals, G702) set against CAzen's own arithmetic, differences listed and marked red; single cells rounded their own way (burnt orange); change orders picked out of the PDF and the cover sheet's change order summary checked; several lines selected at once to mark as change orders or headings; the PDF side by side with the figures; uncertify to correct; dollar boxes typed as $1,234.56 everywhere | Live (2026-11-23); checked in a test browser |
+| Addenda in the change documents register, with their own form; each change document downloadable as one PDF (cover, manual sections, sheets) | Live once pushed (2026-11-24); checked in a test browser |
+| Pay applications: differences from the contractor's PDF explained by cause; the PDF's period and date taken; retainage rounded application by application | Live once pushed (2026-11-24); checked against production data read locally |
 | AI access to project content | Planned |
 
 ## Decisions made

@@ -110,3 +110,45 @@ export async function assemble(old: Uint8Array, incoming: Uint8Array[], order: {
   }
   return out.save()
 }
+
+/**
+ * A change document as it went out, in one PDF to hand to the owner or the contractor: its cover
+ * sheet, then the project manual sections it replaced (in section order), then the drawing sheets
+ * it revised (in sheet order). Each part is what was kept when it was issued, so the package is
+ * the same one whenever it is downloaded.
+ */
+export async function assembleChangeDocument(
+  project: ProjectStore,
+  parts: { cover: string | null; sections: { number: string; filePath: string }[]; sheets: BundleSheet[] },
+  order: Discipline[],
+  onProgress?: (what: string) => void,
+): Promise<Bundle & { sections: number; cover: boolean }> {
+  const out = await PDFDocument.create()
+  const missing: string[] = []
+  const add = async (path: string, name: string) => {
+    try {
+      const doc = await PDFDocument.load(await readFile(project, path), { ignoreEncryption: true })
+      for (const page of await out.copyPages(doc, doc.getPageIndices())) out.addPage(page)
+      return true
+    } catch { missing.push(name); return false }
+  }
+  let cover = false
+  if (parts.cover) { onProgress?.('the cover sheet'); cover = await add(parts.cover, 'the cover sheet') }
+  const sections = [...parts.sections].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+  let sectionsIn = 0
+  for (const [i, s] of sections.entries()) {
+    onProgress?.(`section ${i + 1} of ${sections.length} · ${s.number}`)
+    if (await add(s.filePath, `section ${s.number}`)) sectionsIn++
+    await new Promise((r) => setTimeout(r, 0))
+  }
+  const sheets = sortSheets(parts.sheets, (s) => s.number, order, (s) => s.filedUnder)
+  let sheetsIn = 0
+  for (const [i, s] of sheets.entries()) {
+    onProgress?.(`sheet ${i + 1} of ${sheets.length} · ${s.number}`)
+    if (await add(s.filePath, s.number)) sheetsIn++
+    await new Promise((r) => setTimeout(r, 0))
+  }
+  onProgress?.('writing the file')
+  out.setProducer('CAzen')
+  return { bytes: await out.save(), sheets: sheetsIn, sections: sectionsIn, cover, missing }
+}
