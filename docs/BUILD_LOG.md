@@ -11,6 +11,24 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:30 CST (the change upload: manual pages up top, drag between, wide)
+
+- **Letter pages are manual pages.** A letter-size page among large sheets is taken as a project
+  manual page even when its text doesn't say so (a scan with no readable footer); the notice about
+  them says where they went and offers "Make them all manual pages" / "Make them all drawings" as
+  well as "Leave them out".
+- **Manual pages live with the manual.** They no longer sit in the sheet list with blanked-out
+  fields; the project manual card (sections, numbers, how each goes in) is at the top of the
+  review, and the drawings below. Its include checkbox is now "Leave out" / "Put back", next to
+  "They're drawings".
+- **Drag between them.** A drawing row dragged onto the manual card becomes a manual page; a
+  manual section dragged onto the drawings becomes drawings; the target lights up. The Part
+  select on each row still does the same by hand.
+- **Wide pop-up.** Once the pages are read, the upload opens over the page, nearly full width,
+  with an × to cancel.
+`checks/t_changedoc.py` drags a drawing up, its section down, sends the manual pages back by
+their Part, and saves as before.
+
 # Checkpoint — 2026-11-24, 10:05 CST (every application against its PDF, at a glance)
 
 Checked production's UCA CW Loop applications (read-only): the billing on all five is what the

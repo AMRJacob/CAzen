@@ -844,7 +844,15 @@ interface Draft {
 /** Sort pages into cover, manual and drawings; a page sorted by hand stays where it was put. */
 function sortRoles(list: Draft[]): Draft[] {
   const roles = classifyPages(list.map((d) => ({ text: d.page.text, readByTemplate: !!d.templateId })))
-  return list.map((d, i) => (d.roleByHand || d.role === roles[i] ? d : { ...d, role: roles[i] }))
+  // A letter page among large sheets is a project manual page, whatever its text says (a scan
+  // with no readable footer is still one); it can be made a drawing by hand.
+  const areas = list.map((d) => d.page.text.width * d.page.text.height).sort((a, b) => a - b)
+  const median = areas.length ? areas[Math.floor(areas.length / 2)] : 0
+  const small = (d: Draft) => median > 1_000_000 && d.page.text.width * d.page.text.height < median * 0.5
+  return list.map((d, i) => {
+    const role = roles[i] === 'sheet' && small(d) && !d.templateId ? 'spec' : roles[i]
+    return d.roleByHand || d.role === role ? d : { ...d, role }
+  })
 }
 
 const ROLE_LABEL: Record<PageRole, string> = { sheet: 'Drawing', cover: 'Cover', spec: 'Manual' }
@@ -927,6 +935,21 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   // Cover, manual or drawing, page by page. A page whose part was chosen by hand keeps it.
   const setRole = (i: number, role: PageRole) =>
     setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, role, roleByHand: true } : x)))
+  // Pages dragged between the project manual and the drawings: a drawing dropped on the manual is a
+  // manual page, a manual section dropped on the drawings is drawings.
+  const DRAG = 'application/x-cazen-pages'
+  const [dropOn, setDropOn] = useState<'manual' | 'drawings' | null>(null)
+  const pagesTo = (ats: number[], role: PageRole) =>
+    setDrafts((ds) => ds.map((d) => (ats.includes(d.pageIndex) ? { ...d, role, roleByHand: true, include: true } : d)))
+  const dragPages = (ats: number[]) => (e: React.DragEvent) => { e.dataTransfer.setData(DRAG, JSON.stringify(ats)); e.dataTransfer.effectAllowed = 'move' }
+  const dropZone = (where: 'manual' | 'drawings', role: PageRole) => ({
+    onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setDropOn(where) } },
+    onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) setDropOn(null) },
+    onDrop: (e: React.DragEvent) => {
+      const raw = e.dataTransfer.getData(DRAG); setDropOn(null)
+      if (raw) { e.preventDefault(); pagesTo(JSON.parse(raw) as number[], role) }
+    },
+  })
 
   // The cover read again whenever which pages make it up changes; fields typed by hand stay.
   const coverKey = drafts.filter((d) => d.include && d.role === 'cover').map((d) => d.pageIndex).join(',')
@@ -1058,9 +1081,13 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
    */
   const pageSizes = drafts.map((d) => d.page.text.width * d.page.text.height).sort((a, b) => a - b)
   const median = pageSizes.length ? pageSizes[Math.floor(pageSizes.length / 2)] : 0
-  const smallPages = median > 1_000_000
-    ? drafts.map((d, i) => [i, d] as const).filter(([, d]) => d.role === 'sheet' && d.page.text.width * d.page.text.height < median * 0.5)
+  // Letter pages among large sheets, whichever part they are in now (cover pages aside).
+  const smallLetter = median > 1_000_000
+    ? drafts.map((d, i) => [i, d] as const).filter(([, d]) => d.role !== 'cover' && d.page.text.width * d.page.text.height < median * 0.5)
     : []
+  const smallPages = smallLetter
+  const smallAsManual = smallLetter.filter(([, d]) => d.role === 'spec').length
+  const roleAllSmall = (role: PageRole) => setDrafts((ds) => ds.map((d, j) => (smallLetter.some(([i]) => i === j) ? { ...d, role, roleByHand: true } : d)))
   const smallStillIn = smallPages.filter(([, d]) => d.include)
   const inches1 = (pts: number) => Number((pts / 72).toFixed(1))
   const sizeOf = (d: Draft) => {
@@ -1215,7 +1242,11 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   }
 
   return (
-    <div className="card upload-panel">
+    <>
+    {/* Once the pages are read, the upload opens wide over the page: there is a lot to see at once. */}
+    {(step === 'review' || step === 'saving') && <div className="upload-backdrop" aria-hidden="true" />}
+    <div className={`card upload-panel${step === 'review' || step === 'saving' ? ' wide' : ''}`} role={step === 'review' || step === 'saving' ? 'dialog' : undefined} aria-label="Upload">
+      {(step === 'review' || step === 'saving') && <button className="link upload-close" onClick={onCancel} disabled={step === 'saving'} aria-label="Cancel the upload">×</button>}
       <h2>Upload a set, revised sheets or a change document</h2>
       <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.
         A change document can come as one PDF — cover, project manual pages and drawings — and each page is sorted into its part.</p>
@@ -1275,6 +1306,16 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
 
       {(step === 'review' || step === 'saving') && (
         <>
+          {/* The project manual's pages first, with the manual's own tools; the drawings below. */}
+          {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div className={`drop-area${dropOn === 'manual' ? ' on' : ''}`} {...dropZone('manual', 'spec')}>
+            {specPages.length > 0 ? (
+              <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
+                onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
+                onDrawings={(ats) => pagesTo(ats, 'sheet')} onDragRow={dragPages} />
+            ) : (
+              <div className="drop-empty muted small">Project manual pages go here. Drag a page from the drawings below to make it one.</div>
+            )}
+          </div>}
           {sizeWarning && (
             <div className="notice warn">
               {sizeWarning}
@@ -1304,23 +1345,20 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
               )}
             </div>
           )}
-          {smallPages.length > 0 && (
+          {smallLetter.length > 0 && (
             <div className="notice">
-              {smallPages.length} of {drafts.length} pages are {sizeOf(smallPages[0][1])}, much smaller than the{' '}
-              {sizeOf(drafts.find((d) => d.page.text.width * d.page.text.height >= median)!)} sheets in this upload — project
-              manual pages, most likely, rather than drawings.
+              {smallLetter.length} of {drafts.length} pages are {sizeOf(smallLetter[0][1])}, much smaller than the{' '}
+              {sizeOf(drafts.find((d) => d.page.text.width * d.page.text.height >= median)!)} sheets —{' '}
+              {smallAsManual === smallLetter.length ? 'project manual pages, so they are with the project manual above.'
+                : smallAsManual ? `${smallAsManual} are with the project manual above and ${smallLetter.length - smallAsManual} are drawings.`
+                : 'they are being taken as drawings.'}
               <div className="notice-actions">
-                <button onClick={dropSmall} disabled={!smallStillIn.length}>
-                  {smallStillIn.length ? `Leave them out (${smallStillIn.length})` : 'Left out'}
-                </button>
-                <span className="muted small">Pages: {smallPages.map(([i]) => i + 1).join(', ')}</span>
+                {smallAsManual < smallLetter.length && <button onClick={() => roleAllSmall('spec')}>Make them all manual pages</button>}
+                {smallAsManual > 0 && <button onClick={() => roleAllSmall('sheet')}>Make them all drawings</button>}
+                <button onClick={dropSmall} disabled={!smallStillIn.length}>{smallStillIn.length ? `Leave them out (${smallStillIn.length})` : 'Left out'}</button>
+                <span className="muted small">Pages: {smallLetter.map(([i]) => i + 1).join(', ')}</span>
               </div>
             </div>
-          )}
-
-          {specPages.length > 0 && (
-            <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
-              onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))} />
           )}
 
           <div className="tb-bar">
@@ -1342,6 +1380,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             </div>
           </div>
 
+          <div className={`drop-area${dropOn === 'drawings' ? ' on' : ''}`} {...dropZone('drawings', 'sheet')}>
+          <p className="muted small drop-hint">Drawings and cover pages. Drag a row up to the project manual, or a manual section down here, to move it.</p>
           <table>
             <thead><tr>
               <th>
@@ -1354,8 +1394,10 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
+                // Manual pages are with the project manual above, not here among the drawings.
+                if (d.role === 'spec' && d.include) return null
                 return (
-                  <tr key={d.pageIndex} className={d.include ? '' : 'skipped'}>
+                  <tr key={d.pageIndex} className={d.include ? '' : 'skipped'} draggable onDragStart={dragPages([d.pageIndex])} title="Drag to the project manual above to make it a manual page">
                     <td>
                       {/* onClick rather than onChange: it carries the shift key, and by the time it
                           runs the box already holds its new value. */}
@@ -1424,6 +1466,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
               })}
             </tbody>
           </table>
+          </div>
           <div className="actions">
             <button className="primary" onClick={save} disabled={step === 'saving' || sheetTrouble || nothing || !!manualProblem}>
               {step === 'saving' ? `Saving ${progress}…` : `Save ${[
@@ -1489,6 +1532,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
       )}
       {error && <div className="notice error">{error}</div>}
     </div>
+    </>
   )
 }
 

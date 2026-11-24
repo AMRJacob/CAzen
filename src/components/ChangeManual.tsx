@@ -56,7 +56,11 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: {
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, onDragRow }: {
+  /** Start dragging a section's pages (by their place in the upload) out of the manual. */
+  onDragRow?: (ats: number[]) => (e: React.DragEvent) => void
+  /** These pages (by their place in the upload) are drawings, not manual pages. */
+  onDrawings?: (ats: number[]) => void
   project: ProjectStore
   pages: SpecPageIn[]
   /** Written on each section revision: the set's mark, or its name. */
@@ -165,7 +169,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: 
       </p>
       {loadError && <div className="notice error">Couldn’t read the project manual: {loadError}</div>}
       <table className="change-manual-table">
-        <thead><tr><th></th><th>Section</th><th>Title</th><th>Upload pages</th><th>Footer pages</th><th>Goes in as</th><th>Result</th></tr></thead>
+        <thead><tr><th>Section</th><th>Title</th><th>Upload pages</th><th>Footer pages</th><th>Goes in as</th><th>Result</th><th></th></tr></thead>
         <tbody>
           {rows.map((r) => {
             const ats = r.s.pages.map((i) => pages[i].at)
@@ -174,8 +178,8 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: 
             const partial = new Set(['late-start', 'short', 'missing', 'no-heading', 'no-end'])
             const trouble = r.s.trouble.filter((t) => r.action !== 'pages' || !partial.has(t.kind)).map(troubleText)
             return (
-              <tr key={r.key} className={r.include ? '' : 'skipped'}>
-                <td><input type="checkbox" checked={r.include} onChange={(e) => edit(r.key, { include: e.target.checked })} aria-label={`Include ${r.number || 'this section'}`} /></td>
+              <tr key={r.key} className={r.include ? '' : 'skipped'} draggable={!!onDragRow} onDragStart={onDragRow?.(ats)}
+                title={onDragRow ? 'Drag down to the drawings if these pages are drawings' : undefined}>
                 <td><input className={`cell mono ${r.include && (!r.number || twice.has(r.number)) ? 'bad' : ''}`} value={r.number} placeholder="09 91 00"
                   onChange={(e) => edit(r.key, { number: e.target.value })} aria-label="Section number" /></td>
                 <td><input className="cell" value={r.title} onChange={(e) => edit(r.key, { title: e.target.value })} aria-label={`Title of ${r.number}`} /></td>
@@ -205,6 +209,10 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek }: 
                         <span className="muted"> · {r.old.places!.length} → {r.splice.order.length} pages</span>
                       </>}
                   {r.include && trouble.length > 0 && <div className="muted">{trouble.join(' · ')}</div>}
+                </td>
+                <td className="small nowrap change-manual-acts">
+                  <button className="link small" onClick={() => edit(r.key, { include: !r.include })}>{r.include ? 'Leave out' : 'Put back'}</button>
+                  {onDrawings && <button className="link small" onClick={() => onDrawings(ats)} title="Move these pages down to the drawings">They’re drawings</button>}
                 </td>
               </tr>
             )
