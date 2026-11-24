@@ -3937,3 +3937,7 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 /* Where a held note or category lands beside another: a line above or below it. */
 .nbd-card.over-before, .nbd-box.over-before { box-shadow: 0 -3px 0 0 var(--moss); }
 .nbd-card.over-after, .nbd-box.over-after { box-shadow: 0 3px 0 0 var(--moss); }
+
+.as-pdf { display: inline-flex; flex-direction: column; align-items: flex-end; }
+.as-pdf.off { outline: 2px solid #c0392b; outline-offset: 2px; border-radius: 2px; background: #fdecea; }
+.as-pdf-cazen { font-size: .7rem; color: #a33; font-weight: 400; }

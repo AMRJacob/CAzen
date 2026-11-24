@@ -3678,3 +3678,8 @@ Jacob, 16:00: UCA's drawings look pixelated, as CAW's did before the viewer fix;
 - The reader keeps where on the PDF each G702 figure was read (page and box), in the PDF read (`pdf_read.g702At`).
 - In "Against the contractor's PDF", click a cover-sheet row → "Show where $8.00 was read on the PDF": the PDF opens beside the figures at that place with a box around the figure. Drag the box or its corners over the whole figure, "Read the box" (the PDF's own words, or the picture of the box for a scan), then "Use $8,000,000". Several figures in the box are offered one by one. A PDF read before places were kept gets a box on page 1 to drag onto the figure.
 - A PDF read before places were kept: "Show where … was read" now reads the PDF again to find the figure ("Finding it on the PDF — reading page 1 of 2…") and puts the box on it, instead of a box in a set place; the places found are kept with the read.
+
+## 2026-11-24 — The PDF's figures first
+- With a PDF read, the cover sheet (lines 1–9 and the change order summary) shows the contractor's PDF's figures; CAzen's own arithmetic is the check. A figure CAzen works out differently is outlined red with "CAzen $…" under it and the difference on hover.
+- Money linked from a contract line into a change order line (contingency moved into CO 1's lines) is no longer counted in line 2, on that application and those after it: line 2 is the change order lines less what was moved into them. So once the contingency moves are linked, CAzen's line 2 comes to the PDF's.
+- The summary line above the sheet says when the change order lines come to more or less than the PDF's line 2.

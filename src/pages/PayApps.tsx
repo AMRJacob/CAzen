@@ -64,7 +64,7 @@ export default function PayApps() {
   /** Every application worked out, in order, so the summary and the tabs agree by construction. */
   const figured = useMemo(() => {
     if (!data) return []
-    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), rounding: a.rounding }))
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), rounding: a.rounding, moves: a.moves }))
     return data.applications.map((a, i) =>
       figure(data.contract, data.lines, a, history[i].billed, history.slice(0, i), data.steps))
   }, [data])
@@ -509,7 +509,7 @@ function checkAgainstPdf(data: LoadedContract, index: number, figures: Figures) 
   let retainageFix: { way: RoundWay; label: string } | null = null
   const iDiffs = (f: Figures) => againstPdf(f, pdf).filter((d) => d.col === 'I' || d.col === 'retainageTotal').length
   if (iDiffs(figures)) {
-    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding }))
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding, moves: a.moves }))
     for (const way of ['period', 'nearest', 'up', 'down'] as RoundWay[]) {
       if (way === data.contract.rounding?.I) continue
       const f = figure({ ...data.contract, rounding: { ...(data.contract.rounding ?? {}), I: way } }, data.lines, app, history[index].billed, history.slice(0, index), data.steps)
@@ -678,6 +678,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   // Where CAzen's arithmetic and the contractor's PDF part company, worked out afresh each time,
   // so a correction or a rounding choice that brings them together clears it.
   const pdf = app.pdf_read ?? null
+  // The cover sheet as the contractor's PDF has it, where one was read.
+  const pg = pdf?.g702 ?? null
   const { current: project } = useProject()
   /** Keep the contractor's PDF with the application's files. */
   const keepPdf = (bytes: Uint8Array, file?: string) => putFile(project!, bytes, `${project!.id}/payapps/${app.id}.pdf`, {
@@ -983,16 +985,17 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               : <><strong>✓ Agrees with the contractor’s PDF</strong>{pdf.g702?.due != null && <> — {money(pdf.g702.due)} due on both</>}</>}
           </button>
         )}
+        {pg && <p className="muted small">The cover sheet shows the contractor’s PDF; a figure CAzen works out differently is marked, with CAzen’s beside it.</p>}
         <p className="pay-702-preamble">
           Application is made for payment, as shown below, in connection with the contract.
           The continuation sheet below is the G703.
         </p>
 
         <div className="g702">
-          <Line n="1." label="Original contract sum" value={g.originalSum} />
-          <Line n="2." label="Net change by change orders" value={g.changeOrders} />
-          <Line n="3." label="Contract sum to date" note="line 1 ± 2" value={g.contractSum} strong />
-          <Line n="4." label="Total completed &amp; stored to date" note="column G on G703" value={g.completedAndStored} />
+          <Line n="1." label="Original contract sum" value={g.originalSum} pdf={pg?.originalSum} />
+          <Line n="2." label="Net change by change orders" value={g.changeOrders} pdf={pg?.changeOrders} />
+          <Line n="3." label="Contract sum to date" note="line 1 ± 2" value={g.contractSum} pdf={pg?.contractSum} strong />
+          <Line n="4." label="Total completed &amp; stored to date" note="column G on G703" value={g.completedAndStored} pdf={pg?.completedAndStored} />
 
           <div className="g702-n">5.</div>
           <div className="g702-label g702-label-plain">Retainage:</div>
@@ -1003,15 +1006,15 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           <Line sub n="b." rate={figures.rates.stored} rateOf="of stored material"
             note="column F on G703" value={g.retainageStored} />
           <Line n="" label="Total retainage" note="lines 5a + 5b, or column I on G703"
-            value={g.retainageTotal} />
+            value={g.retainageTotal} pdf={pg?.retainageTotal} />
 
           <Line n="6." label="Total earned less retainage" note="line 4 less line 5"
-            value={g.earnedLessRetainage} strong />
+            value={g.earnedLessRetainage} pdf={pg?.earnedLessRetainage} strong />
           <Line n="7." label="Less previous certificates for payment" note="line 6 from the prior certificate"
-            value={g.previousCertificates} />
-          <Line n="8." label="Current payment due" value={g.due} boxed />
+            value={g.previousCertificates} pdf={pg?.previousCertificates} />
+          <Line n="8." label="Current payment due" value={g.due} pdf={pg?.due} boxed />
           <Line sub n="9." label="Balance to finish, including retainage" note="line 3 less line 6"
-            value={g.balanceToFinish} />
+            value={g.balanceToFinish} pdf={pg?.balanceToFinish} />
         </div>
 
         {figures.rates.steppedTo != null && (
@@ -1031,22 +1034,22 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           <tbody>
             <tr>
               <td>Total changes approved in previous months by owner</td>
-              <td className="right mono"><Money n={co.previousAdditions} /></td>
-              <td className="right mono"><Money n={co.previousDeductions} /></td>
+              <td className="right mono"><AsPdf pdf={pg?.coPreviousAdditions} cazen={co.previousAdditions} /></td>
+              <td className="right mono"><AsPdf pdf={pg?.coPreviousDeductions} cazen={co.previousDeductions} /></td>
             </tr>
             <tr>
               <td>Total approved this month</td>
-              <td className="right mono"><Money n={co.thisAdditions} /></td>
-              <td className="right mono"><Money n={co.thisDeductions} /></td>
+              <td className="right mono"><AsPdf pdf={pg?.coThisAdditions} cazen={co.thisAdditions} /></td>
+              <td className="right mono"><AsPdf pdf={pg?.coThisDeductions} cazen={co.thisDeductions} /></td>
             </tr>
             <tr className="g702-co-total">
               <td className="right">Totals</td>
-              <td className="right mono"><Money n={co.totalAdditions} strong /></td>
-              <td className="right mono"><Money n={co.totalDeductions} strong /></td>
+              <td className="right mono"><AsPdf pdf={pdfCo(pg?.coPreviousAdditions, pg?.coThisAdditions)} cazen={co.totalAdditions} strong /></td>
+              <td className="right mono"><AsPdf pdf={pdfCo(pg?.coPreviousDeductions, pg?.coThisDeductions)} cazen={co.totalDeductions} strong /></td>
             </tr>
             <tr className="g702-co-net">
               <td colSpan={2}>Net change by change order</td>
-              <td className="right mono"><Money n={co.net} strong /></td>
+              <td className="right mono"><AsPdf pdf={pg?.changeOrders} cazen={co.net} strong /></td>
             </tr>
           </tbody>
         </table>
@@ -1086,7 +1089,12 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         <h3>Continuation sheet</h3>
         {(() => {
           const changed = figures.lines.filter((f) => Math.abs(changeOf(f.line.id)) >= 0.005)
-          if (!changed.length) return null
+          // Change order lines against the PDF's line 2: money from contract lines moved into them and not yet linked.
+          const coGap = pg?.changeOrders != null ? Math.round((g.changeOrders - pg.changeOrders) * 100) / 100 : 0
+          const coNote = Math.abs(coGap) >= 0.5
+            ? <> · <span className="pay-read-warn">change order lines come to {money(Math.abs(coGap))} {coGap > 0 ? 'more' : 'less'} than the PDF’s line 2</span>{changed.some((f) => f.line.change_order_id) ? ' — link the change order lines’ changes to the contract lines they came from' : ''}</>
+            : null
+          if (!changed.length) return coNote ? <p className="small pay-sv-summary">{coNote}</p> : null
           const net = Math.round(changed.reduce((n, f) => n + changeOf(f.line.id), 0) * 100) / 100
           const side = (sign: number) => changed.filter((f) => Math.sign(changeOf(f.line.id)) === sign).reduce((n, f) => n + unlinked(f.line.id), 0)
           const left = Math.round(Math.max(side(1), side(-1)) * 100) / 100
@@ -1095,6 +1103,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
               Scheduled values changed on <strong>{changed.length} {changed.length === 1 ? 'line' : 'lines'}</strong> from {index ? `Application ${data.applications[index - 1].number}` : 'the schedule of values'}
               {' · '}net {Math.abs(net) < 0.005 ? '$0, money moved between lines' : signed(net)}
               {left >= 0.005 ? <> · <span className="pay-read-warn">{money(left)} not yet linked</span> — right-click a changed value to say where it went</> : ' · all linked'}
+              {coNote}
             </p>
           )
         })()}
@@ -1781,11 +1790,32 @@ function AddLine({ contractId, projectId, lines, nextSort, onAdded, onTrouble }:
  * amounts that add up without the intermediate ones getting in the way. `sub` is what puts a
  * figure in the inner column.
  */
-function Line({ n, label, note, value, rate, rateOf, strong, boxed, sub }: {
+/** A change order summary total as the PDF has it: its two figures added, where both were read. */
+const pdfCo = (a?: number, b?: number) => (a == null && b == null ? undefined : (a ?? 0) + (b ?? 0))
+
+/**
+ * A cover-sheet figure as shown: the contractor's PDF's where one was read (that is what was
+ * submitted), CAzen's own arithmetic as the check. Where they differ the figure is marked, with
+ * CAzen's on hover.
+ */
+function AsPdf({ pdf, cazen, strong }: { pdf?: number | null; cazen: number; strong?: boolean }) {
+  if (pdf == null) return <Money n={cazen} strong={strong} />
+  const off = Math.abs(pdf - cazen) >= 0.5
+  return (
+    <span className={`as-pdf${off ? ' off' : ''}`} title={off ? `From the PDF. CAzen works out ${money(cazen)} (${(pdf - cazen).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}).` : 'From the PDF; CAzen agrees.'}>
+      <Money n={pdf} strong={strong} />
+      {off && <span className="as-pdf-cazen">CAzen {money(cazen)}</span>}
+    </span>
+  )
+}
+
+function Line({ n, label, note, value, rate, rateOf, strong, boxed, sub, pdf }: {
   n: string
   label?: string
   note?: string
   value: number
+  /** The figure as the contractor's PDF has it, shown in place of CAzen's. */
+  pdf?: number | null
   rate?: number
   rateOf?: string
   strong?: boolean
@@ -1793,7 +1823,7 @@ function Line({ n, label, note, value, rate, rateOf, strong, boxed, sub }: {
   sub?: boolean
 }) {
   const amount = (
-    <span className={boxed ? 'g702-boxed' : undefined}><Money n={value} strong={strong || boxed} /></span>
+    <span className={boxed ? 'g702-boxed' : undefined}><AsPdf pdf={pdf} cazen={value} strong={strong || boxed} /></span>
   )
   return (
     <>

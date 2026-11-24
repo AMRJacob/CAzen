@@ -22,3 +22,13 @@ test('change orders are the total of the change order lines, split by what is ne
   assert.equal(f3.g702.changeOrders, 300); assert.equal(f3.g702.contractSum, 1300)
   assert.equal(f3.changeOrderSummary.thisAdditions, 300); assert.equal(f3.changeOrderSummary.previousAdditions, 0)
 })
+test('money linked from a contract line into a change order line is not line 2', () => {
+  const b4 = M({ a: { this_period: 0, stored: 0, scheduled: 450 }, co1: { this_period: 0, stored: 0, scheduled: 250 } })
+  const app4 = { ...app(4), moves: [{ from: 'a', to: 'co1', amount: 50 }] }
+  const f4 = figure(contract, lines, app4, b4, [b1, b2, b3].map((billed) => ({ billed })))
+  assert.equal(f4.g702.changeOrders, 300); assert.equal(f4.g702.contractSum, 1300)
+  assert.equal(f4.changeOrderSummary.thisAdditions, 0)
+  // and the application after it still leaves it out
+  const f5 = figure(contract, lines, app(5), M({}), [b1, b2, b3, b4].map((billed, i) => ({ billed, moves: i === 3 ? app4.moves : [] })))
+  assert.equal(f5.g702.changeOrders, 300)
+})

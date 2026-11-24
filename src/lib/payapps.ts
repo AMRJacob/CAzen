@@ -224,7 +224,7 @@ export function figure(
   lines: SovLine[],
   application: Application,
   billed: Map<string, Billed>,
-  earlier: { billed: Map<string, Billed>; period_to?: string; rounding?: CellRounding | null }[],
+  earlier: { billed: Map<string, Billed>; period_to?: string; rounding?: CellRounding | null; moves?: Move[] | null }[],
   steps: RetainageStep[] = [],
 ): Figures {
   /**
@@ -257,7 +257,16 @@ export function figure(
   // The contract sum, and what the job is worth now: a change order becomes a line of the
   // schedule, so the two are the same sum counted once.
   const scheduled = sum(real.map((l) => l.scheduled_value))
-  const changeOrders = sum(real.filter((l) => l.change_order_id).map((l) => l.scheduled_value))
+  /**
+   * Money linked as moved from a contract line into a change order line (contingency into CO 1's
+   * lines), on this application and the ones before it. It is still the contract's money, not a
+   * change order's, so it is not part of line 2: the change order lines less it are line 2.
+   */
+  const isCo = new Set(lines.filter((l) => l.change_order_id).map((l) => l.id))
+  const movedIntoCo = (moves: Move[] | null | undefined) => (moves ?? []).reduce((n, m) => n + (isCo.has(m.to) && !isCo.has(m.from) ? m.amount : !isCo.has(m.to) && isCo.has(m.from) ? -m.amount : 0), 0)
+  const crossedBefore = earlier.reduce((n, e) => n + movedIntoCo(e.moves), 0)
+  const crossed = round(crossedBefore + movedIntoCo(application.moves))
+  const changeOrders = round(sum(real.filter((l) => l.change_order_id).map((l) => l.scheduled_value)) - crossed)
 
   // Retainage steps are judged on the job as a whole, so the completion has to be known before
   // any line's retainage can be.
@@ -402,7 +411,7 @@ export function figure(
    * The change order summary at the foot of a G702: what the change order lines came to on the
    * application before this one, and what they have gained or lost since.
    */
-  const coPrevious = earlier.length ? sum(lines.filter((l) => !l.is_heading && l.change_order_id).map((l) => scheduledAt(l, earlier.length - 1))) : 0
+  const coPrevious = earlier.length ? round(sum(lines.filter((l) => !l.is_heading && l.change_order_id).map((l) => scheduledAt(l, earlier.length - 1))) - crossedBefore) : 0
   const coMove = round(changeOrders - coPrevious)
   const changeOrderSummary = {
     previousAdditions: Math.max(0, coPrevious),

@@ -47,7 +47,7 @@ export default function Overview() {
       if (!contracts.length) return 'none' as const
       const data = await loadContract(contracts[0].id)
       if (!data.applications.length) return 'none' as const
-      const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), rounding: a.rounding }))
+      const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), rounding: a.rounding, moves: a.moves }))
       const i = data.applications.length - 1
       return {
         figures: figure(data.contract, data.lines, data.applications[i], history[i].billed, history.slice(0, i), data.steps),

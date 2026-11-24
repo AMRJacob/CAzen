@@ -36,7 +36,7 @@ export async function loadBoard(projectId: string): Promise<Board> {
   let asOf: string | null = null
   for (const c of contracts) {
     const data = await loadContract(c.id)
-    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding }))
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding, moves: a.moves }))
     const last = data.applications.length - 1
     const fig = last >= 0 ? figure(data.contract, data.lines, data.applications[last], history[last].billed, history.slice(0, last), data.steps) : null
     if (last >= 0) asOf = data.applications[last].period_to
