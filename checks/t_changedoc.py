@@ -56,14 +56,15 @@ with sync_playwright() as p:
     # a page moved by hand: the drawing marked as cover, then back
     pg.locator('select.role-cell').last.select_option('cover'); pg.wait_for_timeout(300)
     print('drawing as cover → save:',pg.inner_text(btn)); pg.locator('select.role-cell').last.select_option('sheet'); pg.wait_for_timeout(300)
-    # Drag the drawing up into the project manual, then its section back down to the drawings.
-    dr=lambda: pg.locator('.upload-panel .drop-area table:not(.change-manual-table) tbody tr')
-    secs=lambda: pg.locator('.change-manual tbody tr').count()
+    # The drawing chosen by its page number and made a manual page with the bar, then its section
+    # made drawings again ("They're drawings").
+    dr=lambda: pg.locator('.upload-panel table:not(.change-manual-table) > tbody > tr')
+    secs=lambda: pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').count()
     s0, d0 = secs(), dr().count()
-    dr().last.drag_to(pg.locator('.change-manual')); pg.wait_for_timeout(2500)
-    print('drawing dragged up: manual sections', s0, '→', secs(), '| drawing rows', d0, '→', dr().count())
-    pg.locator('.change-manual tbody tr').last.drag_to(pg.locator('.drop-hint')); pg.wait_for_timeout(1500)
-    print('section dragged down: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
+    dr().last.locator('td.page-pick').click(); pg.click('.pick-bar button:has-text("Project manual")'); pg.wait_for_timeout(2500)
+    print('drawing made a manual page: manual sections', s0, '→', secs(), '| drawing rows', d0, '→', dr().count())
+    pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').last.locator('button:has-text("They’re drawings")').click(); pg.wait_for_timeout(1500)
+    print('section made drawings: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
     for _ in range(2):  # the two manual pages that came down with it, sent back up by their Part
         dr().nth(2).locator('select.role-cell').select_option('spec'); pg.wait_for_timeout(1200)
     print('manual pages back by their Part: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
