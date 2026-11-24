@@ -11,6 +11,33 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:25 CST (change upload: join up / join down; a section read straight through)
+
+Jacob, 11:00: the manual tools of the project manual upload were missing from the change
+upload — join up and down from the list and from the preview; the preview showed sheet fields,
+not the manual's; keep each section's pages in its drop-down for moving things, but read the
+pages continuously once in the preview.
+
+- **join up / join down** on every section row of the change upload's manual card, and **Join
+  up / Join down** in the preview. A join folds the section into the one before it even where
+  the footers cut there (`joins` on `ChangeManual`, kept by the upload screen as `specJoins`);
+  it also undoes a hand split. Splitting again at that page undoes the join. *Join to the one
+  above* is gone (join up does it).
+- **A section opens as one continuous strip** — *view* on its row, or the picture of any page in
+  its drop-down, which opens it at that page (`PdfPreview` `startPage`; `PdfStrip` now answers a
+  go-to as soon as the page is laid out). The strip under the bar has **Section no.**, **Section
+  title**, Join up / Join down and Box the number / Box the title; ‹ › step from section to
+  section. The drop-down's page rows are as they were, for choosing and moving pages.
+- A manual page opened on its own (from the drawings list when re-sorting a saved document)
+  shows Section no. and Section title too, never sheet fields.
+
+`checks/t_secview.py`: 08 43 13's second page opens the section scrolled to it (two pages in the
+strip, fields 08 43 13 / Storefronts); Join up → 09 91 00 of pages 3–6 in the strip and the card;
+split again, then join down in the card → 3–6. `t_split`, `t_secbox` updated for the wording;
+`t_changedoc`, `t_resort`, `t_intro`, `t_upload_bg`, `t_coversheet` pass. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 11:10 CST (notebook corner menus drawn outside the page)
 
 **"When I open my Duo screen in tablet mode, the circle menu won't open when I touch it"** (Jacob,

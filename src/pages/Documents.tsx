@@ -1080,6 +1080,16 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
   // Project manual pages split off by hand to start a section of their own (by their place in the upload).
   const [specSplits, setSpecSplits] = useState<Set<number>>(new Set())
+  // Sections folded into the one before them by hand, by their first page's place in the upload.
+  const [specJoins, setSpecJoins] = useState<Set<number>>(new Set())
+  /** Fold the section starting at this page into the one before: undo a split, or join a cut the footers made. */
+  const joinAt = (at: number) => {
+    if (specSplits.has(at)) setSpecSplits((s) => { const n = new Set(s); n.delete(at); return n })
+    setSpecJoins((s) => new Set(s).add(at))
+  }
+  // A manual section opened to read straight through, at one of its pages.
+  const [secPeek, setSecPeek] = useState<{ key: string; at?: number } | null>(null)
+  const [secBytes, setSecBytes] = useState<{ ats: string; bytes: Uint8Array } | null>(null)
   const moveChosen = (role: PageRole) => { pagesTo([...sel], role); setSel(new Set()) }
   /** Take pages out of the upload, or put them back (by their place in the upload). */
   const includePages = (ats: number[], include: boolean) =>
@@ -1279,6 +1289,15 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const [boxing, setBoxing] = useState<{ at: number; what: 'number' | 'title'; box: Region | null } | null>(null)
   const [lastNumberBox, setLastNumberBox] = useState<Region | null>(null)
   const sections = specPages.length ? manualPlan?.sections ?? [] : []
+  // The open section's pages as one PDF, made again when its pages change (a join, a split).
+  const secAts = secPeek ? sections.find((x) => x.key === secPeek.key)?.ats.join(',') ?? '' : ''
+  useEffect(() => {
+    if (!secAts) return
+    let stop = false
+    const want = secAts.split(',').map((a) => drafts.find((d) => d.pageIndex === Number(a))?.page.bytes).filter((b): b is Uint8Array => !!b)
+    joinPages(want).then((bytes) => { if (!stop) setSecBytes({ ats: secAts, bytes }) }, () => {})
+    return () => { stop = true }
+  }, [secAts])  // eslint-disable-line react-hooks/exhaustive-deps
   const manualProblem = specPages.length ? (manualPlan ? manualPlan.problem : 'Reading the manual pages…') : null
 
   const setTotal = drafts.reduce((n, d) => n + (d.include ? d.page.bytes.length : 0), 0)
@@ -1551,7 +1570,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                           const next = new Set(specSplits)
                           next.add(ats[0])
                           if (ats.length > 1) { const after = order[order.indexOf(ats[ats.length - 1]) + 1]; if (after != null) next.add(after) }
-                          setSpecSplits(next); done()
+                          setSpecSplits(next)
+                          setSpecJoins((j) => { const n = new Set(j); for (const a of next) n.delete(a); return n })
+                          done()
                         }}>Split to a new section</button>
                       )}
                       {inn && <button role="menuitem" onClick={() => { includePages(rowMenu.ats, false); done() }}>Remove from the upload</button>}
@@ -1625,7 +1646,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
                 onDrawings={(ats) => pagesTo(ats, 'sheet')}
                 picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })}
-                splits={specSplits} onJoin={(at) => setSpecSplits((s) => { const n = new Set(s); n.delete(at); return n })} />
+                splits={specSplits} joins={specJoins} onJoin={joinAt} onPeekSection={(key, at) => setSecPeek({ key, at })} />
             ) : (
               <div className="drop-empty muted small">Project manual pages go here. Choose pages in the drawings below (click their page numbers) and make them Project manual.</div>
             )}
@@ -1828,7 +1849,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                 <label className="pv-field pv-role">Part
                   <RolePick value={d.role} onChange={(r) => setRole(i, r)} label="What this page is" />
                 </label>
-                {d.role === 'spec' && d.origin?.t !== 'spec' ? (() => {
+                {d.role === 'spec' ? (() => {
                   // A manual page: the fields are its section's, the same as in the manual card.
                   const sec = sections.find((x) => x.ats.includes(d.pageIndex))
                   const e = sec ? manualEdits[sec.key] ?? {} : {}
@@ -1881,6 +1902,51 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           })()}
         />
       )}
+      {/* A manual section read straight through, with its fields and joins to hand: where a
+          section ends is decided by looking at its pages. */}
+      {secPeek && (() => {
+        const k = sections.findIndex((x) => x.key === secPeek.key)
+        const sec = sections[k]
+        if (!sec) return null
+        const ats = sec.ats.join(',')
+        if (secBytes?.ats !== ats) return null
+        const e = manualEdits[sec.key] ?? {}
+        const go = (to: number) => setSecPeek({ key: sections[to].key })
+        const at = secPeek.at != null && sec.ats.includes(secPeek.at) ? secPeek.at : sec.ats[0]
+        return (
+          <PdfPreview key={ats} flow bytes={secBytes.bytes} startPage={sec.ats.indexOf(at) + 1}
+            title={`${sec.number || 'Section'} · upload pages ${sec.ats.map((a) => a + 1).join(', ')}`}
+            onClose={() => { setSecPeek(null); setSecBytes(null) }}
+            step={{
+              label: `section ${k + 1} of ${sections.length}`,
+              onPrev: k > 0 ? () => go(k - 1) : undefined,
+              onNext: k < sections.length - 1 ? () => go(k + 1) : undefined,
+            }}
+            extra={(
+              <>
+                <label className="pv-field pv-number">Section no.
+                  <input className="mono" value={e.number ?? sec.number} placeholder="09 91 00"
+                    onChange={(ev) => editSection(sec.key, { number: ev.target.value })} aria-label="Section number of this section" />
+                </label>
+                <label className="pv-field pv-title">Section title
+                  <input value={e.title ?? sec.title} onChange={(ev) => editSection(sec.key, { title: ev.target.value })} aria-label="Section title of this section" />
+                </label>
+                <span className="pv-joins">
+                  <button disabled={k === 0} title="This section is really part of the one above"
+                    onClick={() => { const up = sections[k - 1].key; joinAt(sec.ats[0]); setSecPeek({ key: up }) }}>Join up</button>
+                  <button disabled={k >= sections.length - 1} title="The section below is really part of this one"
+                    onClick={() => joinAt(sections[k + 1].ats[0])}>Join down</button>
+                </span>
+                <div className="pv-boxes">
+                  <button className="link small" onClick={() => setBoxing({ at, what: 'number', box: null })}
+                    title="Draw a box round the section number — in the header, the footer or the heading">Box the number</button>
+                  <button className="link small" onClick={() => setBoxing({ at, what: 'title', box: null })}
+                    title="Draw a box round the section title">Box the title</button>
+                </div>
+              </>
+            )} />
+        )
+      })()}
       {boxing && (() => {
         const page = drafts.find((d) => d.pageIndex === boxing.at)
         const sec = sections.find((x) => x.ats.includes(boxing.at))

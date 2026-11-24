@@ -79,13 +79,15 @@ export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo }: {
     return () => el.removeEventListener('scroll', see)
   }, [onPage, aspects, box, zoom])
 
+  // Each ask is answered once, as soon as its page is laid out (an ask made on opening waits for it).
+  const answered = useRef(0)
   useEffect(() => {
-    if (!goTo.ask) return
+    if (!goTo.ask || answered.current === goTo.ask) return
     const el = scroller.current
     const p = el?.querySelector<HTMLElement>(`.ps-page[data-n="${goTo.page}"]`)
-    if (el && p) el.scrollTo({ top: p.offsetTop - GAP })
+    if (el && p) { el.scrollTo({ top: p.offsetTop - GAP }); answered.current = goTo.ask }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goTo.ask])
+  }, [goTo.ask, aspects])
 
   // Ctrl + wheel and a pinch change the size, about the middle of the window, keeping the place.
   const zoomNow = useRef(zoom)

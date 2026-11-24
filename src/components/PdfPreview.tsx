@@ -16,7 +16,9 @@ import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 /** The gap kept between a page's edge and the window's when reading through. */
 const EDGE = 10
 
-export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked }: {
+export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked, startPage }: {
+  /** With flow: the page to open at (1-based). */
+  startPage?: number
   /** Kept to the right of the page rather than over it, to read beside what is on the page. */
   docked?: boolean
   /** Read straight through: every page of the document one under another, scrolled. The
@@ -41,7 +43,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stripZoom, setStripZoom] = useState(1)
-  const [goTo, setGoTo] = useState({ page: 1, ask: 0 })
+  const [goTo, setGoTo] = useState({ page: startPage ?? 1, ask: startPage && startPage > 1 ? 1 : 0 })
   // How the page now arriving was come to: read on into from the one before, or back into.
   const arrive = useRef<'top' | 'bottom' | null>(null)
 

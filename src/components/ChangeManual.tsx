@@ -61,7 +61,11 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, onJoin, edits: given, onEdits, cutBox }: {
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl, splits, joins, onJoin, onPeekSection, edits: given, onEdits, cutBox }: {
+  /** Pages (by their place in the upload) whose section is folded into the one before it. */
+  joins?: Set<number>
+  /** Open a section to read straight through, at one of its pages if given. */
+  onPeekSection?: (key: string, at?: number) => void
   /** The edits, when the upload screen keeps them (so its page preview can change a section too). */
   edits?: Record<string, ManualEdit>
   onEdits?: (fn: (es: Record<string, ManualEdit>) => Record<string, ManualEdit>) => void
@@ -69,7 +73,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
   cutBox?: Region | null
   /** Pages (by their place in the upload) that start a section of their own, whatever the footers say. */
   splits?: Set<number>
-  /** Put a section started that way back with the one before it. */
+  /** Fold the section starting at this page into the one before it. */
   onJoin?: (at: number) => void
   /** These pages (by their place in the upload) are drawings, not manual pages. */
   onDrawings?: (ats: number[]) => void
@@ -109,9 +113,8 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
     const auto = detectSections(mp, null)
     const boxed = box ? mp.filter((p) => sectionInRegion(p.text, box)).length : 0
     const read = cutBox ? detectSections(mp, cutBox) : box && boxed > auto.pages.filter((p) => p.found).length ? detectSections(mp, box) : auto
-    if (!splits?.size) return read
     // A page split off by hand starts a section of its own, with its number to be given.
-    const sections = read.sections.flatMap((s) => {
+    const split = !splits?.size ? read.sections : read.sections.flatMap((s) => {
       const out: typeof s[] = []
       let run = { ...s, pages: [] as number[] }
       for (const i of s.pages) {
@@ -121,8 +124,15 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
       out.push(run)
       return out
     })
+    // A section joined by hand goes into the one before it.
+    const sections: typeof split = []
+    for (const s of split) {
+      const prev = sections[sections.length - 1]
+      if (prev && joins?.has(pages[s.pages[0]]?.at)) sections[sections.length - 1] = { ...prev, pages: [...prev.pages, ...s.pages], trouble: [] }
+      else sections.push(s)
+    }
     return { ...read, sections }
-  }, [pages, box, cutBox, splits])
+  }, [pages, box, cutBox, splits, joins])
 
   const rows = useMemo(() => cut.sections.map((s) => {
     const key = String(pages[s.pages[0]]?.at ?? s.pages[0])
@@ -211,7 +221,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
       <table className="change-manual-table">
         <thead><tr><th>Section</th><th>Title</th><th>Upload pages</th><th>Footer pages</th><th>Goes in as</th><th>Result</th><th></th></tr></thead>
         <tbody>
-          {rows.map((r) => {
+          {rows.map((r, ri) => {
             const ats = r.s.pages.map((i) => pages[i].at)
             // Some of a section's pages, on their way into it, are expected to start late, fall short
             // of "of N" and have no heading or END OF SECTION; only what is wrong with them is said.
@@ -256,7 +266,9 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
                 <td className="small nowrap change-manual-acts">
                   <button className="link small" onClick={() => edit(r.key, { include: !r.include })}>{r.include ? 'Leave out' : 'Put back'}</button>
                   {onDrawings && <button className="link small" onClick={() => onDrawings(ats)} title="Move these pages down to the drawings">They’re drawings</button>}
-                  {onJoin && splits?.has(ats[0]) && <button className="link small" onClick={() => onJoin(ats[0])} title="Put these pages back with the section before them">Join to the one above</button>}
+                  {onPeekSection && <button className="link small" onClick={() => onPeekSection(r.key)} title="Read the section's pages straight through">view</button>}
+                  {onJoin && ri > 0 && <button className="link small" onClick={() => onJoin(ats[0])} title="This section is really part of the one above">join up</button>}
+                  {onJoin && ri < rows.length - 1 && <button className="link small" onClick={() => onJoin(pages[rows[ri + 1].s.pages[0]].at)} title="The section below is really part of this one">join down</button>}
                 </td>
               </tr>
               {unfolded.has(r.key) && r.s.pages.map((pi, k) => {
@@ -266,7 +278,7 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
                     title="Click to choose; Shift-click for a run, Ctrl-click for one more; right-click to move or remove"
                     onClick={(e) => { if (!isControl?.(e)) onPick?.(at, e, allAts) }}
                     onContextMenu={onMenu ? (e) => { e.preventDefault(); onMenu(at, e) } : undefined}>
-                    <td className="thumb-cell"><PageThumb bytes={pages[pi].bytes} label={`Upload page ${at + 1}`} onOpen={() => onPeek?.(at)} /></td>
+                    <td className="thumb-cell"><PageThumb bytes={pages[pi].bytes} label={`Upload page ${at + 1}`} onOpen={() => (onPeekSection ? onPeekSection(r.key, at) : onPeek?.(at))} /></td>
                     <td className="small" colSpan={2}>
                       page {at + 1} of the upload
                       <div className="muted">footer page {placeText(r.places[k])}{pages[pi].text.scanned ? ' · read from a scan' : ''}</div>
