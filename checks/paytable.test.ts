@@ -98,7 +98,7 @@ ok('match', () => {
   assert.match(by.a.note ?? '', /completed and stored was read as 108,600.00; .* make it 108,000.00/)
   assert.equal(by.d.stored, 30313)
   assert.equal(by.e.found, false)
-  assert.match(by.f.unsure ?? '', /from previous/)       // the PDF and the record disagree
+  assert.match(by.f.unsure ?? '', /from previous/i)       // the PDF and the record disagree
   assert.deepEqual(m.missing, ['5'])
   assert.equal(m.extra.length, 1); assert.equal(m.extra[0].name, 'Change Order 002')
 })

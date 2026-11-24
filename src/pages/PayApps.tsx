@@ -13,7 +13,8 @@ import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { PdfPreview } from '../components/PdfPreview'
 import { putFile, readFile, safeName, SECTIONS } from '../lib/files'
-import { againstPdf, COL_SAYS, whyTheyDiffer, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
+import { payText } from '../lib/pdf/payText'
+import { againstPdf, COL_SAYS, ownArithmetic, whyTheyDiffer, WHOSE_SAYS, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
@@ -522,12 +523,35 @@ function checkAgainstPdf(data: LoadedContract, index: number, figures: Figures) 
     coHere: figures.g702.changeOrders, periodTo: app.period_to, pdfPeriodTo: pdf.periodTo,
     coDates: [...dates].map(([date, total]) => ({ date: date || null, total })),
     retainageFix: retainageFix ? { label: retainageFix.label } : null,
+    own: ownArithmetic(pdf),
+    dates: datesTrouble(data, index),
   }
   return { diffs, why: whyTheyDiffer(diffs, ctx), retainageFix }
 }
 
+/**
+ * What can't be right about an application's dates: a period that doesn't match the PDF's, or that
+ * ends on or before the one before it (which is what several applications entered on one day all
+ * ending that day looks like). The dates decide which change orders count on which application.
+ */
+function datesTrouble(data: LoadedContract, index: number): string[] {
+  const app = data.applications[index]
+  const out: string[] = []
+  const pdfTo = app.pdf_read?.periodTo
+  if (pdfTo && pdfTo !== app.period_to) out.push(`The contractor’s PDF has the period ending ${usDate(pdfTo)}; CAzen has ${usDate(app.period_to)}.`)
+  const same = data.applications.filter((a) => a.id !== app.id && a.period_to === app.period_to).map((a) => a.number)
+  if (same.length) out.push(`Application${same.length === 1 ? '' : 's'} ${same.join(', ')} ${same.length === 1 ? 'has' : 'have'} the same period end in CAzen (${usDate(app.period_to)}), so CAzen can’t tell which change orders came before which application.`)
+  else {
+    const before = data.applications[index - 1]
+    if (before && before.period_to > app.period_to) out.push(`The period ends ${usDate(app.period_to)}, before Application ${before.number}’s (${usDate(before.period_to)}).`)
+  }
+  if (app.pdf_read && !pdfTo) out.push('The PDF’s own period wasn’t read when it came in, so CAzen can’t compare the dates yet.')
+  return out
+}
+
 /** A cause in a word or two, for the table of applications. */
 const CAUSE_SHORT: Record<string, string> = {
+  own: 'Contractor’s cover sheet doesn’t add up', misread: 'A misread or typo on the PDF', dates: 'Dates',
   co: 'Change orders', previous: '“From previous”', scheduled: 'Scheduled values', entered: 'This period or stored',
   retainage: 'Retainage rounding', other: 'Completed or balance', cover: 'Cover sheet totals',
 }
@@ -538,7 +562,7 @@ const CAUSE_SHORT: Record<string, string> = {
  */
 function PdfChecks({ data, all, onOpen }: { data: LoadedContract; all: Figures[]; onOpen: (id: string) => void }) {
   const rows = data.applications.map((a, i) => ({ a, f: all[i], c: checkAgainstPdf(data, i, all[i]) }))
-  const off = rows.filter((r) => r.a.pdf_read && r.c.diffs.length).length
+  const off = rows.filter((r) => r.a.pdf_read && r.c.why.length).length
   const unread = rows.filter((r) => !r.a.pdf_read).length
   return (
     <div className="card pay-checks">
@@ -552,12 +576,13 @@ function PdfChecks({ data, all, onOpen }: { data: LoadedContract; all: Figures[]
         <tbody>
           {rows.map(({ a, f, c }) => {
             const asked = a.pdf_read?.g702?.due
-            const ok = a.pdf_read && !c.diffs.length
+            const ok = a.pdf_read && !c.why.length
             const certOff = a.certified_sum != null && Math.abs(a.certified_sum - f.g702.due) >= 0.005
             return (
               <tr key={a.id} onClick={() => onOpen(a.id)} className={a.pdf_read ? (ok ? 'ok' : 'off') : 'unread'}>
                 <td>{a.number}{a.status === 'draft' && <span className="tag">draft</span>}</td>
-                <td>{usDate(a.period_to)}{a.pdf_read?.periodTo && a.pdf_read.periodTo !== a.period_to && <span className="pay-read-warn small"> · PDF: {usDate(a.pdf_read.periodTo)}</span>}</td>
+                <td>{usDate(a.period_to)}{a.pdf_read?.periodTo && a.pdf_read.periodTo !== a.period_to && <span className="pay-read-warn small"> · PDF: {usDate(a.pdf_read.periodTo)}</span>}
+                  {data.applications.some((b) => b.id !== a.id && b.period_to === a.period_to) && <span className="pay-read-warn small" title="Another application has the same period end"> · same as another</span>}</td>
                 <td className="right mono">{asked != null ? money(asked) : '—'}</td>
                 <td className={`right mono${asked != null && Math.abs(asked - f.g702.due) >= 0.005 ? ' pay-read-warn' : ''}`}>{money(f.g702.due)}</td>
                 <td className={`right mono${certOff ? ' pay-read-warn' : ''}`} title={certOff ? `Certified at ${money(a.certified_sum!)}; the figures now work out to ${money(f.g702.due)}` : undefined}>{a.certified_sum != null ? money(a.certified_sum) : '—'}</td>
@@ -674,6 +699,19 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       await setApplication(app.id, { pdf_read: { ...pdf, path, file: pdf.file ?? f.name } } as never)
       onChanged()
     } catch (e) { onTrouble(`The PDF is open beside the figures but couldn’t be kept for next time: ${message(e)}`) }
+  }
+  // A PDF read before CAzen read dates: read its period and date now, from the PDF kept with it.
+  // Only the reading is kept; the application's own dates are changed by the person, if at all.
+  const [readingDates, setReadingDates] = useState(false)
+  async function readDates() {
+    if (!pdf?.path || !project) return
+    setReadingDates(true)
+    try {
+      const { table } = await payText(await readFile(project, pdf.path))
+      if (!table.periodTo && !table.appliedOn) { onTrouble('CAzen couldn’t find a period or application date on the PDF.'); return }
+      await setApplication(app.id, { pdf_read: { ...pdf, periodTo: table.periodTo, appliedOn: table.appliedOn } } as never)
+      onChanged()
+    } catch (e) { onTrouble(message(e)) } finally { setReadingDates(false) }
   }
   const { diffs, why, retainageFix } = useMemo(() => checkAgainstPdf(data, index, figures), [data, index, figures])
   const diffAt = (lineId: string | null, col: PdfCol) =>
@@ -830,10 +868,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         )}
         {pdf && (
           // The verdict first, in one line: does this application agree with the contractor's PDF?
-          <button className={`pay-verdict ${diffs.length ? 'off' : 'ok'}`}
+          <button className={`pay-verdict ${why.length ? 'off' : 'ok'}`}
             onClick={() => document.querySelector('.pay-against')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-            {diffs.length
-              ? <><strong>✗ Differs from the contractor’s PDF</strong> — {why.filter((w) => w.key !== 'cover' || why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}<span className="muted"> · see why below</span></>
+            {why.length
+              ? <><strong>✗ {diffs.length ? 'Differs from the contractor’s PDF' : 'Something to look at'}</strong> — {why.filter((w) => w.key !== 'cover' || why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}<span className="muted"> · see why below</span></>
               : <><strong>✓ Agrees with the contractor’s PDF</strong>{pdf.g702?.due != null && <> — {money(pdf.g702.due)} due on both</>}</>}
           </button>
         )}
@@ -910,6 +948,11 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening} coHere={g.changeOrders} why={why}
         onRoundRetainage={retainageFix ? async () => {
           try { await setContract(data.contract.id, { rounding: { ...(data.contract.rounding ?? {}), I: retainageFix.way } }); onChanged() } catch (e) { onTrouble(message(e)) }
+        } : undefined}
+        readingDates={readingDates}
+        onReadDates={pdf.path && !pdf.periodTo ? () => void readDates() : undefined}
+        onUseDates={pdf.periodTo && pdf.periodTo !== app.period_to ? async () => {
+          try { await setApplication(app.id, { period_to: pdf.periodTo, ...(pdf.appliedOn ? { applied_on: pdf.appliedOn } : {}) } as never); onChanged() } catch (e) { onTrouble(message(e)) }
         } : undefined}
         onBeside={() => (beside ? setBeside(null) : void showBeside())} onAttach={(f) => void attachPdf(f)} onForget={async () => {
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
@@ -1154,7 +1197,12 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage }: {
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage, onReadDates, onUseDates, readingDates }: {
+  /** Read the period and date off a PDF read before CAzen read them. */
+  onReadDates?: () => void
+  readingDates?: boolean
+  /** Give the application the period and date the PDF has. */
+  onUseDates?: () => void
   /** Line 2 as CAzen has it: the change order lines on this application. */
   coHere: number
   /** The differences sorted by what causes them. */
@@ -1173,7 +1221,7 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
   const say = (d: Discrepancy, n: number) => (d.col === 'pct' ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
   const read = new Date(pdf.read_at)
   return (
-    <div className={`card pay-against${diffs.length ? ' has-diffs' : ''}`}>
+    <div className={`card pay-against${why.length ? ' has-diffs' : ''}`}>
       <div className="pad-head">
         <h3>Against the contractor’s PDF</h3>
         <span className="pay-against-tools">
@@ -1190,21 +1238,29 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
         {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
         applications; only this period and stored were taken from the PDF.
       </p>
-      {!diffs.length
+      {!why.length
         ? <p className="pay-read-ok">Every figure on the contractor’s PDF agrees with CAzen’s arithmetic.</p>
         : (
           <>
             <p className="pay-against-lead">
-              <strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong>
-              {why.length > 1 ? `, for ${why.length} reasons:` : ':'} <span className="muted small">red on the sheet below, with both figures on hover.</span>
+              {diffs.length
+                ? <><strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong>
+                  {why.length > 1 ? `, for ${why.length} reasons:` : ':'} <span className="muted small">red on the sheet below, with both figures on hover. Each reason says whose it is.</span></>
+                : <strong className="pay-read-warn">Every figure agrees, but:</strong>}
             </p>
             {why.map((grp) => (
               <div key={grp.key} className={`pay-why pay-why-${grp.key}`}>
-                <div className="pay-why-title">{grp.title}</div>
+                <div className="pay-why-title"><span className={`pay-whose pay-whose-${grp.whose}`}>{WHOSE_SAYS[grp.whose]}</span>{grp.title}</div>
                 {grp.detail && <p className="small pay-why-detail">{grp.detail}</p>}
                 {grp.key === 'retainage' && onRoundRetainage && <button className="primary-lite small" onClick={onRoundRetainage}>Round retainage that way</button>}
-                <table className="pay-against-table">
-                  <thead><tr><th>Where</th><th>Column</th><th className="right">Contractor’s PDF</th><th className="right">CAzen</th><th className="right">Difference</th></tr></thead>
+                {grp.key === 'dates' && (onReadDates || onUseDates) && (
+                  <div className="pay-why-acts">
+                    {onReadDates && <button className="primary-lite small" onClick={onReadDates} disabled={readingDates}>{readingDates ? 'Reading the PDF…' : 'Read the period from the PDF'}</button>}
+                    {onUseDates && <button className="primary-lite small" onClick={onUseDates}>Use the PDF’s period{pdf.appliedOn ? ' and date' : ''} for this application</button>}
+                  </div>
+                )}
+                {grp.rows.length > 0 && <table className="pay-against-table">
+                  <thead><tr><th>Where</th><th>Column</th><th className="right">{grp.heads?.[0] ?? 'Contractor’s PDF'}</th><th className="right">{grp.heads?.[1] ?? 'CAzen'}</th><th className="right">Difference</th></tr></thead>
                   <tbody>
                     {grp.rows.map((d, i) => (
                       <tr key={i}>
@@ -1216,7 +1272,7 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table>}
                 {grp.follow > 0 && <p className="muted small pay-why-follow">and {grp.follow} more {grp.follow === 1 ? 'figure that follows' : 'figures that follow'} from {grp.rows.length === 1 ? 'it' : 'these'}.</p>}
               </div>
             ))}

@@ -84,11 +84,82 @@ export function againstPdf(figures: Figures, pdf: PdfRead): Discrepancy[] {
   return out
 }
 
+// ---------- The PDF against itself ----------
+
+/** A figure on the contractor's cover sheet that its own other figures disagree with. */
+export interface OwnSlip {
+  /** The cover-sheet figure the others point to, where one figure alone explains it. */
+  key?: G702Key | CoKey | 'totalC' | 'totalG' | 'totalI'
+  label: string
+  printed: number
+  /** What the PDF's other figures give for it. */
+  works: number
+  /** The arithmetic that does not hold, in words. */
+  sum: string
+}
+
+const OWN_SAYS: Record<string, string> = { ...G702_SAYS, ...CO_SAYS, totalC: 'Grand total, scheduled value', totalG: 'Grand total, completed and stored', totalI: 'Grand total, retainage' }
+
+/**
+ * The contractor's cover sheet checked against itself: lines 1 + 2 = 3, 4 − 5 = 6, 6 − 7 = 8,
+ * 3 − 6 = 9, the change order summary against line 2, and lines 3, 4 and 5 against the G703's grand
+ * totals. Where one figure alone breaks every sum it is in, and putting what the others give in its
+ * place makes them all hold, that figure is named — it is a typo on the PDF or a misreading of it.
+ * Otherwise each sum that fails is the contractor's arithmetic.
+ */
+export function ownArithmetic(pdf: PdfRead): OwnSlip[] {
+  const g = pdf.g702 ?? ({} as Partial<G702Read>)
+  const v: Record<string, number | undefined> = { ...g, totalC: pdf.total?.C, totalG: pdf.total?.G, totalI: pdf.total?.I }
+  const sums: { terms: [string, number][]; say: string }[] = [
+    { terms: [['originalSum', 1], ['changeOrders', 1], ['contractSum', -1]], say: 'line 1 + line 2 = line 3' },
+    { terms: [['completedAndStored', 1], ['retainageTotal', -1], ['earnedLessRetainage', -1]], say: 'line 4 − line 5 = line 6' },
+    { terms: [['earnedLessRetainage', 1], ['previousCertificates', -1], ['due', -1]], say: 'line 6 − line 7 = line 8' },
+    { terms: [['contractSum', 1], ['earnedLessRetainage', -1], ['balanceToFinish', -1]], say: 'line 3 − line 6 = line 9' },
+    { terms: [['changeOrders', 1], ['coPreviousAdditions', -1], ['coThisAdditions', -1], ['coPreviousDeductions', 1], ['coThisDeductions', 1]], say: 'the change order summary’s net = line 2' },
+    { terms: [['contractSum', 1], ['totalC', -1]], say: 'line 3 = the G703’s scheduled value total' },
+    { terms: [['completedAndStored', 1], ['totalG', -1]], say: 'line 4 = the G703’s completed and stored total' },
+    { terms: [['retainageTotal', 1], ['totalI', -1]], say: 'line 5 = the G703’s retainage total' },
+  ]
+  // A sum is checked only where every figure in it was read (the change order summary may leave
+  // a this-month figure blank, which is nothing).
+  const can = sums.filter((s) => s.terms.every(([k]) => v[k] != null || k.startsWith('coThis')))
+  const off = (s: typeof sums[number]) => s.terms.reduce((t, [k, sign]) => t + (v[k] ?? 0) * sign, 0)
+  const failing = can.filter((s) => Math.abs(off(s)) >= 0.01)
+  if (!failing.length) return []
+  // One figure in every failing sum and in none that holds, giving the same value in each — and
+  // only one such figure, or which of them is wrong can't be told.
+  const odd: OwnSlip[] = []
+  for (const [k] of failing[0].terms) {
+    if (v[k] == null) continue
+    if (!failing.every((s) => s.terms.some(([x]) => x === k))) continue
+    if (can.some((s) => !failing.includes(s) && s.terms.some(([x]) => x === k))) continue
+    const gives = failing.map((s) => { const sign = s.terms.find(([x]) => x === k)![1]; return v[k]! - off(s) / sign })
+    if (gives.every((x) => Math.abs(x - gives[0]) < 0.01)) {
+      odd.push({ key: k as OwnSlip['key'], label: OWN_SAYS[k], printed: v[k]!, works: Math.round(gives[0] * 100) / 100, sum: failing.map((s) => s.say).join('; ') })
+    }
+  }
+  if (odd.length === 1) return odd
+  return failing.map((s) => {
+    const [k, sign] = s.terms[s.terms.length - 1]
+    return { label: `${s.say[0].toUpperCase()}${s.say.slice(1)}`, printed: v[k] ?? 0, works: Math.round(((v[k] ?? 0) - off(s) / sign) * 100) / 100, sum: s.say }
+  })
+}
+
 // ---------- Why they differ ----------
 
+/** Whose the difference is, so it can be put right in the right place or asked about. */
+export type Whose = 'contractor' | 'reading' | 'cazen' | 'rounding' | 'either'
+export const WHOSE_SAYS: Record<Whose, string> = {
+  contractor: 'The contractor’s figures', reading: 'The PDF or its reading', cazen: 'Entered in CAzen',
+  rounding: 'Rounding practice', either: 'The contractor or CAzen',
+}
+
 export interface DiffGroup {
-  key: 'co' | 'previous' | 'scheduled' | 'entered' | 'retainage' | 'cover' | 'other'
+  key: 'own' | 'misread' | 'dates' | 'co' | 'previous' | 'scheduled' | 'entered' | 'retainage' | 'cover' | 'other'
+  whose: Whose
   title: string
+  /** Column headings for the two figures, where they are not "Contractor's PDF" and "CAzen". */
+  heads?: [string, string]
   detail?: string
   /** The differences to show: on a line, only the one the others follow from. */
   rows: Discrepancy[]
@@ -107,6 +178,10 @@ export interface WhyContext {
   coDates: { date: string | null; total: number }[]
   /** A way of rounding retainage that would make every retainage figure agree, if there is one. */
   retainageFix?: { label: string } | null
+  /** Where the contractor's cover sheet disagrees with itself. */
+  own?: OwnSlip[]
+  /** What is wrong with this application's dates, in sentences. */
+  dates?: string[]
 }
 
 const near = (a: number, b: number, by = 0.5) => Math.abs(a - b) < by
@@ -124,12 +199,34 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
   const used = new Set<Discrepancy>()
   const take = (g: DiffGroup) => { if (g.rows.length) { groups.push(g); g.rows.forEach((d) => used.add(d)) } }
 
+  // The PDF against itself first: a figure its own other figures disagree with is either a typo
+  // on the PDF or a misreading, and the PDF beside the sheet shows which.
+  for (const slip of ctx.own ?? []) {
+    const d = slip.key && diffs.find((x) => !used.has(x) && (x.col === slip.key ||
+      (slip.key === 'totalC' && x.where === 'total' && x.col === 'C') || (slip.key === 'totalG' && x.where === 'total' && x.col === 'G') || (slip.key === 'totalI' && x.where === 'total' && x.col === 'I')))
+    if (d && near(d.app, slip.works, 0.01)) {
+      take({ key: 'misread', whose: 'reading', rows: [d], follow: 0,
+        title: `${slip.label}: the PDF’s other figures give ${usd(slip.works)}, not ${usd(slip.printed)}`,
+        detail: `CAzen also has ${usd(slip.works)}. Either the figure was misread from the PDF or it is a typo on the PDF; the PDF side by side shows which. Nothing else follows from it.` })
+    }
+  }
+  const unexplained = (ctx.own ?? []).filter((slip) => !groups.some((g) => g.key === 'misread' && g.title.startsWith(`${slip.label}:`)))
+  if (unexplained.length) {
+    const rows: Discrepancy[] = unexplained.map((s) => ({ where: 'g702', label: s.label, col: (s.key ?? 'due') as G702Key, pdf: s.printed, app: s.works }))
+    groups.push({ key: 'own', whose: 'contractor', rows, follow: 0, heads: ['Printed on the PDF', 'The PDF’s other figures give'],
+      title: `The contractor’s cover sheet doesn’t add up (${unexplained.map((s) => s.sum).join('; ')})`,
+      detail: 'These are the contractor’s own figures checked against each other, before anything CAzen works out.' })
+    // The same figures, where they also differ from CAzen, are shown here and not again.
+    for (const s of unexplained) for (const d of diffs) if (s.key && d.col === s.key) used.add(d)
+  }
+  if (ctx.dates?.length) groups.push({ key: 'dates', whose: 'cazen', rows: [], follow: 0, title: 'This application’s dates', detail: ctx.dates.join(' ') })
+
   // Change orders: line 2, and what line 2 carries into lines 3 and 9 and the sheet's totals.
-  const theirs = diffs.find((d) => d.col === 'changeOrders')
+  const theirs = diffs.find((d) => !used.has(d) && d.col === 'changeOrders')
   const coGap = theirs ? theirs.app - theirs.pdf : 0
   const isCo = (d: Discrepancy) => d.col in CO_SAYS
   if (theirs || diffs.some(isCo)) {
-    const rows = diffs.filter((d) => d === theirs || isCo(d))
+    const rows = diffs.filter((d) => !used.has(d) && (d === theirs || isCo(d)))
     const follows = diffs.filter((d) => !rows.includes(d) && coGap && (
       (d.where === 'g702' && (d.col === 'contractSum' || d.col === 'balanceToFinish') && near(d.app - d.pdf, coGap, 2)) ||
       (d.where === 'total' && (d.col === 'C' || d.col === 'H') && near(d.app - d.pdf, coGap, 2)) ||
@@ -138,7 +235,7 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     const dated = ctx.coDates.filter((c) => Math.abs(c.total) > 0.005)
     const when = dated.map((c) => `${usd(c.total)} ${c.date ? `approved ${usDay(c.date)}` : 'with no approval date'}`).join(', ')
     take({
-      key: 'co', rows, follow: follows.length,
+      key: 'co', rows, follow: follows.length, whose: ctx.dates?.length ? 'cazen' : 'either',
       title: theirs
         ? `Change orders: the contractor’s cover sheet has ${usd(theirs.pdf)}; CAzen counts ${usd(theirs.app)} on this application`
         : 'Change orders: the change order summary differs',
@@ -165,13 +262,13 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     followers[bucket] += ds.length - 1
     ds.slice(1).forEach((d) => used.add(d))
   }
-  take({ key: 'scheduled', rows: roots.C, follow: followers.C,
+  take({ key: 'scheduled', whose: 'contractor', rows: roots.C, follow: followers.C,
     title: `Scheduled value differs on ${roots.C.length} ${roots.C.length === 1 ? 'line' : 'lines'}`,
-    detail: 'The PDF moves money between lines (or adds to them) and the schedule of values here has not followed.' })
-  take({ key: 'previous', rows: roots.D, follow: followers.D,
+    detail: 'The contractor’s PDF moves money between lines, or adds to them, and the schedule of values in CAzen has not followed. A change to the schedule of values needs the owner’s and architect’s agreement or a change order.' })
+  take({ key: 'previous', whose: 'either', rows: roots.D, follow: followers.D,
     title: `“From previous” differs on ${roots.D.length} ${roots.D.length === 1 ? 'line' : 'lines'}`,
-    detail: 'What the PDF says was billed before this application is not what CAzen’s earlier applications billed on these lines: an earlier application here is missing a figure or has a different one.' })
-  take({ key: 'entered', rows: roots.E, follow: followers.E,
+    detail: 'What the PDF says was billed before this application is not what CAzen’s earlier applications billed on these lines. Either an earlier application in CAzen has a different figure, or the contractor’s “from previous” doesn’t match what they billed before; the earlier PDFs show which.' })
+  take({ key: 'entered', whose: 'cazen', rows: roots.E, follow: followers.E,
     title: `This period or stored differs on ${roots.E.length} ${roots.E.length === 1 ? 'line' : 'lines'}`,
     detail: 'These were changed here after the PDF was read, or put in by hand.' })
 
@@ -188,7 +285,7 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     (d.where === 'total' && d.col === 'I') ||
     (d.where === 'g702' && ['retainageTotal', 'earnedLessRetainage', 'previousCertificates', 'due', 'balanceToFinish'].includes(String(d.col)) && Math.abs(d.pdf - d.app) <= 3 * Math.max(1, roots.I.length))))
   retFollow.forEach((d) => used.add(d))
-  take({ key: 'retainage', rows: roots.I, follow: followers.I + retFollow.length,
+  take({ key: 'retainage', whose: 'rounding', rows: roots.I, follow: followers.I + retFollow.length,
     title: roots.I.some((d) => d.where === 'line')
       ? `Retainage differs ${small ? 'by a dollar or two ' : ''}on ${roots.I.length} ${roots.I.length === 1 ? 'line' : 'lines'}`
       : `Retainage differs ${small ? 'by a dollar or two' : ''}`,
@@ -197,11 +294,12 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
         ? `The contractor rounds retainage another way: “${ctx.retainageFix.label}” makes every retainage figure agree.`
         : 'The contractor rounds retainage another way; the Retainage column’s heading (right-click) sets how it is rounded.')
       : undefined })
-  take({ key: 'other', rows: roots.other, follow: followers.other, title: `Completed, balance or % differs on ${roots.other.length} ${roots.other.length === 1 ? 'line' : 'lines'}` })
+  take({ key: 'other', whose: 'contractor', rows: roots.other, follow: followers.other, title: `Completed, balance or % differs on ${roots.other.length} ${roots.other.length === 1 ? 'line' : 'lines'}`,
+    detail: 'Scheduled value, from previous and this period agree on these lines, so the contractor’s own arithmetic across the row is off.' })
 
   // Whatever is left on the cover sheet and the totals row.
   const rest = diffs.filter((d) => !used.has(d))
-  take({ key: 'cover', rows: rest, follow: 0,
+  take({ key: 'cover', whose: 'either', rows: rest, follow: 0,
     title: groups.length ? 'Cover sheet and totals, which follow from the above' : 'Cover sheet and totals' })
   return groups
 }

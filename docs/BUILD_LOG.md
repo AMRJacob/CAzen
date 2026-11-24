@@ -3205,3 +3205,9 @@ pixel ratio; and frame timing under 6× CPU throttling.
 ## 2026-11-24 — Round down ignores the cents
 - A "round down" override now drops the cents whatever they are ($1,488.99 → $1,488), including on deductions (−$1.25 → −$1); "round up" mirrors it.
 - The scheduled-value choice in the read window says plainly what each button does ("Change CAzen to the PDF's values" / "Leave CAzen's values as they are"), and the changed lines are listed open with "CAzen has" / "PDF shows" headings.
+
+## 2026-11-24 — Whose difference is it
+- Every reason a pay application differs from the contractor's PDF now carries a tag saying whose it is: the contractor's figures, the PDF or its reading, entered in CAzen, rounding practice, or the contractor or CAzen.
+- The contractor's cover sheet is checked against itself (1 + 2 = 3, 4 − 5 = 6, 6 − 7 = 8, 3 − 6 = 9, the change order summary against line 2, lines 3–5 against the G703 totals). Where one figure alone breaks its sums, it is named with what the PDF's other figures give — a misread or a typo (UCA application 6's line 1 read as $8 is caught this way). Otherwise the failing sums are shown as the contractor's arithmetic.
+- Dates are checked: the PDF's period against the application's, and applications sharing a period end. A PDF read before dates were read can have its period read now ("Read the period from the PDF"); "Use the PDF's period and date" sets them on the application when the person chooses to.
+- The Summary table marks an application whose period end is the same as another's.

@@ -3686,7 +3686,14 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 
 .pay-against-lead { margin: 8px 0 6px; }
 .pay-why { border-top: 1px solid var(--line); padding: 10px 0 4px; }
-.pay-why-title { font-weight: 600; }
+.pay-why-title { font-weight: 600; display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+.pay-whose { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
+.pay-whose-contractor { background: #fde2dc; color: #8a2b14; }
+.pay-whose-reading { background: #fff1c9; color: #7a5600; }
+.pay-whose-cazen { background: #dde8fb; color: #1d4690; }
+.pay-whose-rounding { background: #e8e8e8; color: #444; }
+.pay-whose-either { background: #efe4f7; color: #5b2a7a; }
+.pay-why-acts { display: flex; gap: .5rem; margin: .35rem 0; flex-wrap: wrap; }
 .pay-why-detail { margin: 3px 0 6px; color: var(--ink); max-width: 80ch; }
 .pay-why-follow { margin: 0 0 4px; }
 
