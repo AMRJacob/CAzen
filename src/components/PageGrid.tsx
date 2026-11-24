@@ -70,13 +70,16 @@ export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen
  * — a taller arrangement scrolls — and as many columns as the screen has (twelve, or eight). On a
  * phone they are one column, each as tall as it needs.
  */
-export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
+export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, onTab }: {
   blocks: Block[]
   screen: Screen
   arranging: boolean
   render: (b: Block) => React.ReactNode
   /** While arranging: the blocks moved, sized or hidden; `done` is the end of a drag. */
   onArrange: (next: Block[], done: boolean) => void
+  /** On a phone, the one block shown, nearly full screen; the rest are a tab or a swipe away. */
+  tab?: string | null
+  onTab?: (id: string) => void
 }) {
   const cols = COLS[screen]
   const grid = useRef<HTMLDivElement | null>(null)
@@ -169,6 +172,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
   const rename = (b: Block, title: string) => onArrange(blocks.map((x) => (x.id === b.id ? { ...x, title } : x)), true)
 
   const phone = screen === 'phone'
+  if (phone && !arranging && onTab) return <PhoneTabs blocks={blocks} render={render} tab={tab ?? null} onTab={onTab} />
   const order = phone ? blocks : [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
   return (
     <div ref={grid} className={`nb-grid${phone ? ' nb-grid-phone' : ''}${arranging ? ' nb-arranging' : ''}`}
@@ -199,6 +203,66 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+// ---------- A phone: one tool at a time ----------
+
+/** What a block's tab says. */
+const TAB: Partial<Record<BlockKind, string>> = { head: 'Day', names: 'Attendees', notes: 'Notes', sketch: 'Sketch', photos: 'Photos', seen: 'Observations' }
+export const tabLabel = (b: Block) => b.title || TAB[b.kind] || LABEL[b.kind]
+
+/**
+ * A notebook page on a phone (Jacob, 11/24: scrolling to find a tool is a pain; each tool nearly
+ * full screen). A strip of the page's own blocks, in the order arranged for a phone — a tool not
+ * on the page is added from the corner menu, as before — and one block filling the screen under
+ * it. A tap on the strip, or a swipe sideways across the block, goes to the next.
+ * Every block stays mounted, hidden when not shown, so what is being typed is not lost.
+ */
+function PhoneTabs({ blocks, render, tab, onTab }: {
+  blocks: Block[]
+  render: (b: Block) => React.ReactNode
+  tab: string | null
+  onTab: (id: string) => void
+}) {
+  const on = blocks.find((b) => b.id === tab) ?? blocks[0]
+  const at = blocks.indexOf(on)
+  const strip = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    strip.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [on?.id])
+  // A swipe: well sideways, quick, and not begun in something that takes a sideways drag itself.
+  const start = useRef<{ x: number; y: number; t: number } | null>(null)
+  const down = (e: React.TouchEvent) => {
+    const el = e.target as HTMLElement
+    if (e.touches.length !== 1 || el.closest('input, textarea, select, [contenteditable], .nbd-card, .nbd-box-head, .nb-tabs')) { start.current = null; return }
+    start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }
+  }
+  const up = (e: React.TouchEvent) => {
+    const s = start.current
+    start.current = null
+    if (!s || document.querySelector('.nbd-held')) return
+    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y
+    if (Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy) || Date.now() - s.t > 700) return
+    const next = blocks[at + (dx < 0 ? 1 : -1)]
+    if (next) onTab(next.id)
+  }
+  if (!on) return null
+  return (
+    <div className="nb-tabbed">
+      <div ref={strip} className="nb-tabs" role="tablist" aria-label="The page's tools">
+        {blocks.map((b) => (
+          <button key={b.id} role="tab" aria-selected={b.id === on.id} className={b.id === on.id ? 'on' : ''} onClick={() => onTab(b.id)}>{tabLabel(b)}</button>
+        ))}
+      </div>
+      <div className="nb-tab-body" onTouchStart={down} onTouchEnd={up}>
+        {blocks.map((b) => (
+          <div key={b.id} data-block={b.id} className={`nb-cell nb-cell-${b.kind} nb-tab-cell`} role="tabpanel" hidden={b.id !== on.id}>
+            <div className="nb-cell-in">{render(b)}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

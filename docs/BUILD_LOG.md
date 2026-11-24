@@ -11,6 +11,72 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 16:10 CST (after a site meeting: groups, phone tabs, photo zoom, AI check, and more)
+
+Ten asks from Jacob, 15:27–15:54, straight after a site meeting. Test browser only throughout.
+
+**One report from several pages — page groups** (three UCA sites on one trip). A group is the
+pages sharing `group_id`, each carrying `group_name`; **migration `0054_page_groups` (two columns)
+is written and NOT applied** — refused from this session without an OK in chat, as before; until it
+is, grouping is not offered (`canGroupPages`). On the contents page: Ctrl/Cmd-click picks a page,
+Shift-click a run; right-click → *Group these N pages*. On a phone: corner menu → *Group pages*,
+tap the pages, *Group*. The group is a heading over its pages — its name (double-click to rename),
+how many and when, and *Make the field report* (or the meeting notes). Right-click a grouped page:
+the group's report, rename, take this page out, ungroup. The report (`src/lib/pageGroups.ts`): each
+page a section under its title or place, its own outline set one level in; attendees once each;
+the places one to a line; every page's photographs and observations. `checks/groups.test.ts`,
+`checks/t_people_groups.py`.
+
+**A phone page is one tool at a time** (scrolling to find a tool is a pain). A strip of the page's
+own blocks — in the phone order, only those on the page — and the chosen one filling the screen;
+tap the strip or swipe sideways (70 px, twice as far across as down). The corner menu's Note goes
+to the notes; a photo taken goes to Photos. Arranging still shows the whole list. Desk and tablet
+unchanged. `PhoneTabs` in `PageGrid.tsx`, `checks/t_tabs.py`.
+
+**The phone's hardware photo button** — not done, and cannot be from a web app: Apple's API for
+the side buttons (AVCaptureEventInteraction) is for native apps with a camera session running; with
+none, the button does what the system does — opens the Camera app. No web equivalent was found
+(that is an absence found, not a statement from Apple).
+
+**Zoom on a photograph** (desk). Wheel about the pointer, double-click to 2.5× and back, drag once
+zoomed, pinch by touch, − / + / Fit; the picture never leaves its frame; any drawing on it scales
+with it. `ZoomPhoto.tsx`, `checks/t_zoomphoto.py`.
+
+**An observation from the page's documentation photos.** *From this page's photos* on a new
+observation made on a page: pick several; labels come too (the first names it if it has no name;
+all go into its details as "Photos: …"); a photograph drawn on is copied with the drawing laid in;
+*Remove from Documentation photos* takes them off the page. Each is the observation's own file — a
+copy, or the same file when it is taken off the page and was not drawn on — so tearing out the page
+cannot take it. `PagePhotoPicker.tsx`, `checks/t_pagephotos.py` (the copy has the ink: 5,378 dark
+pixels where the line runs).
+
+**The notes board**: right-click, or by touch hold and let go without moving, opens a note's or
+category's menu — Edit the words, Add a subcategory, Back to the tray (notes only), Delete/Remove
+(`checks/t_boardmenu.py`). More room round the boxes for dropping. **Newest first**: the tray and
+each category show what was typed or dropped in last at the top; the outline and the report keep
+the order typed (`checks/t_neworder.py`).
+
+**Check with AI** (meeting notes run through an AI for organization, grammar and spelling). On the
+Notes block: *Copy the notes for AI* (the outline and a short request), paste the reply back (or
+read it from the clipboard), *Review the changes*: each difference — reworded, moved in or out,
+taken out, added — with the word changes marked, the suggested words editable, Accept / Reject, and
+accept or reject all; *Apply* writes the notes and the board follows. The reply is read loosely
+(Markdown headings and bullets, any indents, preamble and code fences dropped). No AI is called
+from the app. `src/lib/aiRevise.ts`, `AiCheck.tsx`, `checks/airevise.test.ts`, `checks/t_aicheck.py`.
+
+**Phone numbers hyphenated as typed**, everywhere one is entered: the firm's phone in Settings and
+in setting up a firm, a notebook's new person, and any form field whose key or label says phone or
+contact number. 501-555-0123; 1-501-555-0123; seven digits 555-0123; an extension kept; + numbers
+left alone; backspace after a hyphen takes the digit. `src/lib/phone.ts`, `PhoneInput.tsx`,
+`checks/phone.test.ts`, `checks/t_phone.py`.
+
+**Attendees' details edited** — right-click (or hold) a name on a page: name, company, phone,
+email. Saved on the project's people list, so every page from now on offers them that way (added to
+the list if they were only typed onto pages), and on this page's line. Earlier pages keep what
+they recorded. `setPerson` in `people.ts`.
+
+---
+
 # Checkpoint — 2026-11-24, 11:40 CST (the upload card at the bottom right)
 
 Jacob, 11:32: the minimised upload covers other parts of the screen; the bottom right instead. The

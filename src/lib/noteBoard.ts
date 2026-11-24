@@ -102,3 +102,10 @@ export function move(board: Note[], from: Path, into: Path): Note[] {
   ;(target ? target.kids : next).push(node)
   return next
 }
+
+/** The note at a path, if there is one. */
+export function nodeAt(board: Note[], path: Path): Note | null {
+  let list = board, node: Note | null = null
+  for (const i of path) { node = list[i] ?? null; if (!node) return null; list = node.kids }
+  return node
+}

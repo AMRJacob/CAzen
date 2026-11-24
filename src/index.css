@@ -3798,3 +3798,106 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .change-intro tr.cm-page { cursor: pointer; }
 .change-intro .intro-group td { vertical-align: middle; }
 .change-manual tr.cm-section { cursor: context-menu; }
+
+/* ---------- Groups of pages on a notebook's contents (Jacob, 11/24) ----------
+   A group is a heading — its name (double-click to rename), how many pages and when, and the
+   button for its one report — with its pages set in under it. A page picked with Shift or Ctrl
+   (or by touch after Group pages) is tinted until grouped or cleared. */
+.nb-toc .nb-toc-group { display: flex; align-items: center; gap: 12px; margin: 14px 0 2px; padding: 8px 10px 8px 12px; border-left: 3px solid var(--moss); background: rgba(92, 122, 101, 0.07); border-radius: 0 10px 10px 0; }
+.nb-toc .nb-toc-group-name { flex: 1; min-width: 0; text-align: left; border: none; background: none; padding: 2px 0; font: inherit; font-weight: 600; font-size: 16px; color: #2b2d2c; }
+input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
+.nb-toc .nb-toc-group .nb-toc-what { white-space: nowrap; }
+.nb-toc li.nb-toc-in { margin-left: 18px; border-left: 3px solid rgba(92, 122, 101, 0.25); padding-left: 6px; }
+.nb-toc li.nb-toc-sel > button { background: var(--moss-soft); border-radius: 8px; box-shadow: inset 0 0 0 1.5px var(--moss); }
+@media (max-width: 759px) {
+  .nb-toc .nb-toc-group { flex-wrap: wrap; gap: 6px 10px; }
+  .nb-toc li.nb-toc-in { margin-left: 8px; }
+}
+.nb-toc .nb-toc-group button { width: auto; height: auto; }
+.nb-toc .nb-toc-group button.nb-toc-group-name { flex: 1; }
+.nb-toc .nb-toc-group button.primary-lite { padding: 7px 12px; font-size: 13.5px; }
+
+/* ---------- A notebook page on a phone: one tool at a time (PageGrid's PhoneTabs, Jacob 11/24) ----------
+   The page's own blocks as a strip of tabs that stays at the top; the chosen one fills the screen
+   under it. A swipe sideways across it goes to the next. */
+.nb-tabbed { display: flex; flex-direction: column; min-height: 100%; }
+.nb-tabs { position: sticky; top: 0; z-index: 6; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 0 10px; padding: 6px 2px;
+  background: var(--paper); border-bottom: 1px solid var(--hair); }
+.nb-tabs::-webkit-scrollbar { display: none; }
+.nb-tabs button { flex: none; border: none; background: none; padding: 8px 12px; border-radius: 999px; font-size: 14.5px; color: #5c625d; white-space: nowrap; }
+.nb-tabs button.on { background: #2b2d2c; color: #fff; }
+.nb-tab-body { flex: 1; display: flex; flex-direction: column; touch-action: pan-y; }
+.nb-tab-body > .nb-tab-cell { flex: 1; display: flex; flex-direction: column; min-height: calc(100dvh - 190px - env(safe-area-inset-bottom)); }
+.nb-tab-body > .nb-tab-cell[hidden] { display: none; }
+.nb-tab-cell > .nb-cell-in { flex: 1; display: flex; flex-direction: column; }
+.nb-page .nb-tab-cell > .nb-cell-in > .nb-z { flex: 1; margin: 0; }
+/* The sketch is a picture of the pad: here it can take the whole height. */
+.nb-page .nb-tab-cell.nb-cell-sketch .nb-pad { flex: 1; min-height: 260px; height: auto; }
+
+/* ---------- A photograph that can be zoomed (ZoomPhoto.tsx) ---------- */
+.zp { position: relative; overflow: hidden; touch-action: none; line-height: 0; border-radius: 6px; cursor: zoom-in; user-select: none; -webkit-user-select: none; }
+.zp.zoomed { cursor: grab; }
+.zp.zoomed:active { cursor: grabbing; }
+.zp-in { transform-origin: 0 0; will-change: transform; }
+.zp-in img { -webkit-user-drag: none; user-select: none; }
+.zp-tools { position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 2px; padding: 3px; line-height: 1;
+  background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 999px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+.zp-tools button { border: none; background: none; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 999px; font-size: 15px; cursor: pointer; }
+.zp-tools button:disabled { opacity: 0.3; }
+.zp-tools span { min-width: 44px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: #4d534e; }
+
+/* The notes board's own menu (right-click, or hold and let go by touch), over a clear backdrop that closes it. */
+.nbd-menu-back { position: fixed; inset: 0; z-index: 90; }
+.nbd-menu { position: fixed; z-index: 91; min-width: 210px; }
+
+/* More room around the boxes, so a held note has a larger target to land in (Jacob, 11/24). */
+.nbd-board { gap: 16px; padding: 6px; }
+.nbd-box-in { gap: 7px; padding: 6px 10px 14px; min-height: 46px; }
+.nbd-box .nbd-box .nbd-box-in { padding-bottom: 12px; }
+.nbd-tray { padding: 12px; }
+@media (max-width: 619px) {
+  .nbd .nbd-box-in { padding: 2px 0 14px; }
+  .nbd .nbd-box-head { padding: 14px 0 6px; }
+  .nbd .nbd-box.d1, .nbd .nbd-box.d2 { margin: 4px 0; }
+}
+
+/* ---------- Choosing documentation photographs for an observation (PagePhotoPicker.tsx) ---------- */
+.ppp { width: min(640px, 100%); max-height: min(86vh, 820px); display: flex; flex-direction: column; }
+.ppp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; overflow-y: auto; padding: 4px; margin: 8px 0; }
+.ppp-tile { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1.5px solid var(--hair, #ddd); border-radius: 10px; background: #fff; text-align: left; }
+.ppp-tile.on { border-color: var(--moss); box-shadow: 0 0 0 2px var(--moss-soft); }
+.ppp-pic { display: block; line-height: 0; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 6px; background: #f2f1ec; }
+.ppp-pic .nb-light-pic { width: 100%; height: 100%; }
+.ppp-pic img { width: 100%; height: 100%; object-fit: cover; }
+.ppp-label { font-size: 13px; line-height: 1.3; }
+.ppp-tick { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--moss); color: #fff; font-size: 13px; display: grid; place-items: center; }
+.ppp-off { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 14px; }
+.obs-from-page { margin-top: 6px; }
+
+/* ---------- Check with AI (AiCheck.tsx) ---------- */
+.aic { width: min(720px, 100%); max-height: min(90vh, 900px); display: flex; flex-direction: column; }
+.aic-steps { margin: 6px 0 10px; padding-left: 20px; display: grid; gap: 12px; font-size: 14.5px; }
+.aic-reply { width: 100%; margin-top: 6px; font: 13.5px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+.aic-bar { display: flex; align-items: center; gap: 14px; margin: 4px 0 8px; font-size: 14px; }
+.aic-bar span { flex: 1; }
+.aic-list { list-style: none; margin: 0 0 10px; padding: 0; overflow-y: auto; flex: 1; border-top: 1px solid #e4e6e1; }
+.aic-list li { border-bottom: 1px solid #eef0ec; padding: 7px 4px; font-size: 14px; }
+.aic-same { color: #7d847e; }
+.aic-ch { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; background: #fbfaf3; }
+.aic-ch.off { opacity: 0.55; }
+.aic-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6d5a1e; background: #f3ecd2; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.aic-add .aic-tag { color: #2c6a3b; background: #dcefdf; }
+.aic-remove .aic-tag { color: #8a3b2c; background: #f6e0da; }
+.aic-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.aic-text input { width: 100%; font-size: 14px; padding: 4px 6px; }
+.aic-words { font-size: 13px; line-height: 1.4; color: #555; }
+.aic-words .w-out { text-decoration: line-through; color: #a2452f; background: #fbe7e2; }
+.aic-words .w-in { color: #2c6a3b; background: #e0f1e3; }
+.aic-do { display: flex; gap: 4px; }
+.aic-do button { border: 1px solid #cfd6d0; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+.aic-do button.on { background: #2b2d2c; color: #fff; border-color: #2b2d2c; }
+@media (max-width: 619px) { .aic-ch { grid-template-columns: 1fr; } .aic-do { justify-content: flex-end; } }
+.nb-fix { width: min(420px, 100%); display: grid; gap: 10px; }
+.nb-fix label { display: grid; gap: 4px; font-size: 13px; color: #5c625d; }
+.nb-fix input { font-size: 15px; }
+.nb-names li { -webkit-touch-callout: none; }

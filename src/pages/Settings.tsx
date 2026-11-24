@@ -1,4 +1,5 @@
 import { addToProject, invite, listFirmPeople, listProjectAccess, PROJECT_ROLES, removeFromFirm, removeFromProject, setFirmRole, type FirmPerson, type ProjectRole } from '../lib/access'
+import { PhoneInput } from '../components/PhoneInput'
 import { addCustomTag, byTrade, canHoldMarks, listCustomTags, markOfTag, MarksNotSetUp, removeCustomTag, setTagMark, TagsNotSetUp, WHOLE_TRADE, type Mark, type Tag } from '../lib/tags'
 import { MarkEditor, TagMark } from '../components/TagMark'
 import { PageTitle } from '../components/PageTitle'
@@ -118,7 +119,7 @@ export default function Settings() {
             <label className="wide">Street address<input value={draft.address_line1 ?? ''} onChange={set('address_line1')} /></label>
             <label className="wide">Suite / second line<input value={draft.address_line2 ?? ''} onChange={set('address_line2')} /></label>
             <label className="wide">City, state ZIP<input value={draft.city_state_zip ?? ''} onChange={set('city_state_zip')} /></label>
-            <label>Phone<input value={draft.phone ?? ''} onChange={set('phone')} /></label>
+            <label>Phone<PhoneInput value={draft.phone ?? ''} onChange={set('phone')} /></label>
             <label>Email<input value={draft.email ?? ''} onChange={set('email')} /></label>
             <label>Website<input value={draft.website ?? ''} onChange={set('website')} /></label>
             <label>License line<input value={draft.license_text ?? ''} onChange={set('license_text')} placeholder="Certificate of authority no." /></label>

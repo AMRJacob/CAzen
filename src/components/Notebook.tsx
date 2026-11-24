@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PhoneInput } from './PhoneInput'
 import { useNavigate } from 'react-router-dom'
 import { Mark } from './Logo'
 import { NotePad, PadStill } from './NotePad'
@@ -17,14 +18,17 @@ import {
 } from '../lib/observations'
 import { keepPhoto, photoUrl } from '../lib/photos'
 import { madeAt, onPage, pageOf } from '../lib/obsPages'
+import { defaultName, groupNames, groupNotes, groupPlaces, groupsOf, type GroupPage } from '../lib/pageGroups'
 import { ObsPicker } from './ObsPlaces'
 import { AgendaBlock } from './AgendaBlock'
+import { ZoomPhoto } from './ZoomPhoto'
+import { AiCheck } from './AiCheck'
 import { canLinkPages } from '../lib/observations'
 import {
   canHoldLocation, clockTime, coverOf, longDay, setVisit, shortDay, startVisit,
-  type SiteVisit, type VisitKind,
+  canGroupPages, type SiteVisit, type VisitKind,
 } from '../lib/visits'
-import { addPerson, asLine, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
+import { addPerson, asLine, setPerson, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
 import { metresBetween, placeAt, weatherAt } from '../lib/weather'
 import { readPref } from '../lib/prefs'
 import { useAuth } from '../lib/auth'
@@ -115,7 +119,14 @@ export function Notebook({ project, kind, pages, onPages }: {
   /** The page a right-click on the contents is asking about, and where the menu goes. */
   const [tearing, setTearing] = useState<{ id: string; x: number; y: number } | null>(null)
   // Chosen from the corner menu: the contents list shows a Delete beside each page until done.
-  const [choosing, setChoosing] = useState<'delete' | 'duplicate' | null>(null)
+  const [choosing, setChoosing] = useState<'delete' | 'duplicate' | 'group' | null>(null)
+  // Pages picked on the contents page — Shift or Ctrl-click at a desk, or Group pages from the
+  // corner on a phone — to group into one report (Jacob, 11/24).
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const anchor = useRef<string | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  /** A group whose one report is being made. */
+  const [groupReport, setGroupReport] = useState<string | null>(null)
   const removing = choosing !== null
   const askTear = (p: SiteVisit) => {
     setTear({ page: p, own: kind === 'visit' ? observations.filter((o) => pageOf(o, pages, canLinkPages()) === p.id) : [] })
@@ -171,13 +182,62 @@ export function Notebook({ project, kind, pages, onPages }: {
     } catch (e) { setError(message(e)) }
   }
 
+  /** Pages put together for one report: a new group, named for their shared title or how many. */
+  async function group(ids: string[]) {
+    const chosen = pages.filter((p) => ids.includes(p.id))
+    if (chosen.length < 2) return
+    const gid = crypto.randomUUID(), name = defaultName(chosen)
+    try {
+      for (const p of chosen) await setVisit(p.id, { group_id: gid, group_name: name })
+      onPages(pages.map((p) => (ids.includes(p.id) ? { ...p, group_id: gid, group_name: name } : p)))
+      setSel(new Set()); setChoosing(null)
+    } catch (e) { setError(message(e)) }
+  }
+  async function regroup(ids: string[], patch: { group_id: string | null; group_name: string | null }) {
+    try {
+      for (const id of ids) await setVisit(id, patch)
+      onPages(pages.map((p) => (ids.includes(p.id) ? { ...p, ...patch } : p)))
+    } catch (e) { setError(message(e)) }
+  }
+  const groups = canGroupPages() ? groupsOf(pages) : []
+  const groupOf = (p: SiteVisit) => groups.find((g) => g.id === p.group_id) ?? null
+  /** The contents as listed: a group's pages together, under the group, where its newest page falls. */
+  const listed: ({ group: (typeof groups)[number] } | { page: SiteVisit })[] = []
+  {
+    const done = new Set<string>()
+    for (const p of pages) {
+      const g = groupOf(p)
+      if (!g) { listed.push({ page: p }); continue }
+      if (done.has(g.id)) continue
+      done.add(g.id)
+      listed.push({ group: g })
+      for (const q of [...g.pages].reverse()) listed.push({ page: q })
+    }
+  }
+  const order = listed.flatMap((x) => ('page' in x ? [x.page.id] : []))
+  /** A click on a page in the contents: with Shift a run, with Ctrl or Cmd one more, otherwise open it. */
+  const pickPage = (e: React.MouseEvent, p: SiteVisit) => {
+    if (choosing === 'delete') return askTear(p)
+    if (choosing === 'duplicate') return void duplicate(p)
+    const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+    if (canGroupPages() && e.shiftKey && anchor.current) {
+      const a = order.indexOf(anchor.current), b = order.indexOf(p.id)
+      setSel(new Set(order.slice(Math.min(a, b), Math.max(a, b) + 1)))
+      return
+    }
+    if (canGroupPages() && (e.ctrlKey || e.metaKey || choosing === 'group')) { anchor.current = p.id; toggle(p.id); return }
+    anchor.current = p.id
+    if (sel.size) { setSel(new Set()); return }
+    go(p.id, 'fwd')
+  }
+
   // Arrow keys turn the page, as long as nobody is typing on it.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable]')) return
       // While a page is being arranged, Escape and the arrows belong to that; the book stays on the page.
       if (document.querySelector('.nb-arranging')) return
-      if (e.key === 'Escape') { if (at) go(null, 'back'); else navigate('/project') }
+      if (e.key === 'Escape') { if (sel.size || choosing) { setSel(new Set()); setChoosing(null); return } if (groupReport) { setGroupReport(null); return } if (at) go(null, 'back'); else navigate('/project') }
       if (!page) return
       // Pages run newest first, so "next" in the book is the older one.
       if (e.key === 'ArrowRight' && i < pages.length - 1) go(pages[i + 1].id, 'fwd')
@@ -227,7 +287,10 @@ export function Notebook({ project, kind, pages, onPages }: {
       {/* At the foot of the page, out of the way of the bar and the way out; it goes when
           touched, and by itself after a few seconds. */}
       {error && <button className="notice error nb-error" onClick={() => setError(null)} title="Dismiss">{error}<span aria-hidden="true"> ×</span></button>}
-      {page ? (
+      {groupReport && groups.some((g) => g.id === groupReport) ? (
+        <GroupExport kind={kind} group={groups.find((g) => g.id === groupReport)!} all={pages} observations={observations} types={types}
+          onBack={() => setGroupReport(null)} />
+      ) : page ? (
         <Page key={page.id} turn={turn} project={project} page={page} bar={turnBar} adds={adds}
           pages={pages}
           earlier={pages.filter((x) => x.id !== page.id).flatMap((x) => linesOf(x.names))}
@@ -255,25 +318,49 @@ export function Notebook({ project, kind, pages, onPages }: {
           {/* The corner mark is the way to a new page, to deleting one, and the way out. */}
           <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')}
             onDelete={pages.length ? () => setChoosing('delete') : undefined}
-            onDuplicate={pages.length ? () => setChoosing('duplicate') : undefined} />
+            onDuplicate={pages.length ? () => setChoosing('duplicate') : undefined}
+            onGroup={canGroupPages() && pages.length > 1 ? () => { setSel(new Set()); setChoosing('group') } : undefined} />
           {pages.length > 0 && <h2>Pages</h2>}
           {removing && pages.length > 0 && (
-            <div className={`nb-removing${choosing === 'duplicate' ? ' nb-copying' : ''}`}>
-              <span>{choosing === 'duplicate' ? 'Choose a page to duplicate.' : 'Choose a page to delete.'}</span>
-              <button className="primary-lite" onClick={() => setChoosing(null)}>Done</button>
+            <div className={`nb-removing${choosing !== 'delete' ? ' nb-copying' : ''}`}>
+              <span>{choosing === 'duplicate' ? 'Choose a page to duplicate.' : choosing === 'group' ? `Choose the pages for one report${sel.size ? ` · ${sel.size} chosen` : ''}.` : 'Choose a page to delete.'}</span>
+              {choosing === 'group' && <button className="primary" disabled={sel.size < 2} onClick={() => void group([...sel])}>Group {sel.size > 1 ? sel.size : ''}</button>}
+              <button className="primary-lite" onClick={() => { setChoosing(null); setSel(new Set()) }}>{choosing === 'group' ? 'Cancel' : 'Done'}</button>
+            </div>
+          )}
+          {!removing && sel.size > 0 && (
+            <div className="nb-removing nb-copying">
+              <span>{sel.size} {sel.size === 1 ? 'page' : 'pages'} chosen — right-click to group them.</span>
+              {sel.size > 1 && <button className="primary" onClick={() => void group([...sel])}>Group {sel.size}</button>}
+              <button className="primary-lite" onClick={() => setSel(new Set())}>Clear</button>
             </div>
           )}
           <ol className="nb-toc">
-            {pages.map((p, n) => {
+            {listed.map((x) => {
+              if ('group' in x) {
+                const g = x.group
+                return (
+                  <li key={`g-${g.id}`} className="nb-toc-group" onContextMenu={(e) => { e.preventDefault(); setTearing({ id: g.pages[0].id, x: e.clientX, y: e.clientY }) }}>
+                    {renaming === g.id
+                      ? <input className="nb-toc-group-name" autoFocus defaultValue={g.name} aria-label="Group name"
+                          onBlur={(e) => { setRenaming(null); const t = e.target.value.trim(); if (t && t !== g.name) void regroup(g.pages.map((p) => p.id), { group_id: g.id, group_name: t }) }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setRenaming(null) }} />
+                      : <button className="nb-toc-group-name" onDoubleClick={() => setRenaming(g.id)} title="Double-click to rename">{g.name}</button>}
+                    <span className="nb-toc-what">{g.pages.length} pages · {shortDay(g.pages[0].visited_on)}</span>
+                    <button className="primary-lite" onClick={() => setGroupReport(g.id)}>{BOOK[kind].exportAs}</button>
+                  </li>
+                )
+              }
+              const p = x.page, n = pages.indexOf(p)
               const seen = kind === 'visit' ? observations.filter((o) => onPage(o, p.id, pages, canLinkPages())) : []
               const photos = p.photos.length + photosOf(seen).length
               return (
-                <li key={p.id} className={removing ? 'nb-toc-removing' : ''}>
+                <li key={p.id} className={[removing ? 'nb-toc-removing' : '', sel.has(p.id) ? 'nb-toc-sel' : '', p.group_id && groupOf(p) ? 'nb-toc-in' : ''].filter(Boolean).join(' ')}>
                   {choosing === 'delete' && <button className="nb-toc-delete" onClick={() => askTear(p)} aria-label={`Delete the page for ${shortDay(p.visited_on)}`}>Delete</button>}
                   {choosing === 'duplicate' && <button className="nb-toc-delete nb-toc-copy" onClick={() => void duplicate(p)} aria-label={`Duplicate the page for ${shortDay(p.visited_on)}`}>Duplicate</button>}
-                  <button onClick={() => (choosing === 'delete' ? askTear(p) : choosing === 'duplicate' ? void duplicate(p) : go(p.id, 'fwd'))}
+                  <button onClick={(e) => pickPage(e, p)} aria-pressed={sel.has(p.id) || undefined}
                     // A right-click on a page in the contents offers to take it out of the book.
-                    onContextMenu={(e) => { e.preventDefault(); setTearing({ id: p.id, x: e.clientX, y: e.clientY }) }}>
+                    onContextMenu={(e) => { e.preventDefault(); if (!sel.has(p.id) && sel.size) setSel(new Set()); setTearing({ id: p.id, x: e.clientX, y: e.clientY }) }}>
                     {kind === 'visit' && <span className="nb-toc-thumb"><Thumb project={project} path={coverOf(p, photosOf(seen))} /></span>}
                     <span className="nb-toc-day">{shortDay(p.visited_on)}</span>
                     <span className="nb-toc-title">{p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
@@ -293,10 +380,22 @@ export function Notebook({ project, kind, pages, onPages }: {
             const p = pages.find((x) => x.id === tearing.id)
             if (!p) return null
             return (
-              <div className="padctx nb-tear" role="menu" style={{ left: Math.min(tearing.x, window.innerWidth - 250), top: Math.min(tearing.y, window.innerHeight - 110) }}>
+              <div className="padctx nb-tear" role="menu" style={{ left: Math.min(tearing.x, window.innerWidth - 290), top: Math.min(tearing.y, window.innerHeight - 260) }}>
                 <span className="nb-tear-say">{shortDay(p.visited_on)} · {p.title || (kind === 'meeting' ? 'Meeting' : 'Site visit')}</span>
                 <button role="menuitem" onClick={() => { setTearing(null); go(p.id, 'fwd') }}>Open</button>
                 <button role="menuitem" onClick={() => { setTearing(null); void duplicate(p) }}>Duplicate this page</button>
+                {canGroupPages() && sel.size > 1 && sel.has(p.id) && (
+                  <button role="menuitem" onClick={() => { setTearing(null); void group([...sel]) }}>Group these {sel.size} pages</button>
+                )}
+                {canGroupPages() && groupOf(p) && (() => {
+                  const g = groupOf(p)!
+                  return <>
+                    <button role="menuitem" onClick={() => { setTearing(null); setGroupReport(g.id) }}>{BOOK[kind].exportAs} for “{g.name}”</button>
+                    <button role="menuitem" onClick={() => { setTearing(null); setRenaming(g.id) }}>Rename the group</button>
+                    <button role="menuitem" onClick={() => { setTearing(null); void regroup(g.pages.length <= 2 ? g.pages.map((q) => q.id) : [p.id], { group_id: null, group_name: null }) }}>Take this page out of the group</button>
+                    <button role="menuitem" onClick={() => { setTearing(null); void regroup(g.pages.map((q) => q.id), { group_id: null, group_name: null }) }}>Ungroup</button>
+                  </>
+                })()}
                 <button role="menuitem" className="danger" onClick={() => {
                   setTearing(null); askTear(p)
                 }}>Delete this page</button>
@@ -306,6 +405,75 @@ export function Notebook({ project, kind, pages, onPages }: {
         </article>
       )}
     </div>
+  )
+}
+
+// ---------- One report from a group of pages ----------
+
+/**
+ * The field report (or meeting notes) for a group of pages: each page a section under its title
+ * or place, with every page's attendees, photographs and observations together (Jacob, 11/24).
+ */
+function GroupExport({ kind, group, all, observations, types, onBack }: {
+  kind: VisitKind
+  group: { id: string; name: string; pages: SiteVisit[] }
+  all: SiteVisit[]
+  observations: Observation[]
+  types: ObservationType[]
+  onBack: () => void
+}) {
+  const pages = group.pages
+  const first = pages[0], last = pages[pages.length - 1]
+  const own = kind === 'visit'
+    ? observations.filter((o) => pages.some((p) => onPage(o, p.id, all, canLinkPages()))).sort((a, b) => madeAt(a) - madeAt(b))
+    : []
+  // Each page's text boxes, checklists and agenda business, after its own notes.
+  const extra = (p: GroupPage) => {
+    const w = (p as SiteVisit).widgets
+    return widgetsForReport(shownBlocks({ v: 1, blocks: [] }, w, 'desktop'), w, (p.notes ?? '').match(/^\d+\.\s/gm)?.length ?? 0)
+  }
+  const notes = groupNotes(pages, extra)
+  const headings = notes.match(/^\d+\.\s/gm)?.length ?? 0
+  const recorded = own.length
+    ? `\n${headings + 1}. Observations recorded\n` + own.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
+    : ''
+  const day = first.visited_on === last.visited_on
+    ? usDateOf(new Date(`${first.visited_on}T12:00:00`))
+    : `${usDateOf(new Date(`${first.visited_on}T12:00:00`))} – ${usDateOf(new Date(`${last.visited_on}T12:00:00`))}`
+  const who = groupNames(pages)
+  const weather = pages.map((p) => p.weather?.trim()).find(Boolean)
+  return (
+    <article className="nb-paper nb-export">
+      <div className="pad-head">
+        <h2>{BOOK[kind].exportAs} · {group.name}</h2>
+        <button onClick={onBack}>Back to the book</button>
+      </div>
+      <p className="muted small">One report from {pages.length} pages: each is a section, under its title or place. Change anything here; the pages stay as they are.</p>
+      {kind === 'visit' ? (
+        <IssueForm key={group.id} kind="field_report" sheetKey={`group:${group.id}`}
+          photos={[
+            ...pages.flatMap((p) => p.photos.map((path) => ({ path, label: p.photo_labels?.[path] ?? '' }))),
+            ...own.flatMap((o) => o.photos.map((path) => ({ path, label: o.title }))),
+          ]}
+          prefill={{
+            'fr.date': day,
+            ...(first.visited_at ? { 'fr.time': clockTime(first.visited_at) } : {}),
+            ...(weather ? { 'fr.weather': weather } : {}),
+            'fr.location': groupPlaces(pages),
+            ...(who ? { 'fr.participants': who } : {}),
+            'fr.observations': notes + recorded,
+          }} />
+      ) : (
+        <IssueForm key={group.id} kind="meeting_notes" prefill={{
+          'mn.date': day,
+          ...(first.visited_at ? { 'mn.time': clockTime(first.visited_at) } : {}),
+          'mn.title': group.name,
+          'mn.location': groupPlaces(pages),
+          ...(who ? { 'mn.participants': who } : {}),
+          'mn.notes': notes,
+        }} />
+      )}
+    </article>
   )
 }
 
@@ -320,11 +488,13 @@ export function Notebook({ project, kind, pages, onPages }: {
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
 interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void; arrange?: () => void }
 
-function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents }: {
+function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit, contents }: {
   /** On a page: a copy of it. On the contents page: puts the list into choosing one to copy. */
   onDuplicate?: () => void
   /** On the contents page, when there is a page to delete: puts the list into choosing. */
   onDelete?: () => void
+  /** The contents page: choose pages to group into one report. */
+  onGroup?: () => void
   /** On the book's contents page: nothing to add to, only a new page or the way out. */
   contents?: boolean
   /** A site visit has photographs and observations; a meeting does not. */
@@ -380,6 +550,7 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents
         </>}
         {spot('New page', I(<><path d="M6 3h9l4 4v14H6V3Z" /><path d="M12 10v7M8.5 13.5h7" /></>), onNew)}
         {onDuplicate && spot(contents ? 'Duplicate a page' : 'Duplicate', I(<><rect x="8" y="8" width="11" height="12" rx="1.5" /><path d="M5 16V5.5A1.5 1.5 0 0 1 6.5 4H15" /></>), onDuplicate)}
+        {contents && onGroup && spot('Group pages', I(<><rect x="4" y="7" width="12" height="13" rx="1.5" /><path d="M8 7V4h12v13h-4" /></>), onGroup)}
         {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
       </div>
     </nav>
@@ -424,6 +595,9 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   if (arrangedOn !== screen) { setArrangedOn(screen); if (work) setWork(null) }
   const shown = shownBlocks(work ?? layout, page.widgets, screen)
   const showing = (k: Block['kind']) => shown.some((b) => b.kind === k)
+  /** On a phone, the block shown (PageGrid's tabs); the corner menu's adds go to theirs. */
+  const [tab, setTab] = useState<string | null>(null)
+  const toTab = (k: Block['kind']) => { const b = shown.find((x) => x.kind === k); if (b) setTab(b.id) }
   const arrange = (next: Block[]) => {
     // An added block taken off is remembered as gone, so writing in it on some page does not bring it back.
     const off = shown.filter((b) => ADDED.includes(b.kind) && !next.some((n) => n.id === b.id)).map((b) => b.id)
@@ -568,7 +742,11 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   useEffect(() => {
     adds.current = {
       arrange: () => setWork(layout),
-      note: !showing('notes') ? undefined : () => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() },
+      note: !showing('notes') ? undefined : () => {
+        toTab('notes')
+        // On a phone the notes are shown first (a tab); then the cursor goes in.
+        requestAnimationFrame(() => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() })
+      },
       sketch: () => { void draw() },
       photo: visit ? () => camera.current?.click() : undefined,
       observation: visit ? () => setObserving('new') : undefined,
@@ -590,6 +768,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
 
   async function taken(files: FileList | null) {
     const list = Array.from(files ?? [])
+    if (list.length) toTab('photos')
     if (camera.current) camera.current.value = ''
     if (library.current) library.current.value = ''
     if (!list.length) return
@@ -621,6 +800,8 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   // Made on this page, or put on it afterwards (from the observation, or Add existing here).
   const own = visit ? observations.filter((o) => onPage(o, page.id, pages, canLinkPages())).sort((a, b) => madeAt(a) - madeAt(b)) : []
   const [picking, setPicking] = useState(false)
+  /** The notes out to an AI and its suggestions back (AiCheck). */
+  const [checking, setChecking] = useState(false)
   const addHere = async (list: Observation[]) => {
     setPicking(false)
     for (const o of list) {
@@ -730,9 +911,11 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       case 'names': return <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
       case 'notes': return (
         <section className="nb-z nb-z-notes">
-          <div className="nb-z-top"><h2>Notes</h2></div>
+          <div className="nb-z-top"><h2>Notes</h2><button className="link" onClick={() => setChecking(true)} disabled={!notes.trim()}>Check with AI</button></div>
           {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
           <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
+          {checking && <AiCheck notes={notes} kind={page.kind} onClose={() => setChecking(false)}
+            onApply={(next) => { setChecking(false); setNotes(next); change({ notes: next }) }} />}
         </section>
       )
       case 'sketch': return (
@@ -829,7 +1012,8 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       {arranging && <p className="nb-arr-say">{screen === 'phone'
         ? 'Arranging this book’s page for a phone: ↑ ↓ to reorder, × to hide.'
         : `Arranging this book’s page for a ${screen}: drag a block to move it, its corner to size it, × to hide.`}</p>}
-      <PageGrid blocks={shown} screen={screen} arranging={arranging} render={part} onArrange={(next) => arrange(next)} />
+      <PageGrid blocks={shown} screen={screen} arranging={arranging} render={part} onArrange={(next) => arrange(next)}
+        tab={tab} onTab={setTab} />
       {/* Kept outside the photographs' block, so the corner menu's Photo works with that block hidden. */}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void taken(e.target.files)} />
       <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => void taken(e.target.files)} />
@@ -837,10 +1021,12 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
         <div className="nb-light" role="dialog" aria-label="Photograph" onClick={() => setViewing(null)}>
           <div className="nb-light-in" onClick={(e) => e.stopPropagation()}>
             <div className="nb-light-img">
-              <span className="nb-light-pic">
-                <Thumb project={project} path={viewing.path} />
-                {photoPads[viewing.path] && <PhotoInk key={`${viewing.path}-${inkSeen}`} pad={photoPads[viewing.path]} />}
-              </span>
+              <ZoomPhoto key={viewing.path}>
+                <span className="nb-light-pic">
+                  <Thumb project={project} path={viewing.path} />
+                  {photoPads[viewing.path] && <PhotoInk key={`${viewing.path}-${inkSeen}`} pad={photoPads[viewing.path]} />}
+                </span>
+              </ZoomPhoto>
             </div>
             <div className="nb-light-row">
               <button disabled={at <= 0} onClick={() => setViewing({ path: page.photos[at - 1], fresh: false })} aria-label="Previous photograph">‹</button>
@@ -873,6 +1059,15 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
         <div className="nb-light nb-sheet" role="dialog" aria-label="Observation" onClick={() => setObserving(null)}>
           <div className="nb-sheet-in" onClick={(e) => e.stopPropagation()}>
             <ObservationForm project={project} types={types} known={observations} day={page.visited_on} visitId={page.id}
+              fromPage={observing === 'new' ? {
+                photos: page.photos.map((path) => ({ path, label: label(path), inked: !!photoPads[path] })),
+                tile: (path) => <span className="nb-light-pic"><Thumb project={project} path={path} />{photoPads[path] && <PhotoInk pad={photoPads[path]} />}</span>,
+                offPage: (paths) => {
+                  const labels = { ...(page.photo_labels ?? {}) }
+                  for (const x of paths) delete labels[x]
+                  change({ photos: page.photos.filter((x) => !paths.includes(x)), photo_labels: labels, ...(page.cover_photo && paths.includes(page.cover_photo) ? { cover_photo: null } : {}) })
+                },
+              } : undefined}
               existing={observing === 'new' ? undefined : observing}
               onSaved={(o, another) => { onObserved(o); if (!another) setObserving(null) }}
               onCancel={() => setObserving(null)} onTrouble={onTrouble} />
@@ -929,6 +1124,33 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
   const me = myName ? { name: myName, company: firm?.name ?? null, phone: firm?.phone ?? null, email: session?.user.email ?? null } : null
   const [adding, setAdding] = useState(false)
   const [fresh, setFresh] = useState({ name: '', company: '', phone: '', email: '' })
+  /** An attendee's details being corrected: the line on this page, and the project's own entry for them if there is one. */
+  const [fixing, setFixing] = useState<{ line: string; person: Person | null; name: string; company: string; phone: string; email: string } | null>(null)
+  const fix = (line: string) => {
+    const [name, company = '', email = ''] = line.split('|').map((x) => x.trim())
+    const person = people.find((p) => p.name.toLowerCase() === name.toLowerCase()) ?? null
+    setFixing({ line, person, name: person?.name ?? name, company: person?.company ?? company, phone: person?.phone ?? '', email: person?.email ?? email })
+  }
+  const saveFix = async () => {
+    const f = fixing
+    if (!f || !f.name.trim()) return
+    setFixing(null)
+    try {
+      const details = { name: f.name.trim(), company: f.company, phone: f.phone, email: f.email }
+      // On the project's list from now on, as corrected — added to it if they were only typed onto pages.
+      const kept = f.person ? await setPerson(f.person.id, details) : await addPerson(projectId, details)
+      if (kept) setPeople((all) => [...all.filter((p) => p.id !== kept.id), kept].sort((a, b) => a.name.localeCompare(b.name)))
+      write(lines.map((l) => (l === f.line ? asLine({ name: details.name, company: details.company || null, email: details.email || null }) : l)))
+    } catch (e) { onTrouble(message(e)) }
+  }
+  // A long press by touch opens the same editor a right-click does at a desk.
+  const holdTimer = useRef<number | null>(null)
+  const holdFor = (line: string) => ({
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); fix(line) },
+    onTouchStart: () => { if (holdTimer.current) clearTimeout(holdTimer.current); holdTimer.current = window.setTimeout(() => { holdTimer.current = null; fix(line) }, 550) },
+    onTouchMove: () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null } },
+    onTouchEnd: () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null } },
+  })
   useEffect(() => {
     listPeople(projectId).then(setPeople).catch(() => setPeople([]))
     listPeopleElsewhere(projectId).then(setElsewhere).catch(() => setElsewhere([]))
@@ -1000,7 +1222,7 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
               }}>
                 <input autoFocus value={fresh.name} onChange={set('name')} placeholder="Name" aria-label="Name" autoComplete="off" />
                 <input value={fresh.company} onChange={set('company')} placeholder="Company" aria-label="Company" autoComplete="off" />
-                <input value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" inputMode="tel" autoComplete="off" />
+                <PhoneInput value={fresh.phone} onChange={set('phone')} placeholder="Phone" aria-label="Phone" autoComplete="off" />
                 <input value={fresh.email} onChange={set('email')} placeholder="Email" aria-label="Email" inputMode="email" autoComplete="off" />
                 <button className="primary-lite" disabled={!fresh.name.trim()}>Add to the list</button>
                 <span className="muted small">Done keeps it too.</span>
@@ -1016,13 +1238,29 @@ function Names({ projectId, names, earlier, onChange, onTrouble }: {
           {lines.map((l) => {
             const [name, company] = l.split('|').map((x) => x.trim())
             return (
-              <li key={l}>
+              <li key={l} {...holdFor(l)} title="Right-click (or hold) to edit their details">
                 <span><strong>{name}</strong>{company ? <span className="muted"> · {company}</span> : null}</span>
                 <button className="link" aria-label={`Take ${name} off this page`} onClick={() => write(lines.filter((x) => x !== l))}>×</button>
               </li>
             )
           })}
         </ul>
+      )}
+      {fixing && (
+        <div className="take-ask" onClick={() => setFixing(null)}>
+          <div className="take-card nb-fix" role="dialog" aria-label="Edit contact" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit {fixing.name || 'contact'}</h3>
+            <p className="muted small">Changed on this page and on the project’s list, so every page from now on has it this way. Earlier pages keep what they recorded.</p>
+            <label>Name<input value={fixing.name} autoFocus onChange={(e) => setFixing({ ...fixing, name: e.target.value })} /></label>
+            <label>Company<input value={fixing.company} onChange={(e) => setFixing({ ...fixing, company: e.target.value })} /></label>
+            <label>Phone<PhoneInput value={fixing.phone} onChange={(e) => setFixing({ ...fixing, phone: e.target.value })} /></label>
+            <label>Email<input type="email" value={fixing.email} onChange={(e) => setFixing({ ...fixing, email: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') void saveFix() }} /></label>
+            <div className="actions">
+              <button className="primary" disabled={!fixing.name.trim()} onClick={() => void saveFix()}>Save</button>
+              <button className="link" onClick={() => setFixing(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

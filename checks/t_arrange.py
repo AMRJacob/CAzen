@@ -56,16 +56,21 @@ with sync_playwright() as p:
         sent=layouts.get('desktop' if name=='desk' else name)
         print('  kept on server:', bool(sent), [ (x['kind'],x.get('title')) for x in (sent or {}).get('layout',{}).get('blocks',[])], '| gone:', (sent or {}).get('layout',{}).get('gone'))
         # Write in the added blocks.
+        tabs=pg.locator('.nb-tabs').count()>0
+        if tabs: pg.locator('.nb-tabs button:has-text("Punch walk")').click(); pg.wait_for_timeout(150)
         item=pg.locator('.nb-cell-check'); item.locator('.nb-check-add').click(); pg.keyboard.type('Roof drains'); pg.keyboard.press('Enter'); pg.keyboard.type('Flashing at parapet')
         item.locator('input[type="checkbox"]').first.check()
+        if tabs: pg.locator('.nb-tabs button:has-text("Text box")').click(); pg.wait_for_timeout(150)
         pg.locator('.nb-cell-text textarea').fill('Rain held up masonry Tuesday.'); pg.locator('.nb-cell-text textarea').blur(); pg.wait_for_timeout(1600)
         w=store[0].get('widgets') or {}
         print('  page holds:', {k:v for k,v in w.items()})
         pg.screenshot(path=f'arr_{name}_2.png')
         # Reopen: the arrangement and the writing come back.
         pg.reload(); pg.wait_for_selector('.nb-toc li'); pg.click('.nb-toc li button'); pg.wait_for_selector('.nb-cell'); pg.wait_for_timeout(900)
+        if pg.locator('.nb-tabs').count(): pg.locator('.nb-tabs button:has-text("Punch walk")').click(); pg.wait_for_timeout(150)
         print('  after reload:', list(boxes(pg)), '| checklist:', pg.locator('.nb-cell-check input[type="text"]').evaluate_all('e=>e.map(x=>x.value)'), '| ticked:', pg.locator('.nb-cell-check input[type="checkbox"]').evaluate_all('e=>e.map(x=>x.checked)'))
         # The report carries them.
+        if pg.locator('.nb-tabs').count(): pg.locator('.nb-tabs button:has-text("Day")').click(); pg.wait_for_timeout(150)
         pg.click('button:has-text("Make the field report")'); pg.wait_for_timeout(1500)
         if pg.locator('text=List of fields').count(): pg.click('text=List of fields'); pg.wait_for_timeout(500)
         txt=' '.join(pg.locator('textarea').evaluate_all('e=>e.map(x=>x.value)'))

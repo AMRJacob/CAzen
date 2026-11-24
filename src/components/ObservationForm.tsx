@@ -18,6 +18,7 @@ const splitDetail = (d: string | null | undefined) => {
 const joinDetail = (detail: string, discussed: string) =>
   [detail.trim(), discussed.trim() ? `Discussed with: ${discussed.trim()}` : ''].filter(Boolean).join('\n') || null
 import { Photos } from './Photos'
+import { PagePhotoPicker, type PagePhoto } from './PagePhotoPicker'
 import { today } from '../lib/dates'
 import { message } from '../lib/errors'
 import {
@@ -39,7 +40,7 @@ const LAST_TYPE = 'cazen.pref.lastObservationType'
  * fills in are what it is and what kind of thing it is. Everything else is there when it
  * matters and out of the way when it doesn't.
  */
-export function ObservationForm({ project, types, existing, pin, day, visitId, onSaved, onCancel, onTrouble, onMark }: {
+export function ObservationForm({ project, types, existing, pin, day, visitId, fromPage, onSaved, onCancel, onTrouble, onMark }: {
   /** Told the mark the observation would wear, as the kind of tag is chosen — so a tag being
    *  placed on a sheet behind the form can wear it too. */
   onMark?: (m: Mark | null) => void
@@ -48,6 +49,8 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
   project: ProjectStore
   /** The notebook page it is being made on, when it is made on one. */
   visitId?: string
+  /** Made on a notebook page: its documentation photographs to choose from (PagePhotoPicker), and taking some off the page. */
+  fromPage?: { photos: PagePhoto[]; tile: (path: string) => React.ReactNode; offPage: (paths: string[]) => void }
   types: ObservationType[]
   existing?: Observation
   /** Where on a sheet it was raised, when it was raised from one. */
@@ -76,6 +79,7 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
   const [observedOn, setObservedOn] = useState(existing?.observed_on ?? day ?? today())
   const [dueOn, setDueOn] = useState(existing?.due_on ?? '')
   const [photos, setPhotos] = useState<string[]>(existing?.photos ?? [])
+  const [fromPagePicking, setFromPagePicking] = useState(false)
   // Where on the drawings it is: given by the sheet it was raised from, already on the
   // observation, or chosen here with "Tag to drawing".
   // It can be in several places — more than one spot on a sheet, or on several sheets. The
@@ -235,6 +239,24 @@ export function ObservationForm({ project, types, existing, pin, day, visitId, o
           <span className="obs-attach-label">Photos</span>
           <Photos project={project} paths={photos} about={title.trim() || 'Observation'}
             editable onChange={setPhotos} onTrouble={onTrouble} />
+          {fromPage && fromPage.photos.length > 0 && (
+            <button type="button" className="link obs-from-page" onClick={() => setFromPagePicking(true)}>From this page’s photos</button>
+          )}
+          {fromPage && fromPagePicking && (
+            <PagePhotoPicker project={project} photos={fromPage.photos} tile={fromPage.tile} onTrouble={onTrouble}
+              onClose={() => setFromPagePicking(false)}
+              onTaken={({ paths, labels, offPage }) => {
+                setFromPagePicking(false)
+                setPhotos((ps) => [...ps, ...paths.filter((p) => !ps.includes(p))])
+                // The labels come too: the first names it if it has no name yet; all are kept in its details.
+                if (labels.length) {
+                  if (!title.trim()) setTitle(labels[0])
+                  const line = `Photos: ${labels.join('; ')}`
+                  setDetail((d) => (d.includes(line) ? d : d.trim() ? `${d.trim()}\n${line}` : line))
+                }
+                if (offPage.length) fromPage.offPage(offPage)
+              }} />
+          )}
         </div>
         <div>
           <span className="obs-attach-label">Tag to drawing</span>

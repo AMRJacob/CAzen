@@ -37,6 +37,9 @@ export interface SiteVisit {
   pad_id: string | null
   /** What the page's added text boxes and checklists hold, keyed by block id (src/lib/pageLayout.ts). */
   widgets?: import('./pageLayout').Widgets
+  /** Pages grouped into one report share a group id and carry the group's name (migration 0054). */
+  group_id?: string | null
+  group_name?: string | null
   issued_id: string | null
   created_at: string
 }
@@ -84,6 +87,22 @@ let widgetsKnown: boolean | null = (() => {
 })()
 let widgetsAsked = false
 export const canHoldWidgets = () => widgetsKnown === true
+
+/** Whether pages can be grouped (migration 0054); until then grouping is not offered. */
+const GROUP_KEY = 'cazen.visits.groups'
+let groupKnown: boolean | null = (() => {
+  try { const v = localStorage.getItem(GROUP_KEY); return v === null ? null : v === '1' } catch { return null }
+})()
+let groupAsked = false
+export const canGroupPages = () => groupKnown === true
+async function lookForGroups(): Promise<void> {
+  if (groupAsked || !navigator.onLine) return
+  const { error } = await db().from('site_visits').select('group_id, group_name').limit(1)
+  if (error && !(error as { code?: string }).code) return
+  groupAsked = true
+  groupKnown = !error
+  try { localStorage.setItem(GROUP_KEY, groupKnown ? '1' : '0') } catch { /* private mode */ }
+}
 async function lookForWidgets(): Promise<void> {
   if (widgetsAsked || !navigator.onLine) return
   const { error } = await db().from('site_visits').select('widgets').limit(1)
@@ -107,8 +126,8 @@ export function listVisits(projectId: string, kind: VisitKind): Promise<SiteVisi
     store: 'visits',
     here: async () => (await localAll<SiteVisit>('visits', projectId)).filter((v) => v.kind === kind),
     theirs: async () => {
-      await Promise.all([lookForLocation().catch(() => {}), lookForWidgets().catch(() => {})])
-      const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : '') + (widgetsKnown ? ', widgets' : ''))
+      await Promise.all([lookForLocation().catch(() => {}), lookForWidgets().catch(() => {}), lookForGroups().catch(() => {})])
+      const { data, error } = await db().from('site_visits').select(COLUMNS + (locationKnown ? ', location' : '') + (widgetsKnown ? ', widgets' : '') + (groupKnown ? ', group_id, group_name' : ''))
         .eq('project_id', projectId).eq('kind', kind)
         .order('visited_on', { ascending: false }).order('visited_at', { ascending: false, nullsFirst: false })
       if (error) { if (notThere(error)) throw new VisitsNotSetUp(); throw error }

@@ -1,4 +1,6 @@
 import { flushSync } from 'react-dom'
+import { PhoneInput } from '../components/PhoneInput'
+import { isPhoneField } from '../lib/phone'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MoneyInput } from '../components/MoneyInput'
 import { OutlineTools } from '../components/OutlineTools'
@@ -394,8 +396,10 @@ function Input({ f, value, onChange, layout, autoValue, overridden, onReset, sug
   const listId = suggestions.length ? `dl-${f.key.replace('.', '-')}` : undefined
   return (
     <label>{label}
+      {/* A phone number is hyphenated as it is typed (Jacob, 11/24). */}
+      {isPhoneField(f.key, f.label) ? <PhoneInput value={value} onChange={(e) => onChange(e.target.value)} className={state} /> :
       <input value={value} onChange={(e) => onChange(e.target.value)} className={state}
-        list={listId} autoComplete="off" placeholder={f.csi === 'section' ? 'Type a section, e.g. 09 30 00' : f.csi === 'division' ? 'Type a number or name' : ''} />
+        list={listId} autoComplete="off" placeholder={f.csi === 'section' ? 'Type a section, e.g. 09 30 00' : f.csi === 'division' ? 'Type a number or name' : ''} />}
       {listId && (
         <datalist id={listId}>
           {suggestions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

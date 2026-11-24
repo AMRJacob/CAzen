@@ -13,7 +13,7 @@ def run(name,kw,touch):
         route.fallback()
     ctx.route(re.compile(r'.*/rest/v1/site_visits.*'),pat)
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)[:200])); pg.on('dialog',lambda d:d.accept())
-    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); (pg.tap if touch else pg.click)('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc-title'); (pg.tap if touch else pg.click)('.nb-toc-title'); pg.wait_for_selector('.nbd-type input'); pg.wait_for_timeout(400)
+    pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); (pg.tap if touch else pg.click)('td.p-name, .p-card'); pg.wait_for_timeout(600); pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc-title'); (pg.tap if touch else pg.click)('.nb-toc-title'); pg.wait_for_timeout(500); (pg.locator('.nb-tabs button:has-text("Notes")').tap() if pg.locator('.nb-tabs').count() else None); pg.wait_for_selector('.nbd-type input'); pg.wait_for_timeout(400)
     cdp=ctx.new_cdp_session(pg)
     def centre(sel): bb=pg.locator(sel).first.bounding_box(); return bb['x']+bb['width']/2, bb['y']+min(bb['height']/2,16)
     HOLD=520  # by touch a card is picked up by holding it still (11/23)

@@ -41,6 +41,20 @@ export async function addPerson(projectId: string, p: { name: string; company?: 
   return row
 }
 
+/**
+ * A person's details corrected (Jacob, 11/24: right-click an attendee to edit). Kept on the
+ * project's list, so every page from now on offers them as they are now. Pages already written
+ * keep the line they had.
+ */
+export async function setPerson(id: string, patch: { name?: string; company?: string | null; phone?: string | null; email?: string | null }): Promise<Person | null> {
+  const had = await localGet<Person>('people', id).catch(() => undefined)
+  const clean = Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, typeof v === 'string' ? (v.trim() || (k === 'name' ? v : null)) : v]))
+  const next = had ? { ...had, ...clean } as Person : null
+  if (next) await localPut('people', next)
+  await queue(had?.project_id ?? '', { kind: 'row.patch', table: 'project_people', id, patch: clean })
+  return next
+}
+
 export async function removePerson(id: string): Promise<void> {
   const had = await localGet<Person>('people', id).catch(() => undefined)
   await localRemove('people', id).catch(() => {})

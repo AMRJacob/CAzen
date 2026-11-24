@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { PhoneInput } from '../components/PhoneInput'
 import { db } from './supabase'
 import { useAuth } from './auth'
 import type { Firm, FirmRole } from './types'
@@ -110,7 +111,7 @@ function FirmSetup({ onCreated }: { onCreated: (f: Firm) => void }) {
         <label>Street address<input value={f.address} onChange={set('address')} /></label>
         <label>City, state ZIP<input value={f.city} onChange={set('city')} /></label>
         <div className="two">
-          <label>Phone<input value={f.phone} onChange={set('phone')} /></label>
+          <label>Phone<PhoneInput value={f.phone} onChange={set('phone')} /></label>
           <label>Website<input value={f.website} onChange={set('website')} /></label>
         </div>
         <button className="primary" disabled={busy || !f.name.trim()}>{busy ? 'Creating…' : 'Create firm'}</button>
