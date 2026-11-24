@@ -741,6 +741,24 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   }
   /** The part of a line's change no move yet accounts for. */
   const unlinked = (id: string) => Math.max(0, Math.abs(changeOf(id)) - moves.filter((m) => m.from === id || m.to === id).reduce((n, m) => n + m.amount, 0))
+  /**
+   * Lines tied together by moves: yellow while the moves leave some of a change unaccounted for,
+   * green once every line in the group comes to what the PDF has.
+   */
+  const linkState = useMemo(() => {
+    const parent = new Map<string, string>()
+    const top = (x: string): string => { const p = parent.get(x) ?? x; return p === x ? x : top(p) }
+    for (const m of moves) parent.set(top(m.from), top(m.to))
+    const groups = new Map<string, string[]>()
+    for (const id of new Set(moves.flatMap((m) => [m.from, m.to]))) groups.set(top(id), [...(groups.get(top(id)) ?? []), id])
+    const out = new Map<string, 'linked' | 'settled'>()
+    for (const ids of groups.values()) {
+      const settled = ids.every((id) => unlinked(id) < 0.005)
+      for (const id of ids) out.set(id, settled ? 'settled' : 'linked')
+    }
+    return out
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moves, figures, diffs])
   const lineName = (id: string) => { const l = data.lines.find((x) => x.id === id); return [l?.item_no, l?.description].filter(Boolean).join(' ') }
   const saveMoves = async (next: typeof moves) => { try { await setApplication(app.id, { moves: next } as never); onChanged() } catch (e) { onTrouble(message(e)) } }
   async function linkMove(other: string) {
@@ -784,14 +802,14 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                 if (!f) return null
                 const v = valueOf(l.id)
                 return (
-                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}`} {...pickCell(l.id)}>
+                  <tr key={l.id} className={`${l.change_order_id ? 'pay-703-co' : ''}${picked.has(l.id) ? ' picked' : ''}${linkState.get(l.id) ? ` pay-row-${linkState.get(l.id)}` : ''}`} {...pickCell(l.id)}>
                     <td className="mono pay-703-item">{l.item_no ?? ''}</td>
                     <td className="pay-703-name" onContextMenu={(e) => { e.preventDefault(); setLineMenu({ line: l, x: e.clientX, y: e.clientY }) }}>
                       {l.description}
                     </td>
-                    <ScheduledCell f={f} diff={diffAt(l.id, 'C')} editable={editable} editing={svEdit === l.id} before={data.applications[index - 1]?.number}
+                    <ScheduledCell f={f} diff={diffAt(l.id, 'C')} link={linkState.get(l.id)} editable={editable} editing={svEdit === l.id} before={data.applications[index - 1]?.number}
                       moves={moves.flatMap((m, k) => m.from === l.id || m.to === l.id ? [{
-                        text: `${m.from === l.id ? '→' : '←'} ${(() => { const o = data.lines.find((x) => x.id === (m.from === l.id ? m.to : m.from)); return o?.item_no ? `line ${o.item_no}` : (o?.description ?? '').slice(0, 18) })()} ${money(m.amount)}`,
+                        text: `${m.from === l.id ? 'moved to' : 'moved from'} ${(() => { const o = data.lines.find((x) => x.id === (m.from === l.id ? m.to : m.from)); return o?.item_no ? `line ${o.item_no}` : (o?.description ?? '').slice(0, 18) })()} ${money(m.amount)}`,
                         title: m.from === l.id ? `${money(m.amount)} moved to ${lineName(m.to)}` : `${money(m.amount)} moved here from ${lineName(m.from)}`,
                         onCancel: () => void saveMoves(moves.filter((_, j) => j !== k)),
                       }] : [])}
@@ -1190,7 +1208,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           const set = async (n: number | null) => { setSvMenu(null); try { await setScheduledHere(app.id, svMenu.lineId, n); onChanged() } catch (e) { onTrouble(message(e)) } }
           const items: { label: string; note?: string; run: () => void }[] = []
           const ch = changeOf(svMenu.lineId)
-          if (ch) items.push({ label: ch < 0 ? 'Show the line it moved to…' : 'Show the line it came from…', note: `${signed(ch)} on this application — then click that line`, run: () => { setSvMenu(null); setMoving({ line: svMenu.lineId, out: ch < 0 }) } })
+          if (ch) items.push({ label: ch < 0 ? 'Moved to a different line…' : 'Moved from a different line…', note: `${signed(ch)} on this application — then click that line`, run: () => { setSvMenu(null); setMoving({ line: svMenu.lineId, out: ch < 0 }) } })
           if (d && editable) items.push({ label: `Use the PDF’s ${money(d.pdf)}`, note: `${signed(d.pdf - d.app)} on this application and the ones after it`, run: () => void set(d.pdf) })
           if (editable) items.push({ label: 'Enter a value for this application…', run: () => { setSvMenu(null); setSvEdit(svMenu.lineId) } })
           if (f.scheduledHere && editable) items.push({ label: `Back to ${money(f.carried)}`, note: index ? `carried from Application ${data.applications[index - 1].number}` : 'the schedule of values', run: () => void set(null) })
@@ -1333,7 +1351,9 @@ const signed = (n: number) => n.toLocaleString('en-US', { style: 'currency', cur
  * Column C on one application. It starts from the previous application's value; where the PDF
  * read for this application has another, the difference shows under it with a button to take it.
  */
-function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCancel, moves }: {
+function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCancel, moves, link }: {
+  /** Tied to other lines by moves: some of the change still unaccounted for, or all of it. */
+  link?: 'linked' | 'settled'
   f: import('../lib/payapps').LineFigures
   /** Money linked as moved to or from this line on this application. */
   moves: { text: string; title: string; onCancel: () => void }[]
@@ -1351,6 +1371,7 @@ function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCa
   const title = [
     f.scheduledHere ? `Set on this application. Carried from ${from}: ${money(f.carried)}.` : `Carried from ${from}.`,
     diff ? (diff.missing ? 'This line isn’t on the PDF.' : `PDF: ${money(diff.pdf)} (${signed(diff.pdf - diff.app)}).`) : '',
+    link === 'settled' ? 'The moves linked to it account for the whole change.' : link === 'linked' ? 'Moved to a different line, with some of the change not yet accounted for.' : '',
     'Right-click to change it on this application, or to show where money moved.',
   ].filter(Boolean).join('\n')
   if (editing) {
@@ -1365,7 +1386,7 @@ function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCa
     )
   }
   return (
-    <td className={`right mono${diff ? ' pay-pdf-diff' : ''}${f.scheduledHere ? ' pay-sv-here' : ''}`} data-label="Scheduled value" title={title}
+    <td className={`right mono${diff && !link ? ' pay-pdf-diff' : ''}${f.scheduledHere ? ' pay-sv-here' : ''}${link ? ` pay-sv-${link}` : ''}`} data-label="Scheduled value" title={title}
       onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY) }}>
       <Money n={value} />
       {diff && (

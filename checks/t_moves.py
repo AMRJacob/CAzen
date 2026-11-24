@@ -4,7 +4,7 @@ import t_overview as o, json, re
 apps=[dict(a) for a in o.ex['pay_apps']]
 apps[1]['status']='draft'
 sv={l['id']:float(l['scheduled_value']) for l in (o.ex['sov_lines'](None) if callable(o.ex['sov_lines']) else o.ex['sov_lines'])}
-apps[1]['pdf_read']={'file':'App 2.pdf','read_at':'2026-11-23T20:00:00Z','g702':{},'lines':{o.L1:{'C':sv[o.L1]-75000},o.L2:{'C':sv[o.L2]+75000}}}
+apps[1]['pdf_read']={'file':'App 2.pdf','read_at':'2026-11-23T20:00:00Z','g702':{},'lines':{o.L1:{'C':sv[o.L1]-75000},o.L2:{'C':sv[o.L2]+(50000 if 'part' in __import__('sys').argv else 75000)}}}
 apps[1]['moves']=[]
 ex=dict(o.ex); ex['issued_form_links']=[]; ex['pay_apps']=lambda r: apps; patched=[]
 def patch(r): row=json.loads(r.post_data); patched.append(row); apps[1].update(row); return []
@@ -20,7 +20,8 @@ with sync_playwright() as p:
     print('banner:',pg.inner_text('.pay-moving'))
     pg.locator('.pay-703 tbody tr').filter(has=pg.locator('td.pay-pdf-diff')).nth(1).locator('td.pay-703-name').click(); pg.wait_for_timeout(1000)
     print('saved:',patched)
+    print('cell classes:',[c.split() for c in pg.eval_on_selector_all('.pay-703 td.pay-sv-linked, .pay-703 td.pay-sv-settled','els=>els.map(e=>e.className)')])
     print('list:',pg.inner_text('.pay-moves').replace('\n',' | '),'| notes:',pg.locator('.pay-sv-move').all_inner_texts())
-    pg.locator('.pay-703').screenshot(path='moves.png')
+    pg.locator('.pay-703').screenshot(path=('moves_part.png' if 'part' in __import__('sys').argv else 'moves.png'))
     pg.locator('.pay-sv-move button').first.click(); pg.wait_for_timeout(800)
     print('after undo:',patched[-1],'| errors:',errs); b.close()
