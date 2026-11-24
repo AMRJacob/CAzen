@@ -172,8 +172,37 @@ export function screenNow(): Screen {
 
 export interface CheckItem { text: string; done: boolean }
 /** Its heading travels with it, so a page shows it properly to someone whose layout lacks the block. */
+/** A place on the spread of notes (NoteSpread), in its own pixels. */
+export interface Spot { x: number; y: number }
 export type Widget = { title?: string; text: string } | { title?: string; items: CheckItem[] } | { title?: string; agenda: Agenda }
+  /** `_on`: which blocks this page shows (Jacob, 11/24: a page starts nearly blank). */
+  | { title?: string; on: string[] }
+  /** `spread`: where the notes were laid out on the full-screen spread. */
+  | { title?: string; spread: Record<string, Spot> }
 export type Widgets = Record<string, Widget>
+
+/** The page's own list of shown blocks, kept with what it holds; none on a page from before. */
+export const ON = '_on'
+export const onOf = (w: Widgets | undefined): string[] | null => {
+  const x = w?.[ON]
+  return x && 'on' in x && Array.isArray(x.on) ? x.on.filter((i) => typeof i === 'string') : null
+}
+export const SPREAD = 'spread'
+export const spreadOf = (w: Widgets | undefined): Record<string, Spot> => {
+  const x = w?.[SPREAD]
+  return x && 'spread' in x && x.spread && typeof x.spread === 'object' ? x.spread : {}
+}
+/** A block's kind from its id: a built-in is named for its kind; an added one is "text-…" and so on. */
+export function kindOfId(id: string): BlockKind | null {
+  if ((['head', 'names', 'notes', 'sketch', 'photos', 'seen'] as string[]).includes(id)) return id as BlockKind
+  for (const k of ADDED) if (id.startsWith(`${k}-`)) return k
+  return null
+}
+/** A new block put on a page with no place for it in this person's arrangement yet: full width, at the foot. */
+export function freshBlock(id: string, kind: BlockKind, y: number, cols: number): Block {
+  const h = kind === 'agenda' ? 8 : kind === 'check' || kind === 'text' ? 4 : kind === 'notes' || kind === 'sketch' ? 8 : LEAST[kind].h + 2
+  return { id, kind, x: 0, y, w: cols === 1 ? 1 : cols, h: cols === 1 ? 1 : h }
+}
 
 export const textOf = (w: Widget | undefined) => (w && 'text' in w ? w.text : '')
 export const itemsOf = (w: Widget | undefined): CheckItem[] => (w && 'items' in w && Array.isArray(w.items) ? w.items : [])

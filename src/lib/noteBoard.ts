@@ -136,3 +136,41 @@ export function placeBeside(board: Note[], from: Path, target: Path, after: bool
   there.splice(there.indexOf(mark) + (after ? 1 : 0), 0, node)
   return next
 }
+
+/**
+ * Two notes put together where neither has a category yet (Jacob, 11/24: spread the notes out,
+ * then combine). Dropping one note on another loose note makes a new category holding the two,
+ * the one dropped on first. Returns the board and where the new category is.
+ */
+export function combine(board: Note[], from: Path, onto: Path, name = 'New category'): { board: Note[]; at: number } {
+  if (within(from, onto) || within(onto, from)) return { board, at: -1 }
+  const next = copy(board)
+  const a = at(next, onto), b = at(next, from)
+  const homeA = kidsAt(next, onto.slice(0, -1)), homeB = kidsAt(next, from.slice(0, -1))
+  if (!a || !b || !homeA || !homeB) return { board, at: -1 }
+  homeA.splice(homeA.indexOf(a), 1)
+  homeB.splice(homeB.indexOf(b), 1)
+  next.push({ text: name, kids: [a, b] })
+  return { board: next, at: next.length - 1 }
+}
+
+/**
+ * Names for the things laid out on the spread — each category at the top, and each loose note —
+ * by their words, so a place stays with its note when the outline is renumbered. A second note
+ * with the same words is told apart by how many came before it. Keyed by path ("2", "4.0").
+ */
+export function spreadKeys(board: Note[]): Map<string, string> {
+  const out = new Map<string, string>()
+  const seen = new Map<string, number>()
+  const name = (kind: string, text: string) => {
+    const base = `${kind}:${text}`
+    const n = seen.get(base) ?? 0
+    seen.set(base, n + 1)
+    return `${base}#${n}`
+  }
+  board.forEach((n, i) => {
+    if (n.text === LOOSE) n.kids.forEach((k, j) => out.set(`${i}.${j}`, name('n', k.text)))
+    else out.set(`${i}`, name('c', n.text))
+  })
+  return out
+}

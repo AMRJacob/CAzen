@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { Mark } from './Logo'
 import {
-  addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, itemsOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
+  addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, freshBlock, itemsOf, kindOfId, onOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
   type Block, type BlockKind, type CheckItem, type Layout, type Screen, type VisitKind, type Widget, type Widgets,
 } from '../lib/pageLayout'
 import { keepLayout, layoutHere, layoutThere } from '../lib/layoutStore'
@@ -48,9 +48,27 @@ export function usePageLayout(kind: VisitKind, screen: Screen): [Layout, (next: 
  * written in it on this page but is not in their layout — someone else's checklist on a shared
  * job, say. Writing on a page is never hidden from the next person to open it.
  */
-export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen: Screen): Block[] {
+export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen: Screen, all = false): Block[] {
+  const on = all ? null : onOf(widgets)
+  // A page that says which blocks it shows (Jacob, 11/24): those, where this person keeps them,
+  // and any this person has no place for yet at the foot. Gaps left by the rest close up.
+  if (on) {
+    const want = new Set(['head', ...on])
+    const cols = COLS[screen]
+    const list = layout.blocks.filter((b) => want.has(b.id))
+    let y = depth(list)
+    for (const id of want) {
+      if (list.some((b) => b.id === id)) continue
+      const kind = kindOfId(id)
+      if (!kind) continue
+      const blk = freshBlock(id, kind, y, cols)
+      list.push({ ...blk, ...(widgets?.[id]?.title ? { title: widgets[id].title } : {}) })
+      y += blk.h
+    }
+    return screen === 'phone' ? list : settle(list, cols)
+  }
   const mine = new Set(layout.blocks.map((b) => b.id))
-  const gone = new Set(layout.gone ?? [])
+  const gone = new Set(all ? [] : layout.gone ?? [])
   const extra: Block[] = []
   let y = depth(layout.blocks)
   for (const [id, w] of Object.entries(widgets ?? {})) {
@@ -60,7 +78,7 @@ export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen
     extra.push({ id, kind, x: 0, y, w: screen === 'phone' ? 1 : COLS[screen], h: screen === 'phone' ? 1 : 4, title: w.title })
     y += 4
   }
-  return [...layout.blocks, ...extra]
+  return [...layout.blocks.filter((b) => !gone.has(b.id)), ...extra]
 }
 
 // ---------- The grid ----------
@@ -70,7 +88,32 @@ export function shownBlocks(layout: Layout, widgets: Widgets | undefined, screen
  * — a taller arrangement scrolls — and as many columns as the screen has (twelve, or eight). On a
  * phone they are one column, each as tall as it needs.
  */
-export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, onTab }: {
+/**
+ * A block's own menu from its heading (Jacob, 11/24): right-click at a desk; by touch, hold the
+ * heading (or the block's tab on a phone) for a moment. Not while arranging.
+ */
+type TitleMenu = (id: string, x: number, y: number) => void
+function titleMenu(id: string, open: TitleMenu | undefined, only?: string) {
+  if (!open) return {}
+  let timer = 0, from: { x: number; y: number } | null = null
+  const ours = (t: EventTarget) => !only || !!(t as HTMLElement).closest?.(only)
+  return {
+    onContextMenu: (e: React.MouseEvent) => { if (!ours(e.target)) return; e.preventDefault(); open(id, e.clientX, e.clientY) },
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType !== 'touch' || !ours(e.target)) return
+      from = { x: e.clientX, y: e.clientY }
+      const { clientX: x, clientY: y } = e
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => { from = null; open(id, x, y) }, 550)
+    },
+    onPointerMove: (e: React.PointerEvent) => { if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) > 8) { window.clearTimeout(timer); from = null } },
+    onPointerUp: () => { window.clearTimeout(timer); from = null },
+    onPointerCancel: () => { window.clearTimeout(timer); from = null },
+  }
+}
+const HEADING = '.nb-z-top h2, .nb-z > h2, .nb-agenda-top h2'
+
+export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, onTab, onTitleMenu }: {
   blocks: Block[]
   screen: Screen
   arranging: boolean
@@ -80,6 +123,8 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, on
   /** On a phone, the one block shown, nearly full screen; the rest are a tab or a swipe away. */
   tab?: string | null
   onTab?: (id: string) => void
+  /** A block's heading asked for its menu. */
+  onTitleMenu?: TitleMenu
 }) {
   const cols = COLS[screen]
   const grid = useRef<HTMLDivElement | null>(null)
@@ -172,7 +217,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, on
   const rename = (b: Block, title: string) => onArrange(blocks.map((x) => (x.id === b.id ? { ...x, title } : x)), true)
 
   const phone = screen === 'phone'
-  if (phone && !arranging && onTab) return <PhoneTabs blocks={blocks} render={render} tab={tab ?? null} onTab={onTab} />
+  if (phone && !arranging && onTab) return <PhoneTabs blocks={blocks} render={render} tab={tab ?? null} onTab={onTab} onTitleMenu={onTitleMenu} />
   const order = phone ? blocks : [...blocks].sort((a, b) => a.y - b.y || a.x - b.x)
   return (
     <div ref={grid} className={`nb-grid${phone ? ' nb-grid-phone' : ''}${arranging ? ' nb-arranging' : ''}`}
@@ -182,7 +227,7 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange, tab, on
           className={`nb-cell nb-cell-${b.kind}${b.x === 0 ? ' at-left' : ''}${b.y === 0 ? ' at-top' : ''}${lifted === b.id ? ' lifted' : ''}`}
           style={phone ? undefined : { gridColumn: `${b.x + 1} / span ${b.w}`, gridRow: `${b.y + 1} / span ${b.h}` }}>
           {/* While arranging, what is in a block cannot be touched — the block is something to move. */}
-          <div className="nb-cell-in" {...(arranging ? { inert: '' as unknown as boolean } : {})}>{render(b)}</div>
+          <div className="nb-cell-in" {...(arranging ? { inert: '' as unknown as boolean } : titleMenu(b.id, onTitleMenu, HEADING))}>{render(b)}</div>
           {arranging && (
             <div className="nb-arr" onPointerDown={(e) => grab(e, b, 'move')} onPointerMove={follow} onPointerUp={drop} onPointerCancel={drop}>
               <div className="nb-arr-head" onPointerDown={(e) => { if ((e.target as HTMLElement).closest('input, button')) e.stopPropagation() }}>
@@ -220,7 +265,8 @@ export const tabLabel = (b: Block) => b.title || TAB[b.kind] || LABEL[b.kind]
  * it. A tap on the strip, or a swipe sideways across the block, goes to the next.
  * Every block stays mounted, hidden when not shown, so what is being typed is not lost.
  */
-function PhoneTabs({ blocks, render, tab, onTab }: {
+function PhoneTabs({ blocks, render, tab, onTab, onTitleMenu }: {
+  onTitleMenu?: TitleMenu
   blocks: Block[]
   render: (b: Block) => React.ReactNode
   tab: string | null
@@ -253,13 +299,13 @@ function PhoneTabs({ blocks, render, tab, onTab }: {
     <div className="nb-tabbed">
       <div ref={strip} className="nb-tabs" role="tablist" aria-label="The page's tools">
         {blocks.map((b) => (
-          <button key={b.id} role="tab" aria-selected={b.id === on.id} className={b.id === on.id ? 'on' : ''} onClick={() => onTab(b.id)}>{tabLabel(b)}</button>
+          <button key={b.id} role="tab" aria-selected={b.id === on.id} className={b.id === on.id ? 'on' : ''} onClick={() => onTab(b.id)} {...titleMenu(b.id, onTitleMenu)}>{tabLabel(b)}</button>
         ))}
       </div>
       <div className="nb-tab-body" onTouchStart={down} onTouchEnd={up}>
         {blocks.map((b) => (
           <div key={b.id} data-block={b.id} className={`nb-cell nb-cell-${b.kind} nb-tab-cell`} role="tabpanel" hidden={b.id !== on.id}>
-            <div className="nb-cell-in">{render(b)}</div>
+            <div className="nb-cell-in" {...titleMenu(b.id, onTitleMenu, HEADING)}>{render(b)}</div>
           </div>
         ))}
       </div>

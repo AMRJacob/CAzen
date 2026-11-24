@@ -3941,3 +3941,9 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 .as-pdf { display: inline-flex; flex-direction: column; align-items: flex-end; }
 .as-pdf.off { outline: 2px solid #c0392b; outline-offset: 2px; border-radius: 2px; background: #fdecea; }
 .as-pdf-cazen { font-size: .7rem; color: #a33; font-weight: 400; }
+
+/* ---------- Starting a page with only what is wanted (Jacob, 11/24) ---------- */
+.nb-start .nb-start-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 14px; margin: 10px 0 14px; }
+.nb-start .nb-start-list label { display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 15px; cursor: pointer; }
+.nb-start .nb-start-list input { width: 19px; height: 19px; margin: 0; flex: none; }
+.nb-start .take-remove.primary { background: var(--moss); color: #fff; border-color: var(--moss); }

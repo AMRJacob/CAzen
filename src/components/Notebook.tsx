@@ -7,7 +7,7 @@ import { ObservationForm } from './ObservationForm'
 import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
 import { ArrangeMenu, CheckBlock, InFrame, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
-import { ADDED, LABEL, widgetsForReport, type Block, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
+import { ADDED, BUILT_IN, COLS, holds, LABEL, ON, onOf, settle, widgetsForReport, type Block, type BlockKind, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
 import { usDate as usDateOf } from '../lib/templates/fields'
@@ -27,7 +27,7 @@ import { AiCheck } from './AiCheck'
 import { canLinkPages } from '../lib/observations'
 import {
   canHoldLocation, clockTime, coverOf, longDay, setVisit, shortDay, startVisit,
-  canGroupPages, type SiteVisit, type VisitKind,
+  canGroupPages, canHoldWidgets, type SiteVisit, type VisitKind,
 } from '../lib/visits'
 import { addPerson, asLine, setPerson, linesOf, listPeople, listPeopleElsewhere, nameIn, type Person } from '../lib/people'
 import { metresBetween, placeAt, weatherAt } from '../lib/weather'
@@ -156,12 +156,34 @@ export function Notebook({ project, kind, pages, onPages }: {
   const page = i >= 0 ? pages[i] : null
   const go = (id: string | null, dir: 'fwd' | 'back') => { setTurn(dir); setAt(id) }
 
-  async function newPage() {
+  /**
+   * A new page starts with only what is asked for (Jacob, 11/24): the blocks ticked, last time's
+   * choice ticked to begin with. More can be put on from the corner menu at any time.
+   */
+  const [starting, setStarting] = useState<string[] | null>(null)
+  const startKey = `cazen.startWith.${kind}`
+  const offered: BlockKind[] = [...BUILT_IN[kind].filter((k) => k !== 'head'), ...ADDED]
+  function newPage() {
+    if (!canHoldWidgets()) { void startPage(null); return }
+    let last: string[] | null = null
+    try { last = JSON.parse(localStorage.getItem(startKey) ?? 'null') } catch { /* first time */ }
+    setStarting(Array.isArray(last) ? last.filter((k) => offered.includes(k as BlockKind)) : ['names', 'notes'])
+  }
+  async function startPage(kinds: string[] | null) {
+    setStarting(null)
     try {
       const v = await startVisit(project.id, kind, pages[0]?.names ?? null,
         kind === 'visit' ? (project.address ? `Job site\n${project.address}` : 'Job site') : pages[0]?.location ?? null)
-      onPages([v, ...pages])
-      go(v.id, 'fwd')
+      let made: SiteVisit = v
+      if (kinds) {
+        try { localStorage.setItem(startKey, JSON.stringify(kinds)) } catch { /* not kept */ }
+        const on = kinds.map((k) => (ADDED.includes(k as BlockKind) ? `${k}-${crypto.randomUUID().slice(0, 8)}` : k))
+        const widgets: Widgets = { [ON]: { on } }
+        made = { ...v, widgets }
+        await setVisit(v.id, { widgets })
+      }
+      onPages([made, ...pages])
+      go(made.id, 'fwd')
     } catch (e) { setError(message(e)) }
   }
 
@@ -254,13 +276,34 @@ export function Notebook({ project, kind, pages, onPages }: {
     <BookMenu
       visit={kind === 'visit'} adds={adds}
       onDuplicate={page ? () => void duplicate(page) : undefined}
-      onNew={() => void newPage()}
+      onNew={() => newPage()}
       // Out of a page is back to the book's contents; the contents page has its own way out.
       onClose={() => go(null, 'back')} />
   )
 
   return (
     <div className={`nb nb-${kind} nb-rule-${paper}`}>
+      {starting && (
+        <div className="take-ask nb-tearout" role="dialog" aria-label="Start a page" onClick={() => setStarting(null)}>
+          <div className="take-card nb-start" onClick={(e) => e.stopPropagation()}>
+            <h3>Start the page with</h3>
+            <p className="muted small">More can be added from the corner menu’s Add at any time.</p>
+            <div className="nb-start-list">
+              {offered.map((k) => (
+                <label key={k}>
+                  <input type="checkbox" checked={starting.includes(k)}
+                    onChange={(e) => setStarting(e.target.checked ? [...starting, k] : starting.filter((x) => x !== k))} />
+                  <span>{LABEL[k]}</span>
+                </label>
+              ))}
+            </div>
+            <div className="take-choices">
+              <button className="take-remove primary" onClick={() => void startPage(offered.filter((k) => starting.includes(k)))}><strong>Start the page</strong></button>
+            </div>
+            <button className="link" onClick={() => setStarting(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {tear && (
         <div className="take-ask nb-tearout" role="dialog" aria-label="Tear out this page" onClick={() => setTear(null)}>
           <div className="take-card" onClick={(e) => e.stopPropagation()}>
@@ -317,7 +360,7 @@ export function Notebook({ project, kind, pages, onPages }: {
             </span>
           </button>
           {/* The corner mark is the way to a new page, to deleting one, and the way out. */}
-          <BookMenu contents visit={false} onNew={() => void newPage()} onClose={() => navigate('/project')}
+          <BookMenu contents visit={false} onNew={() => newPage()} onClose={() => navigate('/project')}
             onDelete={pages.length ? () => setChoosing('delete') : undefined}
             onDuplicate={pages.length ? () => setChoosing('duplicate') : undefined}
             onGroup={canGroupPages() && pages.length > 1 ? () => { setSel(new Set()); setChoosing('group') } : undefined} />
@@ -449,7 +492,7 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
   // Each page's text boxes, checklists and agenda business, after its own notes.
   const extra = (p: GroupPage) => {
     const w = (p as SiteVisit).widgets
-    return widgetsForReport(shownBlocks({ v: 1, blocks: [] }, w, 'desktop'), w, (p.notes ?? '').match(/^\d+\.\s/gm)?.length ?? 0)
+    return widgetsForReport(shownBlocks({ v: 1, blocks: [] }, w, 'desktop', true), w, (p.notes ?? '').match(/^\d+\.\s/gm)?.length ?? 0)
   }
   const notes = groupNotes(trimmed, extra)
   const headings = notes.match(/^\d+\.\s/gm)?.length ?? 0
@@ -523,7 +566,12 @@ function GroupExport({ kind, group, all, observations, types, onBack }: {
  * few seconds of not being used.
  */
 /** What a page offers to add to itself; the corner menu calls these. Absent where a page has no such part. */
-interface PageAdds { note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void; arrange?: () => void }
+interface PageAdds {
+  note?: () => void; sketch?: () => void; photo?: () => void; observation?: () => void; arrange?: () => void
+  /** Blocks not on this page that can be put on it, and putting one on (Jacob, 11/24). */
+  addable?: () => BlockKind[]
+  add?: (k: BlockKind) => void
+}
 
 function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit, contents }: {
   /** On a page: a copy of it. On the contents page: puts the list into choosing one to copy. */
@@ -543,6 +591,9 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit,
 }) {
 
   const [open, setOpen] = useState(false)
+  /** The list of blocks that can be put on this page, open above the bar. */
+  const [adding, setAdding] = useState<BlockKind[] | null>(null)
+  useEffect(() => { if (!open) setAdding(null) }, [open])
   const timer = useRef<number | null>(null)
   const rest = useCallback((ms: number) => {
     if (timer.current !== null) window.clearTimeout(timer.current)
@@ -553,7 +604,7 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit,
   const nav = useRef<HTMLElement>(null)
   useEffect(() => {
     if (!open) return
-    const away = (e: PointerEvent) => { if (!nav.current?.contains(e.target as Node)) setOpen(false) }
+    const away = (e: PointerEvent) => { if (!nav.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.nb-add-list')) setOpen(false) }
     document.addEventListener('pointerdown', away)
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
@@ -582,6 +633,9 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit,
         {spot('Sketch', I(<><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4Z" /><path d="M14 7l3 3" /></>), () => adds?.current?.sketch?.())}
         {visit && spot('Photo', I(<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7l1.5-3h5L16 7" /><circle cx="12" cy="13.5" r="3.2" /></>), () => adds?.current?.photo?.())}
         {visit && spot('Observation', I(<><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.6" /></>), () => adds?.current?.observation?.())}
+        {/* Anything else onto this page: a hidden block, a text box, checklist or agenda (Jacob, 11/24). */}
+        {spot('Add', I(<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M12 8v8M8 12h8" /></>),
+          adds?.current?.addable?.().length ? () => setAdding(adding ? null : adds.current!.addable!()) : undefined, true)}
         {/* Move, size, hide and add the page's blocks — this person's own arrangement, for this book on this kind of screen. */}
         {spot('Arrange', I(<><rect x="3.5" y="3.5" width="7" height="7" rx="1" /><rect x="13.5" y="3.5" width="7" height="4" rx="1" /><rect x="13.5" y="10.5" width="7" height="10" rx="1" /><rect x="3.5" y="13.5" width="7" height="7" rx="1" /></>), () => adds?.current?.arrange?.())}
         </>}
@@ -591,6 +645,11 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, onGroup, adds, visit,
         {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
       </div>
     </nav>
+    {open && adding && adding.length > 0 && (
+      <div className="nb-arr-show nb-add-list" role="menu" aria-label="Add to this page" onPointerDown={() => rest(4200)}>
+        {adding.map((k) => <button key={k} role="menuitem" onClick={() => { adds?.current?.add?.(k); setAdding(null); setOpen(false) }}>{LABEL[k]}</button>)}
+      </div>
+    )}
     </InFrame>
   )
 }
@@ -630,15 +689,15 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   // An arrangement is for one kind of screen: turning a phone or unfolding one leaves arranging rather than save it to the wrong one.
   const [arrangedOn, setArrangedOn] = useState(screen)
   if (arrangedOn !== screen) { setArrangedOn(screen); if (work) setWork(null) }
-  const shown = shownBlocks(work ?? layout, page.widgets, screen)
+  // While arranging, what is being arranged is what was on this page, and what is added to it.
+  const shown = work ? work.blocks : shownBlocks(layout, page.widgets, screen)
   const showing = (k: Block['kind']) => shown.some((b) => b.kind === k)
   /** On a phone, the block shown (PageGrid's tabs); the corner menu's adds go to theirs. */
   const [tab, setTab] = useState<string | null>(null)
   const toTab = (k: Block['kind']) => { const b = shown.find((x) => x.kind === k); if (b) setTab(b.id) }
   const arrange = (next: Block[]) => {
-    // An added block taken off is remembered as gone, so writing in it on some page does not bring it back.
-    const off = shown.filter((b) => ADDED.includes(b.kind) && !next.some((n) => n.id === b.id)).map((b) => b.id)
-    setWork({ v: 1, blocks: next, gone: [...(work?.gone ?? layout.gone ?? []), ...off] })
+    const gone = work?.gone ?? layout.gone
+    setWork({ v: 1, blocks: next, ...(gone?.length ? { gone } : {}) })
   }
   const [notes, setNotes] = useState(page.notes ?? '')
   const [pad, setPadRow] = useState<Pad | null>(null)
@@ -706,6 +765,38 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
     const next = { ...widgetsNow.current, [id]: w }
     widgetsNow.current = next
     changeNow.current({ widgets: next })
+  }
+
+  // ---- Which blocks this page shows (Jacob, 11/24: a page starts nearly blank; add as needed) ----
+  /** This page's blocks by id, the head aside — its own list, or what it shows now on a page from before. */
+  const onHere = () => onOf(widgetsNow.current) ?? shown.map((b) => b.id).filter((id) => id !== 'head')
+  const canChoose = canHoldWidgets()
+  /** A block put on this page: one already kept somewhere is shown again; an added kind is a new one. */
+  const putOn = (k: BlockKind): string => {
+    const id = ADDED.includes(k) ? `${k}-${crypto.randomUUID().slice(0, 8)}` : k
+    if (!onHere().includes(id)) setWidget(ON, { on: [...onHere(), id] })
+    return id
+  }
+  /** Off this page. A text box, checklist or agenda can go with what is written in it. */
+  const hideBlock = (id: string, clear = false) => {
+    const next: Widgets = { ...widgetsNow.current, [ON]: { on: onHere().filter((x) => x !== id) } }
+    if (clear) delete next[id]
+    widgetsNow.current = next
+    changeNow.current({ widgets: next })
+  }
+  const [blockMenu, setBlockMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  /**
+   * Arranging done: this person's arrangement keeps where everything on this page now is, and
+   * where the blocks not on it were; this page shows what was left on it.
+   */
+  const finishArranging = () => {
+    if (!work) return
+    const here = new Set(work.blocks.map((b) => b.id))
+    const rest = layout.blocks.filter((b) => !here.has(b.id))
+    const blocks = screen === 'phone' ? [...work.blocks, ...rest] : settle([...work.blocks, ...rest], COLS[screen])
+    keepArrangement({ ...work, blocks })
+    if (canChoose) setWidget(ON, { on: work.blocks.map((b) => b.id).filter((id) => id !== 'head') })
+    setWork(null)
   }
 
   const padId = page.pad_id
@@ -778,15 +869,17 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
   const root = useRef<HTMLElement | null>(null)
   useEffect(() => {
     adds.current = {
-      arrange: () => setWork(layout),
-      note: !showing('notes') ? undefined : () => {
-        toTab('notes')
+      arrange: () => setWork({ ...layout, blocks: shown }),
+      addable: () => canChoose ? [...BUILT_IN[page.kind].filter((k) => k !== 'head' && !showing(k)), ...ADDED] : [],
+      add: (k) => { const id = putOn(k); setTab(id) },
+      note: !showing('notes') && !canChoose ? undefined : () => {
+        if (!showing('notes')) { setTab(putOn('notes')) } else toTab('notes')
         // On a phone the notes are shown first (a tab); then the cursor goes in.
         requestAnimationFrame(() => { const el = root.current?.querySelector<HTMLInputElement>('.nbd-type input'); el?.scrollIntoView({ block: 'center' }); el?.focus() })
       },
-      sketch: () => { void draw() },
-      photo: visit ? () => camera.current?.click() : undefined,
-      observation: visit ? () => setObserving('new') : undefined,
+      sketch: () => { if (!showing('sketch') && canChoose) putOn('sketch'); void draw() },
+      photo: visit ? () => { if (!showing('photos') && canChoose) putOn('photos'); camera.current?.click() } : undefined,
+      observation: visit ? () => { if (!showing('seen') && canChoose) putOn('seen'); setObserving('new') } : undefined,
     }
   })
   useEffect(() => () => { adds.current = {} }, [adds])
@@ -866,7 +959,7 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
     // something in it on this page, whether or not it is in this person's layout.
     // Categories with nothing under them are left out of the report, and named above it (Jacob, 11/24).
     const { notes: printed, empty } = dropEmpty(notes)
-    const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen), page.widgets, printed.match(/^\d+\.\s/gm)?.length ?? 0)
+    const added = widgetsForReport(shownBlocks({ ...layout, gone: [] }, page.widgets, screen, true), page.widgets, printed.match(/^\d+\.\s/gm)?.length ?? 0)
     const headings = (printed + added).match(/^\d+\.\s/gm)?.length ?? 0
     const recorded = own.length
       ? `\n${headings + 1}. Observations recorded\n` + own.map((o, n) => `  ${String.fromCharCode(97 + (n % 26))}. ${nameOf(o, types)} ${o.title}${o.area ? ` (${o.area})` : ''}`).join('\n')
@@ -1046,14 +1139,39 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       {arranging ? (
         <ArrangeMenu kind={page.kind} screen={screen} layout={{ ...work, blocks: shown }}
           onChange={setWork}
-          onClose={() => { keepArrangement(work); setWork(null) }}
+          onClose={finishArranging}
           onDiscard={() => setWork(null)} />
       ) : bar}
       {arranging && <p className="nb-arr-say">{screen === 'phone'
-        ? 'Arranging this book’s page for a phone: ↑ ↓ to reorder, × to hide.'
-        : `Arranging this book’s page for a ${screen}: drag a block to move it, its corner to size it, × to hide.`}</p>}
+        ? 'Arranging this book’s page for a phone: ↑ ↓ to reorder, × to take off this page.'
+        : `Arranging this book’s page for a ${screen}: drag a block to move it, its corner to size it, × to take it off this page.`}</p>}
       <PageGrid blocks={shown} screen={screen} arranging={arranging} render={part} onArrange={(next) => arrange(next)}
-        tab={tab} onTab={setTab} />
+        tab={tab} onTab={setTab} onTitleMenu={(id, x, y) => { if (id !== 'head') setBlockMenu({ id, x, y }) }} />
+      {blockMenu && (() => {
+        const b = shown.find((x) => x.id === blockMenu.id)
+        if (!b) return null
+        const close = () => setBlockMenu(null)
+        const added = ADDED.includes(b.kind)
+        const w = page.widgets?.[b.id]
+        const name = b.title || w?.title || LABEL[b.kind]
+        return (
+          <InFrame>
+            <div className="nbd-menu-back" onPointerDown={close} onContextMenu={(e) => { e.preventDefault(); close() }}>
+              <div className="padctx nbd-menu" role="menu" onPointerDown={(e) => e.stopPropagation()}
+                style={{ left: Math.min(blockMenu.x, window.innerWidth - 250), top: Math.min(blockMenu.y, window.innerHeight - 160) }}>
+                <span className="nb-tear-say">{name}</span>
+                <button role="menuitem" disabled={!canChoose} onClick={() => { close(); hideBlock(b.id) }}
+                  title={canChoose ? 'What is in it stays with the page and in its report' : 'Needs the database update for added blocks'}>Hide on this page</button>
+                {added && <button role="menuitem" className="danger" disabled={!canChoose} onClick={() => {
+                  close()
+                  if (holds(w) && !window.confirm(`Remove “${name}” and what is written in it from this page?`)) return
+                  hideBlock(b.id, true)
+                }}>Remove from this page</button>}
+              </div>
+            </div>
+          </InFrame>
+        )
+      })()}
       {/* Kept outside the photographs' block, so the corner menu's Photo works with that block hidden. */}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void taken(e.target.files)} />
       <input ref={library} type="file" accept="image/*" multiple hidden onChange={(e) => void taken(e.target.files)} />

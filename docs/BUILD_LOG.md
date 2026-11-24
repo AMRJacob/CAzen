@@ -11,6 +11,35 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 17:05 CST (pages start nearly blank; hide from a heading; Add from the corner)
+
+Two asks, 16:29 and 16:30. Test browser only.
+
+**A page shows only what was chosen for it.** Which blocks a page shows is kept with the page, in
+`site_visits.widgets` under `_on` (`{ on: [ids] }`) — no migration. Pages without it (every page
+from before) show as they did. Where a block sits is still each person's arrangement for the book
+and screen; a block chosen for a page that the arrangement has no place for goes full width at
+the foot, and gaps close up (`shownBlocks` in `src/components/PageGrid.tsx`).
+
+**New page asks what to start with.** Corner menu → New page opens a list of the book's blocks plus
+Text box, Checklist and Agenda; last time's choice is ticked to begin with (kept on the device,
+`cazen.startWith.<book>`); Attendees and Notes the first time.
+
+**Add from the corner menu.** A new *Add* spot lists what is not on the page (hidden built-ins,
+and a new Text box, Checklist or Agenda) and puts the chosen one on. Note, Sketch, Photo and
+Observation put their block on the page first if it is not there.
+
+**Right-click (or hold) a block's heading** — or its tab on a phone — for *Hide on this page*;
+a text box, checklist or agenda also has *Remove from this page*, which asks first when something
+is written in it. Hidden blocks' contents stay with the page and still go in its report.
+
+**Arranging** now arranges what is on this page; × takes a block off this page rather than out of
+the arrangement, so its place is remembered for pages that show it. Closing saves the page's list.
+
+`checks/t_blankpage.py` (desk and phone).
+
+---
+
 # Checkpoint — 2026-11-24, 16:35 CST (AI review fixes, empty categories, report order, board reordering)
 
 Four asks from Jacob after testing on device. Test browser only throughout.
