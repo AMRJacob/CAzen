@@ -3204,3 +3204,4 @@ pixel ratio; and frame timing under 6× CPU throttling.
 
 ## 2026-11-24 — Round down ignores the cents
 - A "round down" override now drops the cents whatever they are ($1,488.99 → $1,488), including on deductions (−$1.25 → −$1); "round up" mirrors it.
+- The scheduled-value choice in the read window says plainly what each button does ("Change CAzen to the PDF's values" / "Leave CAzen's values as they are"), and the changed lines are listed open with "CAzen has" / "PDF shows" headings.

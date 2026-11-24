@@ -55,7 +55,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
   const [coDate, setCoDate] = useState('')
   /** Where the PDF's scheduled values differ from the record: follow the PDF, or keep the record. Asked, not assumed. */
   const [svChoice, setSvChoice] = useState<'pdf' | 'keep' | null>(null)
-  const [svOpen, setSvOpen] = useState(false)
+  const [svOpen, setSvOpen] = useState(true)
   /** The contractor's PDF, shown beside the figures. */
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -274,15 +274,16 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
 
                   {svRows.length > 0 && onSetScheduled && (
                     <div className={`pay-read-decide${svWaiting ? ' waiting' : ''}`}>
-                      <strong>Scheduled values changed on {svRows.length} {svRows.length === 1 ? 'line' : 'lines'}</strong>
+                      <strong>The PDF shows different scheduled values than CAzen on {svRows.length} {svRows.length === 1 ? 'line' : 'lines'}</strong>
                       <span className="muted small">
                         {Math.abs(svNet) < 0.005
-                          ? ' — net $0: money moved between lines.'
+                          ? ' — they net to $0, so the contractor moved money between lines; the contract sum is unchanged.'
                           : ` — net ${svNet > 0 ? '+' : '−'}${money(Math.abs(svNet))}, which changes the contract sum.`}
                         {' '}<button className="link small" onClick={() => setSvOpen((o) => !o)}>{svOpen ? 'hide them' : 'show them'}</button>
                       </span>
                       {svOpen && (
                         <table className="pay-read-sv small">
+                          <thead><tr><th>Item</th><th>Description</th><th className="right">CAzen has</th><th></th><th className="right">PDF shows</th></tr></thead>
                           <tbody>
                             {svRows.map((r) => {
                               const k = known.find((x) => x.id === r.id)!
@@ -297,12 +298,12 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                         </table>
                       )}
                       <div className="pay-read-choose">
-                        <button className={svChoice === 'pdf' ? 'on' : ''} onClick={() => setSvChoice('pdf')}>Use the PDF’s scheduled values</button>
-                        <button className={svChoice === 'keep' ? 'on' : ''} onClick={() => setSvChoice('keep')}>Keep CAzen’s</button>
+                        <button className={svChoice === 'pdf' ? 'on' : ''} onClick={() => setSvChoice('pdf')}>Change CAzen to the PDF’s values</button>
+                        <button className={svChoice === 'keep' ? 'on' : ''} onClick={() => setSvChoice('keep')}>Leave CAzen’s values as they are</button>
                       </div>
                       <span className="muted small">{svChoice === 'pdf'
-                        ? 'CAzen keeps one scheduled value per line, so earlier applications will show the new values too.'
-                        : svChoice === 'keep' ? 'The difference stays visible when the figures are set against the PDF.' : ''}</span>
+                        ? 'The schedule of values in CAzen is updated to match. CAzen stores one scheduled value per line, so earlier applications are shown with the new values too.'
+                        : svChoice === 'keep' ? 'Nothing in CAzen changes. This application is checked against CAzen’s values, so these lines show as differences from the PDF.' : ''}</span>
                     </div>
                   )}
 
