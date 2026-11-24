@@ -527,10 +527,17 @@ function checkAgainstPdf(data: LoadedContract, index: number, figures: Figures) 
   return { diffs, why: whyTheyDiffer(diffs, ctx), retainageFix }
 }
 
-/** Each line's scheduled value as a PDF read for an application has it: $0 for a line it doesn't list. */
+/**
+ * Each line's scheduled value as a PDF read for an application has it. A line the PDF doesn't list
+ * is $0 there — but only when the lines read add up to the PDF's grand total, so a row the reader
+ * missed isn't taken for one the contractor left off; otherwise it is left as it is.
+ */
 function scheduledFromPdf(lines: SovLine[], pdf: import('../lib/payCompare').PdfRead): { id: string; scheduled: number }[] {
-  if (!Object.keys(pdf.lines ?? {}).length) return []
-  return lines.filter((l) => !l.is_heading).map((l) => ({ id: l.id, scheduled: pdf.lines[l.id]?.C ?? 0 }))
+  const read = pdf.lines ?? {}
+  if (!Object.keys(read).length) return []
+  const sum = Object.values(read).reduce((n, x) => n + (x.C ?? 0), 0)
+  const whole = pdf.total?.C != null && Math.abs(sum - pdf.total.C) < 1
+  return lines.filter((l) => read[l.id] || (!l.is_heading && whole)).map((l) => ({ id: l.id, scheduled: read[l.id]?.C ?? 0 }))
 }
 
 /** A cause in a word or two, for the table of applications. */
@@ -1021,6 +1028,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         {(
           <PayRead
             checkOnly={!editable}
+            onHeadingsToLines={async (ids) => { for (const id of ids) await setSovLine(id, { is_heading: false } as never) }}
             known={data.lines.map((l) => ({ id: l.id, item_no: l.item_no, description: l.description,
               scheduled: figures.lines.find((x) => x.line.id === l.id)?.line.scheduled_value ?? l.scheduled_value,
               previous: figures.lines.find((x) => x.line.id === l.id)?.previous ?? 0, heading: l.is_heading }))}

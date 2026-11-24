@@ -15,7 +15,9 @@ import type { PdfRead } from '../lib/payCompare'
  * line of the schedule of values. What its arithmetic bears out is filled in plainly; what it
  * does not is filled in red with the reason, and nothing is kept until it has been looked over.
  */
-export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, number, start, onStarted, periodTo, checkOnly }: {
+export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, number, start, onStarted, periodTo, checkOnly, onHeadingsToLines }: {
+  /** Headings in CAzen that carry figures on this PDF become line items. */
+  onHeadingsToLines?: (ids: string[]) => Promise<void>
   /** A certified application: the PDF's scheduled values and the comparison are kept; what was billed isn't touched. */
   checkOnly?: boolean
   /** Add lines the PDF has to the schedule of values; returns their ids, in the same order. */
@@ -49,6 +51,9 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
   const [open, setOpen] = useState(false)
   /** Lines on the PDF that are not in the schedule of values, and which of them to add. */
   const [extra, setExtra] = useState<Extra[]>([])
+  // Rows on the PDF that are headings in CAzen but carry figures here ("Balance of Work" before it
+  // was broken out): they come in as line items, with their figures.
+  const [headingHits, setHeadingHits] = useState<{ id: string; label: string; x: Extra }[]>([])
   const [adds, setAdds] = useState<Set<number>>(new Set())
   /** Lines to be added that are headings, though the PDF prints them like any other line. */
   const [heads, setHeads] = useState<Set<number>>(new Set())
@@ -107,10 +112,15 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
       // own heading rows come back unmatched; they are the same rows, not lines to add.
       const norm = (t: string | null | undefined) => (t ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^0+(?=\d)/, '')
       const headingsHere = known.filter((k) => k.heading)
+      const hits: { id: string; label: string; x: Extra }[] = []
       for (let i = more.length - 1; i >= 0; i--) {
         const x = more[i]
-        if (headingsHere.some((h) => (h.item_no && x.item && norm(h.item_no) === norm(x.item)) || norm(h.description) === norm(x.name))) more.splice(i, 1)
+        const h = headingsHere.find((h) => (h.item_no && x.item && norm(h.item_no) === norm(x.item)) || norm(h.description) === norm(x.name))
+        if (!h) continue
+        more.splice(i, 1)
+        if (x.scheduled || x.previous || x.this_period || x.stored) hits.unshift({ id: h.id, label: [h.item_no, h.description].filter(Boolean).join(' '), x })
       }
+      setHeadingHits(onHeadingsToLines ? hits : [])
       // A contract with no schedule of values yet takes the PDF's lines as its schedule of values.
       setExtra(onAddLines ? more : [])
       setAdds(new Set(sov.length ? [] : more.map((_, i) => i)))
@@ -154,6 +164,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
         const changes = rows.filter((r) => r.found && r.pdfScheduled != null).map((r) => ({ id: r.id, scheduled_value: r.pdfScheduled! }))
         if (changes.length) await onSetScheduled(changes)
       }
+      if (headingHits.length && onHeadingsToLines) await onHeadingsToLines(headingHits.map((h) => h.id))
       const chosen = extra.map((x, i) => [x, i] as const).filter(([, i]) => adds.has(i))
       const ids = chosen.length && onAddLines
         ? await onAddLines(chosen.map(([x, i]) => ({ item_no: x.item, description: x.name, scheduled_value: heads.has(i) ? 0 : x.scheduled, ...(heads.has(i) ? { is_heading: true } : {}),
@@ -165,6 +176,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
           return { id: r.id, value: { this_period: num(v.e), stored: num(v.f) } }
         }),
         ...chosen.flatMap(([x, i], k) => (heads.has(i) ? [] : [{ id: ids[k], value: { this_period: num(xval(x, i).e), stored: num(xval(x, i).f) } }])),
+        ...headingHits.map((h) => ({ id: h.id, value: { this_period: h.x.this_period, stored: h.x.stored } })),
       ], checks ? {
         file: fileName, read_at: new Date().toISOString(),
         ...(checks.application ? { application: checks.application } : {}),
@@ -174,9 +186,10 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
         lines: Object.fromEntries([
           ...rows.filter((r) => r.found && r.pdf).map((r) => [r.id, r.pdf!] as const),
           ...chosen.filter(([, i]) => !heads.has(i)).map(([x, i]) => [ids[chosen.findIndex(([, j]) => j === i)], x.pdf] as const),
+          ...headingHits.map((h) => [h.id, h.x.pdf] as const),
         ]),
       } : null, pdfBytes.current)
-      setRows(null); setChecks(null); setExtra([])
+      setRows(null); setChecks(null); setExtra([]); setHeadingHits([])
     } catch (e) { setError(message(e)) } finally { setBusy(null) }
   }
 
@@ -272,6 +285,12 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                   )
                 })()}
                 <div className="pay-read-scroll">
+                  {headingHits.length > 0 && (
+                    <div className="pay-read-decide">
+                      <strong>{headingHits.map((h) => h.label).join(', ')}</strong>
+                      <span className="small"> {headingHits.length === 1 ? 'is a heading' : 'are headings'} in CAzen but {headingHits.length === 1 ? 'has' : 'have'} figures on this PDF ({headingHits.map((h) => money(h.x.scheduled)).join(', ')} scheduled), so {headingHits.length === 1 ? 'it comes' : 'they come'} in as {headingHits.length === 1 ? 'a line item' : 'line items'}. Each application’s value comes from its own PDF.</span>
+                    </div>
+                  )}
                   {checks && <ReadChecks checks={checks} number={number} listed={extra.length > 0} periodTo={periodTo} />}
 
                   {svRows.length > 0 && onSetScheduled && (
