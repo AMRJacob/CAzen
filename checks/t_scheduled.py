@@ -17,7 +17,7 @@ with sync_playwright() as p:
     cell=pg.locator('.pay-703 td.pay-pdf-diff').first
     print('cell:',cell.inner_text().replace('\n',' | '),'| title:',cell.get_attribute('title').replace('\n',' / '))
     print('against table scheduled row:',pg.locator('.pay-why-scheduled').inner_text().replace('\n',' | ')[:200])
-    cell.locator('button').click(); pg.wait_for_timeout(800)
+    cell.click(button='right'); pg.wait_for_timeout(300); pg.locator('.pay-line-menu button').filter(has_text='Use the PDF').click(); pg.wait_for_timeout(800)
     print('posted:',posted,'| schedule of values patched:',sov)
     cell=pg.locator('.pay-703 td.pay-pdf-diff').first; cell.click(button='right'); pg.wait_for_timeout(300)
     print('menu:',pg.inner_text('.pay-line-menu').replace('\n',' | '))

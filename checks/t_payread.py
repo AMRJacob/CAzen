@@ -14,4 +14,4 @@ with sync_playwright() as p:
     print('says:',pg.inner_text('.pay-read-sum')[:160])
     print('rows:',[[c for c in r.split('\t')][:3]+[i.input_value() for i in pg.locator('.pay-read-table tbody tr').nth(n).locator('input').all()] for n,r in enumerate(pg.locator('.pay-read-table tbody tr').all_inner_texts())])
     pg.screenshot(path='payread.png'); pg.click('.pay-read-full button.primary'); pg.wait_for_timeout(900)
-    print('kept:',[(s['sov_line_id'][-4:],s['this_period'],s['stored']) for s in sent],'| dialog closed:',pg.locator('.pay-read-full').count()==0,'| errors:',errs); b.close()
+    print('kept:',[(s['sov_line_id'][-4:],s['this_period'],s['stored']) for s in [x for y in sent for x in (y if isinstance(y,list) else [y])] if 'this_period' in s], '| scheduled from the PDF:',[(s['sov_line_id'][-4:],s['scheduled']) for y in sent if isinstance(y,list) for s in y],'| dialog closed:',pg.locator('.pay-read-full').count()==0,'| errors:',errs); b.close()

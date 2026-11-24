@@ -15,7 +15,9 @@ import type { PdfRead } from '../lib/payCompare'
  * line of the schedule of values. What its arithmetic bears out is filled in plainly; what it
  * does not is filled in red with the reason, and nothing is kept until it has been looked over.
  */
-export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, number, start, onStarted, periodTo }: {
+export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, number, start, onStarted, periodTo, checkOnly }: {
+  /** A certified application: the PDF's scheduled values and the comparison are kept; what was billed isn't touched. */
+  checkOnly?: boolean
   /** Add lines the PDF has to the schedule of values; returns their ids, in the same order. */
   onAddLines?: (lines: { item_no: string | null; description: string; scheduled_value: number; is_heading?: boolean; is_change_order?: boolean; approved_on?: string | null }[]) => Promise<string[]>
   /** The application's period, the default approval date of change order lines added from it. */
@@ -185,7 +187,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
           onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); void read(e.dataTransfer.files?.[0]) }}>
           <button className="link" disabled={!!busy} onClick={() => setOpen(true)}>
-            {busy ?? (known.some((k) => !k.heading) ? 'Read this period from the contractor’s PDF' : 'Read the schedule of values and this period from the contractor’s PDF')}
+            {busy ?? (checkOnly ? 'Read the contractor’s PDF to check this application' : known.some((k) => !k.heading) ? 'Read this period from the contractor’s PDF' : 'Read the schedule of values and this period from the contractor’s PDF')}
           </button>
           {!busy && <span className="muted small"> — or drop it here. Printed or scanned.</span>}
         </div>
@@ -401,9 +403,10 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                 </div>
                 <div className="actions pay-read-foot">
                   <button className="primary" disabled={!!busy || svWaiting} onClick={() => void keep()}>
-                    {busy ?? (adds.size ? `Add ${adds.size} ${adds.size === 1 ? 'line' : 'lines'} and put the figures in` : 'Put these in the application')}
+                    {busy ?? (checkOnly ? 'Check this application against the PDF' : adds.size ? `Add ${adds.size} ${adds.size === 1 ? 'line' : 'lines'} and put the figures in` : 'Put these in the application')}
                   </button>
                   <button className="link" onClick={close}>Cancel</button>
+                  {checkOnly && <span className="muted small">Certified: only its scheduled values come from the PDF; what was billed stays.</span>}
                   {svWaiting && <span className="small pay-read-warn">Choose what to do with the changed scheduled values first.</span>}
                 </div>
               </div>

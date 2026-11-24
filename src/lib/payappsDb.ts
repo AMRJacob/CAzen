@@ -92,6 +92,15 @@ export async function setBilled(payAppId: string, sovLineId: string, value: Bill
   if (error) throw error
 }
 
+/** Every line's scheduled value on one application at once, as a PDF read for it has them. */
+export async function setScheduledMany(payAppId: string, values: { id: string; scheduled: number }[]): Promise<void> {
+  if (!values.length) return
+  const { error } = await db()
+    .from('pay_app_lines')
+    .upsert(values.map((v) => ({ pay_app_id: payAppId, sov_line_id: v.id, scheduled: v.scheduled })), { onConflict: 'pay_app_id,sov_line_id' })
+  if (error) throw error
+}
+
 /**
  * A line's scheduled value on one application (migration 0052), or null to go back to the value
  * carried from the application before. Later applications carry it on until one sets its own.
