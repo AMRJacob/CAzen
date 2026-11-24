@@ -3727,3 +3727,9 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .upload-panel td.page-pick { cursor: pointer; user-select: none; }
 .upload-panel tr.picked td { background: var(--moss-soft); }
 .kept-spec { display: block; }
+/* The pages chosen in the upload screen, and what to make them. */
+.pick-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin: 8px 0; background: var(--moss-soft); border: 1px solid var(--moss); border-radius: 10px; }
+.change-manual tr.cm-page td { background: var(--wash); padding-top: 3px; padding-bottom: 3px; }
+.change-manual tr.cm-page.picked td { background: var(--moss-soft); }
+.change-manual td.page-pick { cursor: pointer; user-select: none; white-space: nowrap; padding-left: 18px; }
+.cm-fold { text-decoration: none; }

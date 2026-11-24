@@ -11,6 +11,33 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:30 CST (no dragging in the upload; choose pages and move them; titles from known numbers; "Revision date")
+
+Jacob, 09:26–09:27.
+
+- **Dragging is gone from the upload screen** — it was keeping him from selecting text in the
+  rows. Rows and manual sections no longer drag; the drop areas are plain.
+- **Choose pages, then move them.** Click a page number to choose it, Shift-click for a run,
+  Ctrl-click for one more — in the drawings list or in a manual section's page list (the choice
+  is kept by each page's place in the upload, so it spans both). A bar appears at the top:
+  *N pages chosen — make them: Drawings · Project manual · Cover · Clear*. Right-click still
+  offers the same three for the chosen pages.
+- **Each manual section's pages, folded.** The section's *Upload pages* is now a ▸ toggle,
+  closed by default; open, it lists each page (its place in the upload, its footer page, *view*,
+  whether it was read from a scan) with *It's a drawing*, and its page numbers can be chosen
+  for the bar or right-clicked.
+- **A sheet number the project already has brings its title.** Typing a number that is a
+  current sheet fills the title from it, until the title is typed over by hand.
+- **"Sheet date" is now "Revision date"**, in the upload table and the page preview, and in a
+  sheet's history ("· revision date 11/20/2026"). It is also in the sheet's own info: the
+  Rename panel on the drawings list has a **Revision date** field for the current revision,
+  saved with the rest.
+
+`checks/t_resort.py` (bar, folded page list, no draggable rows, title from A-101 and kept when
+typed over; the re-sort as before), `checks/t_revdate.py`. Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 10:05 CST (moving pages: right-click and several at once; a saved document's pages opened again)
 
 Jacob, 09:06: allow pages to be moved in the upload screen, and let the upload screen be

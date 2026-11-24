@@ -18,6 +18,7 @@ fx={'issuances':lambda r: ISS if 'pgrst.object' in (r.headers.get('accept') or '
                        {'id':'srB','revision_label':'Addendum 1','sheet_date':None,'title_at_rev':'ROOF PLAN','file_path':'r2:a202','sheets':{'number':'A-202','title':'ROOF PLAN'}}],
     'spec_revisions':[{'id':'spP','section_id':'sec-paint','revision_index':1,'title_at_rev':'PAINTING','pages':5,'file_path':'r2:spec','spec_sections':{'number':'09 91 00','title':'PAINTING'}}],
     'current_specs':[],'spec_sections':[],
+    'current_sheets':[{'sheet_id':'s-a101','project_id':PROJ,'number':'A-101','title':'FIRST FLOOR PLAN','discipline':'A','filed_under':None,'is_void':False,'revision_id':'r-a101','revision_index':0,'revision_label':'Bid Set','file_path':'r2:a201','issuance_kind':'bid_set','issuance_number':'1','issued_on':'2026-09-01','revision_count':1}],
     'POST:sheets':rec('sheets',{'id':'sh-new','title':'X'}),'POST:sheet_revisions':rec('sheet_revisions',{'id':'sr-new'}),
     'POST:spec_sections':rec('spec_sections',{'id':'sec-new','title':'X'}),'POST:spec_revisions':rec('spec_revisions',{'id':'sp-new'}),
     'PATCH:spec_revisions':rec('spec_revisions.patch'),'PATCH:issuances':rec('issuances.patch'),'PATCH:issued_forms':rec('issued_forms.patch'),
@@ -52,11 +53,18 @@ with sync_playwright() as p:
     print('chosen:',pg.locator('.upload-panel tr.picked').count())
     rows.nth(1).locator('td.page-pick').click(button='right'); pg.click('.pick-menu button:has-text("Drawings")'); pg.wait_for_timeout(300)
     print('both → drawings by right-click:',roles(pg))
-    # drag a manual section down to the drawings
-    src=pg.locator('.change-manual-table tbody tr').first.bounding_box(); dst=rows.nth(0).bounding_box()
-    pg.mouse.move(src['x']+30,src['y']+src['height']/2); pg.mouse.down(); pg.mouse.move(src['x']+60,src['y']+30,steps=4)
-    pg.mouse.move(dst['x']+200,dst['y']+dst['height']/2,steps=10); pg.mouse.up(); pg.wait_for_timeout(600)
-    print('section dragged to drawings:',roles(pg),'| manual sections:',msec())
+    # a manual section's pages, unfolded; two chosen with Shift and made drawings with the bar
+    pg.locator('.change-manual-table .cm-fold').first.click(); pg.wait_for_timeout(200)
+    cm=pg.locator('.change-manual-table tr.cm-page td.page-pick')
+    print('pages listed under the section:',cm.count())
+    cm.nth(0).click(); cm.nth(1).click(modifiers=['Shift'])
+    print('bar:',pg.inner_text('.pick-bar').replace('\n',' '))
+    pg.click('.pick-bar button:has-text("Drawings")'); pg.wait_for_timeout(500)
+    print('after the bar:',roles(pg),'| manual sections:',msec(),'| rows draggable:',pg.locator('.upload-panel tr[draggable=true]').count())
+    # a typed number the project already has brings its title
+    r=pg.locator('.upload-panel table:not(.change-manual-table) > tbody > tr').nth(2)
+    r.locator('td:nth-child(5) input').fill('A-101'); print('title filled:',repr(r.locator('td:nth-child(6) input').input_value()))
+    r.locator('td:nth-child(6) input').fill('NEW TITLE'); r.locator('td:nth-child(5) input').fill('A-101'); print('kept when typed over:',repr(r.locator('td:nth-child(6) input').input_value()))
     pg.click('.upload-close'); pg.wait_for_timeout(500)
     # 2. a saved one, opened again
     pg.goto(BASE+'#/documents'); pg.wait_for_timeout(800)

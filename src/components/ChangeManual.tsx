@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { detectSections, placeOnPage, readManual, sectionInRegion, troubleText, FRONT, type ManualPage } from '../lib/pdf/splitManual'
 import { pageBody, type PageText, type Region } from '../lib/pdf/pageText'
 import { placeText, splicePages, suggestAction, type SpecAction, type Splice } from '../lib/pdf/changeDoc'
@@ -56,11 +56,15 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, onDragRow }: {
-  /** Start dragging a section's pages (by their place in the upload) out of the manual. */
-  onDragRow?: (ats: number[]) => (e: React.DragEvent) => void
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu }: {
   /** These pages (by their place in the upload) are drawings, not manual pages. */
   onDrawings?: (ats: number[]) => void
+  /** The pages chosen on the upload screen (by their place in the upload), shared with its drawings list. */
+  picked?: Set<number>
+  /** A page number clicked in a section's page list: choose it (Shift for a run, Ctrl for one more). */
+  onPick?: (at: number, e: React.MouseEvent, list: number[]) => void
+  /** A right-click on one of a section's pages: the screen's Drawings / Cover / Project manual menu. */
+  onMenu?: (at: number, e: React.MouseEvent) => void
   project: ProjectStore
   pages: SpecPageIn[]
   /** Written on each section revision: the set's mark, or its name. */
@@ -158,6 +162,10 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
 
   useEffect(() => { onPlan(plan) }, [plan, onPlan])
 
+  // Each section's own pages, folded away until asked for: a page that is not the manual's can be
+  // found and chosen there, and moved with the screen's bar or a right-click.
+  const [unfolded, setUnfolded] = useState<Set<string>>(new Set())
+  const allAts = pages.map((p) => p.at)
   const edit = (key: string, patch: Edit) => setEdits((es) => ({ ...es, [key]: { ...es[key], ...patch } }))
 
   return (
@@ -178,13 +186,16 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
             const partial = new Set(['late-start', 'short', 'missing', 'no-heading', 'no-end'])
             const trouble = r.s.trouble.filter((t) => r.action !== 'pages' || !partial.has(t.kind)).map(troubleText)
             return (
-              <tr key={r.key} className={r.include ? '' : 'skipped'} draggable={!!onDragRow} onDragStart={onDragRow?.(ats)}
-                title={onDragRow ? 'Drag down to the drawings if these pages are drawings' : undefined}>
+              <Fragment key={r.key}>
+              <tr className={r.include ? '' : 'skipped'}>
                 <td><input className={`cell mono ${r.include && (!r.number || twice.has(r.number)) ? 'bad' : ''}`} value={r.number} placeholder="09 91 00"
                   onChange={(e) => edit(r.key, { number: e.target.value })} aria-label="Section number" /></td>
                 <td><input className="cell" value={r.title} onChange={(e) => edit(r.key, { title: e.target.value })} aria-label={`Title of ${r.number}`} /></td>
                 <td className="small nowrap">
-                  {onPeek ? <button className="link" onClick={() => onPeek(ats[0])}>{span(ats)}</button> : span(ats)}
+                  <button className="link small cm-fold" aria-expanded={unfolded.has(r.key)}
+                    onClick={() => setUnfolded((u) => { const n = new Set(u); if (n.has(r.key)) n.delete(r.key); else n.add(r.key); return n })}>
+                    {unfolded.has(r.key) ? '▾' : '▸'} {span(ats)}
+                  </button>
                 </td>
                 <td className="small mono">{r.places.map(placeText).join(', ')}</td>
                 <td>
@@ -215,6 +226,25 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
                   {onDrawings && <button className="link small" onClick={() => onDrawings(ats)} title="Move these pages down to the drawings">They’re drawings</button>}
                 </td>
               </tr>
+              {unfolded.has(r.key) && r.s.pages.map((pi, k) => {
+                const at = pages[pi].at
+                return (
+                  <tr key={`p${at}`} className={`cm-page${picked?.has(at) ? ' picked' : ''}`} data-at={at}
+                    onContextMenu={onMenu ? (e) => { e.preventDefault(); onMenu(at, e) } : undefined}>
+                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => onPick?.(at, e, allAts)}>
+                      page {at + 1}
+                    </td>
+                    <td className="small muted" colSpan={2}>
+                      {onPeek && <button className="link small" onClick={() => onPeek(at)}>view</button>}
+                      {' '}footer page {placeText(r.places[k])}{pages[pi].text.scanned ? ' · read from a scan' : ''}
+                    </td>
+                    <td colSpan={4} className="small">
+                      {onDrawings && <button className="link small" onClick={() => onDrawings([at])}>It’s a drawing</button>}
+                    </td>
+                  </tr>
+                )
+              })}
+              </Fragment>
             )
           })}
         </tbody>

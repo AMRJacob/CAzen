@@ -35,7 +35,7 @@ import { classifyPages, countOf, readCover, type CoverReading, type PageRole } f
 import { ChangeManual, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
 import { reopenIssuance, takeAwayMoved, type Origin, type Reopened } from '../lib/resort'
-import { setFolderName } from '../lib/sheets'
+import { setFolderName, setSheetDate, sheetDates } from '../lib/sheets'
 import { useColumnWidths } from '../components/ResizableColumns'
 
 /** The drawings register's columns, in order, for the widths a person can set by hand. */
@@ -229,6 +229,7 @@ export default function Documents() {
           firmId={firm.id}
           order={order}
           existingNumbers={new Set(sheets.map((s) => s.number))}
+          existingTitles={new Map(sheets.filter((s) => s.title).map((s) => [s.number.toUpperCase(), s.title!]))}
           onDone={() => { setResorting(null); load() }}
           onCancel={() => setResorting(null)}
         />
@@ -239,6 +240,7 @@ export default function Documents() {
           firmId={firm.id}
           order={order}
           existingNumbers={new Set(sheets.map((s) => s.number))}
+          existingTitles={new Map(sheets.filter((s) => s.title).map((s) => [s.number.toUpperCase(), s.title!]))}
           initialFiles={dropped}
           onDone={() => { setUploading(false); setDropped(undefined); load() }}
           onCancel={() => { setUploading(false); setDropped(undefined) }}
@@ -528,11 +530,22 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<SheetRevision[] | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [editing, setEditing] = useState<{ number: string; title: string; filedUnder: string } | null>(null)
+  const [editing, setEditing] = useState<{ number: string; title: string; filedUnder: string; revDate: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // The current revision's own date (the one printed on the sheet), as it was when the panel opened.
+  const revDateWas = useRef('')
 
-  const startEdit = () => { setProblem(null); setEditing({ number: sheet.number, title: niceTitle(sheet.title), filedUnder: sheet.filed_under ?? '' }) }
+  const startEdit = () => {
+    setProblem(null)
+    setEditing({ number: sheet.number, title: niceTitle(sheet.title), filedUnder: sheet.filed_under ?? '', revDate: '' })
+    revDateWas.current = ''
+    sheetDates([sheet.revision_id]).then((m) => {
+      const d = (m.get(sheet.revision_id) ?? '').slice(0, 10)
+      revDateWas.current = d
+      setEditing((e) => (e ? { ...e, revDate: d } : e))
+    }).catch(() => {})
+  }
 
   const onEditKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
@@ -549,6 +562,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
     setProblem(null)
     try {
       await renameSheet(sheet.sheet_id, editing, sheet.revision_id)
+      if (editing.revDate !== revDateWas.current) await setSheetDate(sheet.revision_id, editing.revDate || null)
       setEditing(null)
       setHistory(null)
       onChanged()
@@ -621,6 +635,11 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
               <input value={editing.title} aria-label="Sheet title"
                 onChange={(e) => setEditing({ ...editing, title: e.target.value })} onKeyDown={onEditKey} />
             </label>
+            {/* The date of the sheet's current revision, as printed on it (often not the set's date). */}
+            <label className="f-date">Revision date
+              <input type="date" value={editing.revDate} aria-label="Revision date"
+                onChange={(e) => setEditing({ ...editing, revDate: e.target.value })} onKeyDown={onEditKey} />
+            </label>
             {/* Where the sheet is filed, for the sheets whose numbers don't say their trade. The
                 number stays as printed; only the list it appears in changes. */}
             <label className="f-filed">Filed under
@@ -659,7 +678,7 @@ function SheetRow({ sheet, project, order, isAdmin, onChanged, onOpen, picked, a
               {r.issuances ? usDate(r.issuances.issued_on) : ''}
               {/* The sheet's own date, where its title block carried one that isn't the set's. */}
               {r.sheet_date && r.sheet_date !== r.issuances?.issued_on &&
-                <span className="muted small" title="The date printed on the sheet itself"> · sheet {usDate(r.sheet_date)}</span>}
+                <span className="muted small" title="The revision date printed on the sheet itself"> · revision date {usDate(r.sheet_date)}</span>}
             </td>
             <td className="col-history">{r.revision_index === sheet.revision_index ? <span className="tag">current</span> : <span className="tag muted">superseded</span>}</td>
             <td className="right nowrap">
@@ -891,7 +910,9 @@ function RolePick({ value, onChange, label }: { value: PageRole; onChange: (r: P
   )
 }
 
-export function UploadIssuance({ project, firmId, order, existingNumbers, initialFiles, onDone, onCancel, reopen }: {
+export function UploadIssuance({ project, firmId, order, existingNumbers, existingTitles, initialFiles, onDone, onCancel, reopen }: {
+  /** The project's current sheets' titles by number, to fill a title when its number is typed. */
+  existingTitles?: Map<string, string>
   project: Project
   initialFiles?: File[]
   /** A change document already saved, opened again as its pages to be sorted again. */
@@ -992,42 +1013,33 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   // Cover, manual or drawing, page by page. A page whose part was chosen by hand keeps it.
   const setRole = (i: number, role: PageRole) =>
     setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, role, roleByHand: true } : x)))
-  // Pages dragged between the project manual and the drawings: a drawing dropped on the manual is a
-  // manual page, a manual section dropped on the drawings is drawings.
-  const DRAG = 'application/x-cazen-pages'
-  const [dropOn, setDropOn] = useState<'manual' | 'drawings' | null>(null)
+  // Pages moved between the project manual, the cover and the drawings, by their place in the upload.
   const pagesTo = (ats: number[], role: PageRole) =>
     setDrafts((ds) => ds.map((d) => (ats.includes(d.pageIndex) ? { ...d, role, roleByHand: true, include: true } : d)))
-  const dragPages = (ats: number[]) => (e: React.DragEvent) => { e.dataTransfer.setData(DRAG, JSON.stringify(ats)); e.dataTransfer.effectAllowed = 'move' }
 
-  // Pages chosen together — click the page number; Shift-click a run, Ctrl-click one more — to be
-  // moved at once, by right-click or by dragging any of them.
+  // Pages chosen together — click a page number; Shift-click for a run, Ctrl-click one more — in
+  // the drawings list or in a manual section's page list, then moved at once with the bar that
+  // appears or a right-click. Kept by each page's place in the upload, so the choice spans both.
   const [sel, setSel] = useState<Set<number>>(new Set())
   const lastSel = useRef<number | null>(null)
-  const pickRow = (i: number, e: React.MouseEvent) => {
+  const pickPage = (at: number, e: React.MouseEvent, list: number[]) => {
     setSel((cur) => {
       const n = new Set(e.ctrlKey || e.metaKey || e.shiftKey ? cur : [])
-      if (e.shiftKey && lastSel.current != null) {
-        const [a, b] = [Math.min(lastSel.current, i), Math.max(lastSel.current, i)]
-        for (let k = a; k <= b; k++) n.add(k)
-      } else if (cur.has(i) && (e.ctrlKey || e.metaKey)) n.delete(i)
-      else if (cur.has(i) && cur.size === 1 && !e.shiftKey) n.delete(i)
-      else n.add(i)
+      const from = lastSel.current != null ? list.indexOf(lastSel.current) : -1
+      const to = list.indexOf(at)
+      if (e.shiftKey && from >= 0 && to >= 0) {
+        for (let k = Math.min(from, to); k <= Math.max(from, to); k++) n.add(list[k])
+      } else if (cur.has(at) && (e.ctrlKey || e.metaKey)) n.delete(at)
+      else if (cur.has(at) && cur.size === 1 && !e.shiftKey) n.delete(at)
+      else n.add(at)
       return n
     })
-    lastSel.current = i
+    lastSel.current = at
   }
-  /** The pages (by their place in the upload) a right-click or a drag on row i acts on. */
-  const pagesFor = (i: number) => (sel.has(i) ? [...sel].sort((a, b) => a - b) : [i]).map((k) => drafts[k].pageIndex)
+  /** The pages (by their place in the upload) a right-click on a page acts on: the chosen ones, if it is one of them. */
+  const pagesFor = (at: number) => (sel.has(at) ? [...sel].sort((a, b) => a - b) : [at])
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
-  const dropZone = (where: 'manual' | 'drawings', role: PageRole) => ({
-    onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setDropOn(where) } },
-    onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) setDropOn(null) },
-    onDrop: (e: React.DragEvent) => {
-      const raw = e.dataTransfer.getData(DRAG); setDropOn(null)
-      if (raw) { e.preventDefault(); pagesTo(JSON.parse(raw) as number[], role) }
-    },
-  })
+  const moveChosen = (role: PageRole) => { pagesTo([...sel], role); setSel(new Set()) }
 
   // The cover read again whenever which pages make it up changes; fields typed by hand stay.
   const coverKey = drafts.filter((d) => d.include && d.role === 'cover').map((d) => d.pageIndex).join(',')
@@ -1073,7 +1085,17 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
   useEffect(() => { if (initialFiles?.length) onFiles(initialFiles) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const type = (i: number, k: 'number' | 'title' | 'revision' | 'date', v: string) =>
-    setDrafts(drafts.map((d, j) => (j === i ? { ...d, [k]: v, touched: { ...d.touched, [k]: true } } : d)))
+    setDrafts(drafts.map((d, j) => {
+      if (j !== i) return d
+      const next = { ...d, [k]: v, touched: { ...d.touched, [k]: true } }
+      // A sheet number typed that the project already has brings its title with it, until the
+      // title is typed over by hand.
+      if (k === 'number' && !d.touched.title) {
+        const known = existingTitles?.get(v.trim().toUpperCase())
+        if (known) next.title = known
+      }
+      return next
+    }))
 
   // Choose a template for one sheet (or 'none' to type it in, or null for best fit) and re-read it.
   const pin = (i: number, value: string | null) => {
@@ -1464,13 +1486,24 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             </div>
           )}
           {/* The project manual's pages first, with the manual's own tools; the drawings below. */}
-          {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div className={`drop-area${dropOn === 'manual' ? ' on' : ''}`} {...dropZone('manual', 'spec')}>
+          {sel.size > 0 && (
+            <div className="pick-bar" role="toolbar" aria-label="Move the chosen pages">
+              <strong>{sel.size} {sel.size === 1 ? 'page' : 'pages'} chosen</strong>
+              <span className="muted small">make {sel.size === 1 ? 'it' : 'them'}:</span>
+              <button onClick={() => moveChosen('sheet')}>Drawings</button>
+              <button onClick={() => moveChosen('spec')}>Project manual</button>
+              <button onClick={() => moveChosen('cover')}>Cover</button>
+              <button className="link" onClick={() => setSel(new Set())}>Clear</button>
+            </div>
+          )}
+          {(specPages.length > 0 || smallLetter.length > 0 || !!DOCUMENT_FOR[kind]) && <div>
             {specPages.length > 0 ? (
               <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
-                onDrawings={(ats) => pagesTo(ats, 'sheet')} onDragRow={dragPages} />
+                onDrawings={(ats) => pagesTo(ats, 'sheet')}
+                picked={sel} onPick={pickPage} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })} />
             ) : (
-              <div className="drop-empty muted small">Project manual pages go here. Drag a page from the drawings below to make it one.</div>
+              <div className="drop-empty muted small">Project manual pages go here. Choose pages in the drawings below (click their page numbers) and make them Project manual.</div>
             )}
           </div>}
           {sizeWarning && (
@@ -1537,8 +1570,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
             </div>
           </div>
 
-          <div className={`drop-area${dropOn === 'drawings' ? ' on' : ''}`} {...dropZone('drawings', 'sheet')}>
-          <p className="muted small drop-hint">Drawings and cover pages. Drag a row up to the project manual, or a manual section down here, to move it.</p>
+          <div>
+          <p className="muted small drop-hint">Drawings and cover pages. Click page numbers to choose them — Shift-click for a run — then move them with the bar above, or right-click.</p>
           <table>
             <thead><tr>
               <th>
@@ -1547,20 +1580,20 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                   ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
                   onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
               </th>
-              <th>Page</th><th>View</th><th title="A drawing; the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Sheet date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th>View</th><th title="A drawing; the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Revision date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
+                const listed = drafts.filter((x) => !(x.role === 'spec' && x.include && x.origin?.t !== 'spec')).map((x) => x.pageIndex)
                 // Manual pages are with the project manual above, not here among the drawings.
                 // (Re-sorting a saved document, its pages already in the manual are listed here too, so
                 // each can be moved on its own.)
                 if (d.role === 'spec' && d.include && d.origin?.t !== 'spec') return null
                 return (
-                  <tr key={d.pageIndex} className={`${d.include ? '' : 'skipped'}${sel.has(i) ? ' picked' : ''}`} draggable onDragStart={(e) => dragPages(pagesFor(i))(e)}
-                    title="Drag to the project manual above to make it a manual page; right-click for Drawings, Cover or Project manual"
+                  <tr key={d.pageIndex} className={`${d.include ? '' : 'skipped'}${sel.has(d.pageIndex) ? ' picked' : ''}`}
                     onContextMenu={(e) => {
                       if ((e.target as HTMLElement).closest('input, select, textarea')) return
-                      e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(i) })
+                      e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(d.pageIndex) })
                     }}>
                     <td>
                       {/* onClick rather than onChange: it carries the shift key, and by the time it
@@ -1569,7 +1602,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                         onClick={(e) => tick(i, (e.target as HTMLInputElement).checked, e.shiftKey)}
                         aria-label={`Include page ${d.pageIndex + 1}`} />
                     </td>
-                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => pickRow(i, e)}>{d.pageIndex + 1}</td>
+                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => pickPage(d.pageIndex, e, listed)}>{d.pageIndex + 1}</td>
                     <td className="thumb-cell">
                       <PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} />
                     </td>
@@ -1694,7 +1727,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, initia
                     onChange={(e) => type(i, 'revision', e.target.value)} />
                 </label>
                 {datesRead && (
-                  <label className="pv-field pv-date">Sheet date
+                  <label className="pv-field pv-date">Revision date
                     <input type="date" value={d.role === 'sheet' ? d.date : ''} disabled={d.role !== 'sheet'}
                       onChange={(e) => type(i, 'date', e.target.value)} />
                   </label>
