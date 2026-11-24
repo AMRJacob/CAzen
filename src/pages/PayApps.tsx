@@ -725,7 +725,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   // Where money went: a line whose scheduled value changed on this application, linked to the line
   // it moved to (or came from). Right-click the one, click the other.
   const moves = app.moves ?? []
-  const [moving, setMoving] = useState<{ line: string; out: boolean } | null>(null)
+  // The amount defaults to all of the line's change not yet linked, and can be changed before the other line is clicked.
+  const [moving, setMoving] = useState<{ line: string; out: boolean; amount: string } | null>(null)
   useEffect(() => {
     if (!moving) return
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoving(null) }
@@ -741,6 +742,14 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   }
   /** The part of a line's change no move yet accounts for. */
   const unlinked = (id: string) => Math.max(0, Math.abs(changeOf(id)) - moves.filter((m) => m.from === id || m.to === id).reduce((n, m) => n + m.amount, 0))
+  /** A line's value once its moves are counted, set against the PDF's (or its own) value. */
+  const standing = (id: string) => {
+    const f = figures.lines.find((x) => x.line.id === id)
+    if (!f) return null
+    const d = diffAt(id, 'C')
+    const now = Math.round((f.carried + moves.filter((m) => m.to === id).reduce((n, m) => n + m.amount, 0) - moves.filter((m) => m.from === id).reduce((n, m) => n + m.amount, 0)) * 100) / 100
+    return { now, target: d ? d.pdf : f.line.scheduled_value }
+  }
   /**
    * Lines tied together by moves: yellow while the moves leave some of a change unaccounted for,
    * green once every line in the group comes to what the PDF has.
@@ -753,7 +762,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     for (const id of new Set(moves.flatMap((m) => [m.from, m.to]))) groups.set(top(id), [...(groups.get(top(id)) ?? []), id])
     const out = new Map<string, 'linked' | 'settled'>()
     for (const ids of groups.values()) {
-      const settled = ids.every((id) => unlinked(id) < 0.005)
+      const settled = ids.every((id) => { const st = standing(id); return !!st && Math.abs(st.now - st.target) < 0.005 })
       for (const id of ids) out.set(id, settled ? 'settled' : 'linked')
     }
     return out
@@ -765,9 +774,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     if (!moving) return
     const from = moving.out ? moving.line : other, to = moving.out ? other : moving.line
     setMoving(null)
-    const a = unlinked(moving.line), b = unlinked(other)
-    const amount = a && b ? Math.min(a, b) : a || b
-    if (!amount) { onTrouble('Neither line has a change left to account for on this application.'); return }
+    const amount = Math.round((Number(moving.amount) || 0) * 100) / 100
+    if (amount <= 0) { onTrouble('The amount moved has to be more than $0.'); return }
     await saveMoves([...moves, { from, to, amount }])
   }
   const roundCell = (exact: number | undefined, pct = false, lineId: string | null = null, col?: PdfCol) => {
@@ -811,6 +819,14 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
                       moves={moves.flatMap((m, k) => m.from === l.id || m.to === l.id ? [{
                         text: `${m.from === l.id ? 'moved to' : 'moved from'} ${(() => { const o = data.lines.find((x) => x.id === (m.from === l.id ? m.to : m.from)); return o?.item_no ? `line ${o.item_no}` : (o?.description ?? '').slice(0, 18) })()} ${money(m.amount)}`,
                         title: m.from === l.id ? `${money(m.amount)} moved to ${lineName(m.to)}` : `${money(m.amount)} moved here from ${lineName(m.from)}`,
+                        total: (() => {
+                          const other = m.from === l.id ? m.to : m.from
+                          const st = standing(other)
+                          if (!st) return ''
+                          const no = data.lines.find((x) => x.id === other)?.item_no
+                          const off = Math.round((st.now - st.target) * 100) / 100
+                          return `${no ? `line ${no}` : lineName(other)} total ${money(st.now)}${Math.abs(off) < 0.005 ? ' ✓' : ` of ${money(st.target)} (${signed(off)})`}`
+                        })(),
                         onCancel: () => void saveMoves(moves.filter((_, j) => j !== k)),
                       }] : [])}
                       onMenu={(x, y) => setSvMenu({ lineId: l.id, x, y })}
@@ -988,7 +1004,11 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         <h3>Continuation sheet</h3>
         {moving && (
           <div className="notice pay-moving">
-            <span>Click the line the {money(Math.abs(changeOf(moving.line)))} {moving.out ? 'moved to' : 'came from'} ({lineName(moving.line)}).</span>
+            <span>
+              <MoneyInput className="cell mono right pay-moving-amount" value={moving.amount} aria-label="Amount moved" autoFocus onFocus={(e) => e.target.select()}
+                onChange={(raw) => setMoving((m) => (m ? { ...m, amount: raw } : m))} />
+              {' '}{moving.out ? 'moved from' : 'moved to'} line {data.lines.find((x) => x.id === moving.line)?.item_no ?? lineName(moving.line)} — click the line it {moving.out ? 'moved to' : 'came from'}.
+            </span>
             <div className="notice-actions"><button className="link" onClick={() => setMoving(null)}>Cancel</button></div>
           </div>
         )}
@@ -1208,7 +1228,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           const set = async (n: number | null) => { setSvMenu(null); try { await setScheduledHere(app.id, svMenu.lineId, n); onChanged() } catch (e) { onTrouble(message(e)) } }
           const items: { label: string; note?: string; run: () => void }[] = []
           const ch = changeOf(svMenu.lineId)
-          if (ch) items.push({ label: ch < 0 ? 'Moved to a different line…' : 'Moved from a different line…', note: `${signed(ch)} on this application — then click that line`, run: () => { setSvMenu(null); setMoving({ line: svMenu.lineId, out: ch < 0 }) } })
+          if (ch) items.push({ label: ch < 0 ? 'Moved to a different line…' : 'Moved from a different line…', note: `${signed(ch)} on this application — then click that line`, run: () => { setSvMenu(null); setMoving({ line: svMenu.lineId, out: ch < 0, amount: String(unlinked(svMenu.lineId) || Math.abs(ch)) }) } })
           if (d && editable) items.push({ label: `Use the PDF’s ${money(d.pdf)}`, note: `${signed(d.pdf - d.app)} on this application and the ones after it`, run: () => void set(d.pdf) })
           if (editable) items.push({ label: 'Enter a value for this application…', run: () => { setSvMenu(null); setSvEdit(svMenu.lineId) } })
           if (f.scheduledHere && editable) items.push({ label: `Back to ${money(f.carried)}`, note: index ? `carried from Application ${data.applications[index - 1].number}` : 'the schedule of values', run: () => void set(null) })
@@ -1356,7 +1376,7 @@ function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCa
   link?: 'linked' | 'settled'
   f: import('../lib/payapps').LineFigures
   /** Money linked as moved to or from this line on this application. */
-  moves: { text: string; title: string; onCancel: () => void }[]
+  moves: { text: string; title: string; total: string; onCancel: () => void }[]
   diff?: Discrepancy
   editable: boolean
   editing: boolean
@@ -1401,6 +1421,7 @@ function ScheduledCell({ f, diff, editable, editing, before, onMenu, onSet, onCa
       {moves.map((m, i) => (
         <div key={i} className="pay-sv-move" title={m.title}>
           {m.text}<button className="link small" title="Undo this link" onClick={(e) => { e.stopPropagation(); m.onCancel() }}>✕</button>
+          {m.total && <div className="pay-sv-move-total">{m.total}</div>}
         </div>
       ))}
     </td>
