@@ -14,7 +14,7 @@ import { Money } from '../components/Money'
 import { PdfPreview } from '../components/PdfPreview'
 import { putFile, readFile, safeName, SECTIONS } from '../lib/files'
 import { payText } from '../lib/pdf/payText'
-import { againstPdf, COL_SAYS, ownArithmetic, whyTheyDiffer, WHOSE_SAYS, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
+import { againstPdf, COL_SAYS, ownArithmetic, whyTheyDiffer, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
@@ -538,22 +538,22 @@ function datesTrouble(data: LoadedContract, index: number): string[] {
   const app = data.applications[index]
   const out: string[] = []
   const pdfTo = app.pdf_read?.periodTo
-  if (pdfTo && pdfTo !== app.period_to) out.push(`The contractor’s PDF has the period ending ${usDate(pdfTo)}; CAzen has ${usDate(app.period_to)}.`)
+  if (pdfTo && pdfTo !== app.period_to) out.push(`Period on the PDF: ${usDate(pdfTo)}. In CAzen: ${usDate(app.period_to)}.`)
   const same = data.applications.filter((a) => a.id !== app.id && a.period_to === app.period_to).map((a) => a.number)
-  if (same.length) out.push(`Application${same.length === 1 ? '' : 's'} ${same.join(', ')} ${same.length === 1 ? 'has' : 'have'} the same period end in CAzen (${usDate(app.period_to)}), so CAzen can’t tell which change orders came before which application.`)
+  if (same.length) out.push(`Same period end as Application${same.length === 1 ? '' : 's'} ${same.join(', ')} (${usDate(app.period_to)}).`)
   else {
     const before = data.applications[index - 1]
-    if (before && before.period_to > app.period_to) out.push(`The period ends ${usDate(app.period_to)}, before Application ${before.number}’s (${usDate(before.period_to)}).`)
+    if (before && before.period_to > app.period_to) out.push(`Period ends before Application ${before.number}’s (${usDate(before.period_to)}).`)
   }
-  if (app.pdf_read && !pdfTo) out.push('The PDF’s own period wasn’t read when it came in, so CAzen can’t compare the dates yet.')
+  if (app.pdf_read && !pdfTo) out.push('The PDF’s period hasn’t been read.')
   return out
 }
 
 /** A cause in a word or two, for the table of applications. */
 const CAUSE_SHORT: Record<string, string> = {
-  own: 'Contractor’s cover sheet doesn’t add up', misread: 'A misread or typo on the PDF', dates: 'Dates',
+  own: 'PDF doesn’t add up', misread: 'Misread or typo', dates: 'Dates',
   co: 'Change orders', previous: '“From previous”', scheduled: 'Scheduled values', entered: 'This period or stored',
-  retainage: 'Retainage rounding', other: 'Completed or balance', cover: 'Cover sheet totals',
+  retainage: 'Retainage', other: 'Completed or balance', cover: 'Cover sheet totals',
 }
 
 /**
@@ -871,7 +871,7 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
           <button className={`pay-verdict ${why.length ? 'off' : 'ok'}`}
             onClick={() => document.querySelector('.pay-against')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             {why.length
-              ? <><strong>✗ {diffs.length ? 'Differs from the contractor’s PDF' : 'Something to look at'}</strong> — {why.filter((w) => w.key !== 'cover' || why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}<span className="muted"> · see why below</span></>
+              ? <><strong>✗ {diffs.length ? 'Differs from the contractor’s PDF' : 'Something to look at'}</strong> — {why.filter((w) => w.key !== 'cover' || why.length === 1).map((w) => CAUSE_SHORT[w.key]).join(' · ')}</>
               : <><strong>✓ Agrees with the contractor’s PDF</strong>{pdf.g702?.due != null && <> — {money(pdf.g702.due)} due on both</>}</>}
           </button>
         )}
@@ -1235,47 +1235,43 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
         </span>
       </div>
       <p className="muted small">
-        {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
-        applications; only this period and stored were taken from the PDF.
+        {pdf.file ? <>{pdf.file} · read </> : 'Read '}{read.toLocaleDateString('en-US')} · only this period and stored are taken from the PDF; CAzen works out the rest.
       </p>
       {!why.length
-        ? <p className="pay-read-ok">Every figure on the contractor’s PDF agrees with CAzen’s arithmetic.</p>
+        ? <p className="pay-read-ok">Every figure agrees with the PDF.</p>
         : (
           <>
             <p className="pay-against-lead">
               {diffs.length
-                ? <><strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong>
-                  {why.length > 1 ? `, for ${why.length} reasons:` : ':'} <span className="muted small">red on the sheet below, with both figures on hover. Each reason says whose it is.</span></>
-                : <strong className="pay-read-warn">Every figure agrees, but:</strong>}
+                ? <strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'} from the PDF</strong>
+                : <strong className="pay-read-warn">The figures agree; see below</strong>}
             </p>
-            {why.map((grp) => (
-              <div key={grp.key} className={`pay-why pay-why-${grp.key}`}>
-                <div className="pay-why-title"><span className={`pay-whose pay-whose-${grp.whose}`}>{WHOSE_SAYS[grp.whose]}</span>{grp.title}</div>
-                {grp.detail && <p className="small pay-why-detail">{grp.detail}</p>}
-                {grp.key === 'retainage' && onRoundRetainage && <button className="primary-lite small" onClick={onRoundRetainage}>Round retainage that way</button>}
-                {grp.key === 'dates' && (onReadDates || onUseDates) && (
-                  <div className="pay-why-acts">
-                    {onReadDates && <button className="primary-lite small" onClick={onReadDates} disabled={readingDates}>{readingDates ? 'Reading the PDF…' : 'Read the period from the PDF'}</button>}
-                    {onUseDates && <button className="primary-lite small" onClick={onUseDates}>Use the PDF’s period{pdf.appliedOn ? ' and date' : ''} for this application</button>}
-                  </div>
-                )}
-                {grp.rows.length > 0 && <table className="pay-against-table">
-                  <thead><tr><th>Where</th><th>Column</th><th className="right">{grp.heads?.[0] ?? 'Contractor’s PDF'}</th><th className="right">{grp.heads?.[1] ?? 'CAzen'}</th><th className="right">Difference</th></tr></thead>
-                  <tbody>
-                    {grp.rows.map((d, i) => (
-                      <tr key={i}>
-                        <td>{d.where === 'g702' ? 'Cover sheet' : d.label}</td>
-                        <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
-                        <td className="right mono">{say(d, d.pdf)}</td>
-                        <td className="right mono">{say(d, d.app)}</td>
-                        <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>}
-                {grp.follow > 0 && <p className="muted small pay-why-follow">and {grp.follow} more {grp.follow === 1 ? 'figure that follows' : 'figures that follow'} from {grp.rows.length === 1 ? 'it' : 'these'}.</p>}
-              </div>
-            ))}
+            <table className="pay-against-table">
+              <thead><tr><th>Where</th><th>Column</th><th className="right">PDF</th><th className="right">CAzen</th><th className="right">Difference</th></tr></thead>
+              {why.map((grp) => (
+                <tbody key={grp.key} className={`pay-why pay-why-${grp.key}`}>
+                  <tr className="pay-why-head">
+                    <td colSpan={5}>
+                      <span className="pay-why-title">{grp.title}</span>
+                      {grp.detail && <span className="muted small"> — {grp.detail}</span>}
+                      {grp.follow > 0 && <span className="muted small"> (+{grp.follow} {grp.follow === 1 ? 'figure' : 'figures'} carried from {grp.rows.length === 1 ? 'it' : 'these'})</span>}
+                      {grp.key === 'retainage' && onRoundRetainage && <button className="primary-lite small" onClick={onRoundRetainage}>Round retainage the PDF’s way</button>}
+                      {grp.key === 'dates' && onReadDates && <button className="primary-lite small" onClick={onReadDates} disabled={readingDates}>{readingDates ? 'Reading the PDF…' : 'Read the period from the PDF'}</button>}
+                      {grp.key === 'dates' && onUseDates && <button className="primary-lite small" onClick={onUseDates}>Use the PDF’s period{pdf.appliedOn ? ' and date' : ''}</button>}
+                    </td>
+                  </tr>
+                  {grp.rows.map((d, i) => (
+                    <tr key={i}>
+                      <td>{d.where === 'g702' ? 'Cover sheet' : d.label}</td>
+                      <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
+                      <td className="right mono">{say(d, d.pdf)}</td>
+                      <td className="right mono">{say(d, d.app)}</td>
+                      <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </table>
           </>
         )}
     </div>

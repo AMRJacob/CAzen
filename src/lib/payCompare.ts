@@ -141,7 +141,7 @@ export function ownArithmetic(pdf: PdfRead): OwnSlip[] {
   if (odd.length === 1) return odd
   return failing.map((s) => {
     const [k, sign] = s.terms[s.terms.length - 1]
-    return { label: `${s.say[0].toUpperCase()}${s.say.slice(1)}`, printed: v[k] ?? 0, works: Math.round(((v[k] ?? 0) - off(s) / sign) * 100) / 100, sum: s.say }
+    return { label: OWN_SAYS[k], printed: v[k] ?? 0, works: Math.round(((v[k] ?? 0) - off(s) / sign) * 100) / 100, sum: s.say }
   })
 }
 
@@ -206,20 +206,20 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
       (slip.key === 'totalC' && x.where === 'total' && x.col === 'C') || (slip.key === 'totalG' && x.where === 'total' && x.col === 'G') || (slip.key === 'totalI' && x.where === 'total' && x.col === 'I')))
     if (d && near(d.app, slip.works, 0.01)) {
       take({ key: 'misread', whose: 'reading', rows: [d], follow: 0,
-        title: `${slip.label}: the PDF’s other figures give ${usd(slip.works)}, not ${usd(slip.printed)}`,
-        detail: `CAzen also has ${usd(slip.works)}. Either the figure was misread from the PDF or it is a typo on the PDF; the PDF side by side shows which. Nothing else follows from it.` })
+        title: `${slip.label}: the PDF’s own lines give ${usd(slip.works)}`,
+        detail: 'A misreading or a typo on the PDF.' })
     }
   }
   const unexplained = (ctx.own ?? []).filter((slip) => !groups.some((g) => g.key === 'misread' && g.title.startsWith(`${slip.label}:`)))
   if (unexplained.length) {
     const rows: Discrepancy[] = unexplained.map((s) => ({ where: 'g702', label: s.label, col: (s.key ?? 'due') as G702Key, pdf: s.printed, app: s.works }))
     groups.push({ key: 'own', whose: 'contractor', rows, follow: 0, heads: ['Printed on the PDF', 'The PDF’s other figures give'],
-      title: `The contractor’s cover sheet doesn’t add up (${unexplained.map((s) => s.sum).join('; ')})`,
-      detail: 'These are the contractor’s own figures checked against each other, before anything CAzen works out.' })
+      title: `The PDF’s cover sheet doesn’t add up (${unexplained.map((s) => s.sum).join('; ')})`,
+      detail: `CAzen column: what ${unexplained.map((s) => s.sum.split(' = ')[0]).join('; ')} give on the PDF` })
     // The same figures, where they also differ from CAzen, are shown here and not again.
     for (const s of unexplained) for (const d of diffs) if (s.key && d.col === s.key) used.add(d)
   }
-  if (ctx.dates?.length) groups.push({ key: 'dates', whose: 'cazen', rows: [], follow: 0, title: 'This application’s dates', detail: ctx.dates.join(' ') })
+  if (ctx.dates?.length) groups.push({ key: 'dates', whose: 'cazen', rows: [], follow: 0, title: 'Dates', detail: ctx.dates.join(' ') })
 
   // Change orders: line 2, and what line 2 carries into lines 3 and 9 and the sheet's totals.
   const theirs = diffs.find((d) => !used.has(d) && d.col === 'changeOrders')
@@ -236,14 +236,8 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     const when = dated.map((c) => `${usd(c.total)} ${c.date ? `approved ${usDay(c.date)}` : 'with no approval date'}`).join(', ')
     take({
       key: 'co', rows, follow: follows.length, whose: ctx.dates?.length ? 'cazen' : 'either',
-      title: theirs
-        ? `Change orders: the contractor’s cover sheet has ${usd(theirs.pdf)}; CAzen counts ${usd(theirs.app)} on this application`
-        : 'Change orders: the change order summary differs',
-      detail: theirs && theirs.app > theirs.pdf
-        ? `CAzen counts a change order on every application whose period ends on or after its approval date. This application’s period ends ${usDay(ctx.periodTo)}${ctx.pdfPeriodTo && ctx.pdfPeriodTo !== ctx.periodTo ? ` (the PDF’s ends ${usDay(ctx.pdfPeriodTo)})` : ''}; ${when || 'the change order lines'} — so CAzen puts them here. A wrong date on either side is the thing to change: the application’s period, or the change order’s approval date on its heading row.`
-        : theirs
-          ? `Lines marked as change order lines here, dated on or before ${usDay(ctx.periodTo)}, total ${usd(theirs.app)}. The rest are not marked as change order lines, or are dated after this period.`
-          : undefined,
+      title: 'Change orders',
+      detail: when ? `Counted from the approval date: ${when}.` : undefined,
     })
   }
 
@@ -263,14 +257,14 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     ds.slice(1).forEach((d) => used.add(d))
   }
   take({ key: 'scheduled', whose: 'contractor', rows: roots.C, follow: followers.C,
-    title: `Scheduled value differs on ${roots.C.length} ${roots.C.length === 1 ? 'line' : 'lines'}`,
-    detail: 'The contractor’s PDF moves money between lines, or adds to them, and the schedule of values in CAzen has not followed. A change to the schedule of values needs the owner’s and architect’s agreement or a change order.' })
+    title: 'Scheduled value',
+    detail: 'The PDF’s schedule of values differs from CAzen’s.' })
   take({ key: 'previous', whose: 'either', rows: roots.D, follow: followers.D,
-    title: `“From previous” differs on ${roots.D.length} ${roots.D.length === 1 ? 'line' : 'lines'}`,
-    detail: 'What the PDF says was billed before this application is not what CAzen’s earlier applications billed on these lines. Either an earlier application in CAzen has a different figure, or the contractor’s “from previous” doesn’t match what they billed before; the earlier PDFs show which.' })
+    title: 'From previous',
+    detail: 'Compared with what CAzen’s earlier applications billed.' })
   take({ key: 'entered', whose: 'cazen', rows: roots.E, follow: followers.E,
-    title: `This period or stored differs on ${roots.E.length} ${roots.E.length === 1 ? 'line' : 'lines'}`,
-    detail: 'These were changed here after the PDF was read, or put in by hand.' })
+    title: 'This period or stored',
+    detail: 'Changed in CAzen after the PDF was read.' })
 
   // Retainage alone, by a dollar or two: the contractor rounds it another way. With no line read
   // (an older reading), the retainage figures on the cover sheet and totals row say the same.
@@ -286,20 +280,14 @@ export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[
     (d.where === 'g702' && ['retainageTotal', 'earnedLessRetainage', 'previousCertificates', 'due', 'balanceToFinish'].includes(String(d.col)) && Math.abs(d.pdf - d.app) <= 3 * Math.max(1, roots.I.length))))
   retFollow.forEach((d) => used.add(d))
   take({ key: 'retainage', whose: 'rounding', rows: roots.I, follow: followers.I + retFollow.length,
-    title: roots.I.some((d) => d.where === 'line')
-      ? `Retainage differs ${small ? 'by a dollar or two ' : ''}on ${roots.I.length} ${roots.I.length === 1 ? 'line' : 'lines'}`
-      : `Retainage differs ${small ? 'by a dollar or two' : ''}`,
-    detail: small
-      ? (ctx.retainageFix
-        ? `The contractor rounds retainage another way: “${ctx.retainageFix.label}” makes every retainage figure agree.`
-        : 'The contractor rounds retainage another way; the Retainage column’s heading (right-click) sets how it is rounded.')
-      : undefined })
-  take({ key: 'other', whose: 'contractor', rows: roots.other, follow: followers.other, title: `Completed, balance or % differs on ${roots.other.length} ${roots.other.length === 1 ? 'line' : 'lines'}`,
-    detail: 'Scheduled value, from previous and this period agree on these lines, so the contractor’s own arithmetic across the row is off.' })
+    title: 'Retainage',
+    detail: small && ctx.retainageFix ? `“${ctx.retainageFix.label}” matches the PDF.` : undefined })
+  take({ key: 'other', whose: 'contractor', rows: roots.other, follow: followers.other, title: 'Completed, balance or %',
+    detail: 'Scheduled value, from previous and this period agree; the row’s arithmetic differs.' })
 
   // Whatever is left on the cover sheet and the totals row.
   const rest = diffs.filter((d) => !used.has(d))
   take({ key: 'cover', whose: 'either', rows: rest, follow: 0,
-    title: groups.length ? 'Cover sheet and totals, which follow from the above' : 'Cover sheet and totals' })
+    title: groups.length ? 'Totals carried from the above' : 'Cover sheet and totals' })
   return groups
 }
