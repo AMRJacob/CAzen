@@ -16,7 +16,10 @@ import { useDetailRender, usePageRender, usePageZoom } from '../lib/pdf/zoomPan'
 /** The gap kept between a page's edge and the window's when reading through. */
 const EDGE = 10
 
-export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked, startPage, onPageSeen }: {
+export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flow, docked, startPage, onPageSeen, mark, onMark }: {
+  /** With flow: a box on a page (where a figure was read), brought into view when it changes page or is first given. */
+  mark?: import('./PdfStrip').StripMark | null
+  onMark?: (m: import('./PdfStrip').StripMark) => void
   /** With flow: told the page being read (1-based) as it changes. */
   onPageSeen?: (n: number) => void
   /** With flow: the page to open at (1-based). */
@@ -46,6 +49,15 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
   const [error, setError] = useState<string | null>(null)
   const [stripZoom, setStripZoom] = useState(1)
   const [goTo, setGoTo] = useState({ page: startPage ?? 1, ask: startPage && startPage > 1 ? 1 : 0 })
+  // A box given (or moved to another page) is brought into view; dragging it about is not.
+  const markKey = mark ? `${mark.page}` : ''
+  const markAsk = useRef('')
+  useEffect(() => {
+    if (!mark || markAsk.current === markKey + mark.ask) return
+    markAsk.current = markKey + mark.ask
+    setGoTo((g) => ({ page: mark.page, ask: g.ask + 1 }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markKey, mark?.ask])
   // How the page now arriving was come to: read on into from the one before, or back into.
   const arrive = useRef<'top' | 'bottom' | null>(null)
 
@@ -212,7 +224,7 @@ export function PdfPreview({ bytes, title, onClose, onDownload, step, extra, flo
       </div>
       {extra && <div className="pv-strip">{extra}</div>}
       <div className="sv-body" ref={body}>
-        {flow && pdf && <PdfStrip pdf={pdf} zoom={stripZoom} onZoom={setStripZoom} onPage={seen} goTo={goTo} />}
+        {flow && pdf && <PdfStrip pdf={pdf} zoom={stripZoom} onZoom={setStripZoom} onPage={seen} goTo={goTo} mark={mark} onMark={onMark} />}
         <div className="sv-scroll" ref={scroller} style={flow ? { display: 'none' } : undefined}>
           {busy && <p className="muted sv-msg">Drawing the page…</p>}
           {error && <div className="notice error sv-msg">{error}</div>}

@@ -174,6 +174,7 @@ export interface MatchRead {
   periodTo?: string
   appliedOn?: string
   g702?: G702Read
+  g702At?: import('./payTable').TableRead['g702At']
   /** The grand total row as printed. */
   total?: PdfLine
 }
@@ -335,7 +336,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     rows, found: rows.filter((r) => r.found).length, unsure: rows.filter((r) => r.unsure).length,
     extra, missing: table.missing.filter((n) => !known.some((k) => sameItem(k.item_no, n) && pick.has(k.id))),
     totals, totalNotes, ...(table.application ? { application: table.application } : {}),
-    ...(table.g702 ? { g702: table.g702 } : {}),
+    ...(table.g702 ? { g702: table.g702 } : {}), ...(table.g702At ? { g702At: table.g702At } : {}),
     ...(table.periodTo ? { periodTo: table.periodTo } : {}), ...(table.appliedOn ? { appliedOn: table.appliedOn } : {}),
     ...(() => { const t = table.rows.find((x) => x.kind === 'total'); return t ? { total: Object.fromEntries(Object.entries(t.read).filter(([, v]) => v != null)) as PdfLine } : {} })(),
   }

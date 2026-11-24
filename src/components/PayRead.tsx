@@ -181,7 +181,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
         file: fileName, read_at: new Date().toISOString(),
         ...(checks.application ? { application: checks.application } : {}),
         ...(checks.periodTo ? { periodTo: checks.periodTo } : {}), ...(checks.appliedOn ? { appliedOn: checks.appliedOn } : {}),
-        ...(checks.g702 ? { g702: checks.g702 } : {}),
+        ...(checks.g702 ? { g702: checks.g702 } : {}), ...(checks.g702At ? { g702At: checks.g702At } : {}),
         ...(checks.total ? { total: checks.total } : {}),
         lines: Object.fromEntries([
           ...rows.filter((r) => r.found && r.pdf).map((r) => [r.id, r.pdf!] as const),

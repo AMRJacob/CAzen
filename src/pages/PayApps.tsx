@@ -687,6 +687,35 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   // The contractor's PDF docked beside the sheet, for checking one against the other.
   const [beside, setBeside] = useState<Uint8Array | null>(null)
   const [opening, setOpening] = useState(false)
+  // A cover-sheet figure being read again: the box on the PDF and what it reads.
+  const [fixing, setFixing] = useState<{ key: string; label: string; printed: number; mark: import('../components/PdfStrip').StripMark; reading?: boolean; got?: { n: number | null; text: string; options?: number[] } } | null>(null)
+  useEffect(() => { setFixing(null) }, [app.id])
+  async function showFigure(d: Discrepancy) {
+    if (!pdf) return
+    const at = pdf.g702At?.[d.col as keyof NonNullable<typeof pdf.g702At>]
+    // Where the figure was read; for a PDF read before places were kept, a box on the first page to drag onto it.
+    const box = at ?? { page: 1, x: 0.3, y: 0.3, w: 0.18, h: 0.025 }
+    setFixing({ key: String(d.col), label: d.label, printed: d.pdf, mark: { ...box, ask: Date.now() } })
+    if (!beside) await showBeside()
+  }
+  async function readFixing() {
+    if (!fixing || !beside) return
+    setFixing({ ...fixing, reading: true, got: undefined })
+    try {
+      const { readBox } = await import('../lib/pdf/readBox')
+      const got = await readBox(beside, fixing.mark)
+      setFixing((f) => (f ? { ...f, reading: false, got } : f))
+    } catch (e) { onTrouble(message(e)); setFixing((f) => (f ? { ...f, reading: false } : f)) }
+  }
+  async function useFixing(n = fixing?.got?.n) {
+    if (!fixing || n == null || !pdf) return
+    const { page, x, y, w, h } = fixing.mark
+    try {
+      await setApplication(app.id, { pdf_read: { ...pdf, g702: { ...pdf.g702, [fixing.key]: n }, g702At: { ...pdf.g702At, [fixing.key]: { page, x, y, w, h } } } } as never)
+      setFixing(null); onChanged()
+    } catch (e) { onTrouble(message(e)) }
+  }
+
   async function showBeside() {
     if (!pdf?.path || !project) return
     setOpening(true)
@@ -1011,8 +1040,23 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         </table>
       </div>
 
-      {beside && <PdfPreview bytes={beside} title={pdf?.file ?? `Application ${app.number} — contractor’s PDF`} flow docked onClose={() => setBeside(null)} />}
-      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening} coHere={g.changeOrders} why={why}
+      {beside && <PdfPreview bytes={beside} title={pdf?.file ?? `Application ${app.number} — contractor’s PDF`} flow docked onClose={() => { setBeside(null); setFixing(null) }}
+        mark={fixing?.mark} onMark={fixing ? (m) => setFixing((f) => (f ? { ...f, mark: m, got: undefined } : f)) : undefined}
+        extra={fixing ? (
+          <div className="pay-fix-bar">
+            <span><strong>{fixing.label}</strong> — read as {money(fixing.printed)}. Move or resize the box over the whole figure.</span>
+            <button className="primary-lite small" onClick={() => void readFixing()} disabled={fixing.reading}>{fixing.reading ? 'Reading…' : 'Read the box'}</button>
+            {fixing.got && (fixing.got.n == null
+              ? fixing.got.options
+                ? <><span className="small">The box holds {fixing.got.options.length} figures:</span>
+                    {fixing.got.options.map((n, i) => <button key={i} className="primary-lite small" onClick={() => void useFixing(n)}>Use {money(n)}</button>)}</>
+                : <span className="pay-read-warn small">No figure in the box{fixing.got.text ? ` (read “${fixing.got.text}”)` : ''}.</span>
+              : <><span className="small">Reads <strong className="mono">{money(fixing.got.n)}</strong></span>
+                  <button className="primary small" onClick={() => void useFixing()}>Use {money(fixing.got.n)}</button></>)}
+            <button className="link small" onClick={() => setFixing(null)}>Cancel</button>
+          </div>
+        ) : undefined} />}
+      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} onShowFigure={pdf.path ? (d) => void showFigure(d) : undefined} beside={!!beside} opening={opening} coHere={g.changeOrders} why={why}
         onRoundRetainage={retainageFix ? async () => {
           try { await setContract(data.contract.id, { rounding: { ...(data.contract.rounding ?? {}), I: retainageFix.way } }); onChanged() } catch (e) { onTrouble(message(e)) }
         } : undefined}
@@ -1334,7 +1378,9 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage, onScheduledFromPdf }: {
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage, onScheduledFromPdf, onShowFigure }: {
+  /** Open the PDF at a cover-sheet figure, boxed where it was read, to read it again. */
+  onShowFigure?: (d: Discrepancy) => void
   /** Take the PDF's scheduled values onto this application, for the lines given. */
   onScheduledFromPdf?: (rows: Discrepancy[]) => void
   /** Line 2 as CAzen has it: the change order lines on this application. */
@@ -1352,6 +1398,8 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
   onAttach: (f: File | undefined) => void
 }) {
   const attach = useRef<HTMLInputElement>(null)
+  // A cover-sheet row clicked open, for the button that shows it on the PDF.
+  const [openRow, setOpenRow] = useState<string | null>(null)
   const say = (d: Discrepancy, n: number) => (d.col === 'pct' ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
   const read = new Date(pdf.read_at)
   return (
@@ -1393,15 +1441,26 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
                       {grp.key === 'scheduled' && onScheduledFromPdf && <button className="primary-lite small" onClick={() => onScheduledFromPdf(grp.rows)}>Use the PDF’s values on this application</button>}
                     </td>
                   </tr>
-                  {grp.rows.map((d, i) => (
-                    <tr key={i}>
+                  {grp.rows.flatMap((d, i) => {
+                    const key = `${grp.key}:${String(d.col)}:${i}`
+                    const can = d.where === 'g702' && !!onShowFigure
+                    return [
+                    <tr key={i} className={can ? 'pay-against-click' : ''} onClick={can ? () => setOpenRow(openRow === key ? null : key) : undefined}
+                      title={can ? 'Click to see where this was read on the PDF' : undefined}>
                       <td>{d.where === 'g702' ? 'Cover sheet' : d.label}</td>
                       <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
                       <td className="right mono">{say(d, d.pdf)}</td>
                       <td className="right mono">{say(d, d.app)}</td>
                       <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
-                    </tr>
-                  ))}
+                    </tr>,
+                    ...(can && openRow === key ? [
+                      <tr key={`${i}-open`} className="pay-against-open"><td colSpan={5}>
+                        <button className="primary-lite small" onClick={() => onShowFigure!(d)}>Show where {say(d, d.pdf)} was read on the PDF</button>
+                        <span className="muted small"> — the box can be moved or resized over the whole figure and read again.</span>
+                      </td></tr>,
+                    ] : []),
+                    ]
+                  })}
                 </tbody>
               ))}
             </table>

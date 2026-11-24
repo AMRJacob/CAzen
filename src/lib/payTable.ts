@@ -67,6 +67,8 @@ export interface TableRead {
   appliedOn?: string
   /** The G702's numbered lines as printed, where they could be read. */
   g702?: G702Read
+  /** Where on the PDF each of those figures was read: the page (1-based) and the box, as fractions of the page. */
+  g702At?: Partial<Record<G702Key | CoKey, FigureAt>>
   /** Lines of a description with no figures on them — a name run onto a second line — with the rows above and below. */
   wraps: { text: string; above: number | null; below: number | null }[]
 }
@@ -88,6 +90,41 @@ export type G702Key = 'originalSum' | 'changeOrders' | 'contractSum' | 'complete
 /** The change order summary at the foot of the G702: additions and deductions, before and this month. */
 export type CoKey = 'coPreviousAdditions' | 'coPreviousDeductions' | 'coThisAdditions' | 'coThisDeductions'
 export type G702Read = Partial<Record<G702Key | CoKey, number>>
+
+/** Where a figure was read: its page (1-based), and its box as fractions of the page's width and height. */
+export interface FigureAt { page: number; x: number; y: number; w: number; h: number }
+
+const CO_PAIRS: [RegExp, CoKey, CoKey][] = [
+  [/previous\s*months/i, 'coPreviousAdditions', 'coPreviousDeductions'],
+  [/approved\s*this\s*month/i, 'coThisAdditions', 'coThisDeductions'],
+]
+
+/**
+ * Where each G702 figure read on a page sits: on the line carrying its label, the first word after
+ * the label that reads as that figure. Words are in the page's own units; size is the page's.
+ */
+function g702Where(lines: { words: PlacedWord[] }[], found: G702Read, page: number, size: { w: number; h: number }): Partial<Record<G702Key | CoKey, FigureAt>> {
+  const out: Partial<Record<G702Key | CoKey, FigureAt>> = {}
+  const labels: [G702Key | CoKey, RegExp][] = [...G702_LABELS, ...CO_PAIRS.flatMap(([re, a, b]) => [[a, re], [b, re]] as [CoKey, RegExp][])]
+  for (const [key, re] of labels) {
+    const v = found[key]
+    if (v == null || out[key]) continue
+    for (const l of lines) {
+      const text = l.words.map((w) => w.text).join(' ')
+      const m = re.exec(text)
+      if (!m) continue
+      // The word the label ends in, by counting characters along the joined line.
+      let at = 0, after = 0
+      l.words.forEach((w, i) => { if (at < m.index + m[0].length) after = i + 1; at += w.text.length + 1 })
+      // A change order deduction is the second figure after its label, the addition the first.
+      const second = CO_PAIRS.some(([, , take]) => take === key)
+      const figs = l.words.slice(after).filter((w) => { const f = figure(w.text.replace(/[Oo]/g, '0')); return !!f && !f.pct })
+      const hit = second ? figs[1] : figs.find((w) => Math.abs(Math.abs(figure(w.text.replace(/[Oo]/g, '0'))!.n) - Math.abs(v)) < 0.005)
+      if (hit) { out[key] = { page, x: hit.x / size.w, y: hit.y / size.h, w: hit.w / size.w, h: hit.h / size.h }; break }
+    }
+  }
+  return out
+}
 
 /** The G702's lines by their printed labels, in the order they come; a scan runs words together. */
 const G702_LABELS: [G702Key, RegExp][] = [
@@ -372,10 +409,11 @@ function rolesOf(cols: Column[], rows: (number | null)[][]): Roles | null {
 }
 
 /** Read every page's table into rows. Pages with no table (the G702, insurance certificates) give none. */
-export function readTable(pages: PlacedWord[][]): TableRead {
+export function readTable(pages: PlacedWord[][], sizes?: ({ w: number; h: number } | null)[]): TableRead {
   const rows: TableRow[] = []
   const wraps: TableRead['wraps'] = []
   let tablePages = 0, application: string | undefined, g702: G702Read | undefined, periodTo: string | undefined, appliedOn: string | undefined
+  let g702At: TableRead['g702At']
   pages.forEach((all, pi) => {
     const words = all.filter((w) => w.text.trim() && !JUNK.test(w.text.trim()))
     if (!words.length) return
@@ -383,7 +421,11 @@ export function readTable(pages: PlacedWord[][]): TableRead {
     const lines = linesOf(words)
     {
       const found = g702From(lines.map((l) => l.words.map((w) => w.text).join(' ')))
-      if (Object.keys(found).length >= 3) g702 = { ...found, ...g702 }
+      if (Object.keys(found).length >= 3) {
+        g702 = { ...found, ...g702 }
+        const size = sizes?.[pi]
+        if (size) g702At = { ...g702Where(lines, found, pi + 1, size), ...g702At }
+      }
     }
     for (const l of lines) {
       const s = l.words.map((w) => w.text).join(' ')
@@ -526,7 +568,7 @@ export function readTable(pages: PlacedWord[][]): TableRead {
       totals.push({ col, printed, added, agree: near(printed, added) })
     }
   }
-  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}), ...(g702 ? { g702 } : {}),
+  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}), ...(g702 ? { g702 } : {}), ...(g702At ? { g702At } : {}),
     ...(periodTo ? { periodTo } : {}), ...(appliedOn ? { appliedOn } : {}) }
 }
 

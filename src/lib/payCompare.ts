@@ -13,6 +13,8 @@ export interface PdfRead {
   read_at: string
   application?: string
   g702?: G702Read
+  /** Where on the PDF each cover-sheet figure was read (page 1-based, box as fractions of the page). */
+  g702At?: import('./payTable').TableRead['g702At']
   total?: PdfLine
   lines: Record<string, PdfLine>
 }

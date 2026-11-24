@@ -3098,7 +3098,16 @@ button.gx-swatch.none { background: #cfdad0; position: relative; }
 
 /* ---------- A document read by scrolling: each page its own sheet, one under another ---------- */
 .ps-scroll { flex: 1; min-width: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; align-items: safe center; gap: 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
-.ps-page { flex: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.ps-page { flex: none; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: relative; }
+.pay-against-click { cursor: pointer; }
+.pay-against-click:hover td { background: #faf6ea; }
+.pay-against-open td { background: #faf6ea; padding: 6px 8px; }
+.pay-fix-bar { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; padding: 6px 10px; font-size: .85rem; }
+.ps-mark { position: absolute; border: 2px solid #e0457b; background: rgba(224,69,123,.08); box-sizing: border-box; }
+.ps-mark.live { cursor: move; touch-action: none; }
+.ps-mark-h { position: absolute; width: 10px; height: 10px; background: #fff; border: 2px solid #e0457b; border-radius: 2px; }
+.ps-mark-h.nw { left: -6px; top: -6px; cursor: nwse-resize; } .ps-mark-h.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.ps-mark-h.ne { right: -6px; top: -6px; cursor: nesw-resize; } .ps-mark-h.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
 
 /* ---------- Notebook: choosing a page to duplicate ---------- */
 .nb-removing.nb-copying { background: var(--moss-soft); color: #2f4a38; }

@@ -3642,3 +3642,6 @@ Jacob, 16:00: UCA's drawings look pixelated, as CAW's did before the viewer fix;
 - Sheet viewer: zoomed more than 15% past that point, a line under the bar says the drawing is a picture at N dpi and is as sharp as the file allows up to about N%.
 - The detail layer now draws at up to 3× density (it was 2×), so iPhones get their full resolution when zoomed; the whole-page canvas stays at 2×.
 - `checks/t_soft.py` with `soft_set.pdf` / `soft_sheet.pdf` (`make_soft_set.py`). Test browser only.
+## 2026-11-24 — Cover-sheet figures: show where they were read, and read them again
+- The reader keeps where on the PDF each G702 figure was read (page and box), in the PDF read (`pdf_read.g702At`).
+- In "Against the contractor's PDF", click a cover-sheet row → "Show where $8.00 was read on the PDF": the PDF opens beside the figures at that place with a box around the figure. Drag the box or its corners over the whole figure, "Read the box" (the PDF's own words, or the picture of the box for a scan), then "Use $8,000,000". Several figures in the box are offered one by one. A PDF read before places were kept gets a box on page 1 to drag onto the figure.

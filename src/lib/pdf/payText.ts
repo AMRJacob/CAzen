@@ -44,21 +44,25 @@ export async function payText(
   try {
     const pages = Math.min(pdf.numPages, MAX_PAGES)
     const own: (PlacedWord[] | null)[] = []
+    // Each page's size in the units its words are in, so where a figure was read can be kept.
+    const sizes: ({ w: number; h: number } | null)[] = []
     for (let n = 1; n <= pages; n++) {
       onProgress({ page: n, pages, reading: false })
       const text = await readPageText(await pdf.getPage(n))
       const words = text.words.filter((w) => !w.vertical)
+      sizes.push(words.length >= 12 ? { w: text.width, h: text.height } : null)
       own.push(words.length >= 12
         ? words.map((w) => ({ text: w.str, x: w.x * text.width, y: w.y * text.height, w: w.w * text.width, h: w.h * text.height }))
         : null)
     }
-    const fromOwn = readTable(own.map((w) => w ?? []))
+    const fromOwn = readTable(own.map((w) => w ?? []), sizes)
     if (passes(fromOwn) && own.every(Boolean)) return { table: fromOwn, pages, scanned: 0 }
 
     // Read the pictures: every page if the file's own words did not pass, otherwise only the
     // pages that had none. Stop after the page with the grand total — what follows is lien
     // waivers and insurance certificates.
     const seen: (PlacedWord[] | null)[] = [...own]
+    const seenSizes = [...sizes]
     let scanned = 0
     const all = !passes(fromOwn)
     for (let n = 1; n <= pages; n++) {
@@ -78,15 +82,16 @@ export async function payText(
       removeRules(ctx, canvas.width, canvas.height, scale * 72)
       ocr ??= await reader()
       const { data } = await ocr.recognize(canvas, {}, { text: true, blocks: true })
+      seenSizes[n - 1] = { w: canvas.width, h: canvas.height }
       canvas.width = canvas.height = 0
       scanned++
       seen[n - 1] = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)))
         .filter((w) => w.text.trim())
         .map((w) => ({ text: w.text.trim(), x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0, h: w.bbox.y1 - w.bbox.y0, conf: w.confidence }))
-      const so_far = readTable(seen.slice(0, n).map((w) => w ?? []))
+      const so_far = readTable(seen.slice(0, n).map((w) => w ?? []), seenSizes)
       if (so_far.pages > 0 && so_far.rows.some((r) => r.kind === 'total')) break
     }
-    const fromPicture = readTable(seen.map((w) => w ?? []))
+    const fromPicture = readTable(seen.map((w) => w ?? []), seenSizes)
     ;(globalThis as { __payText?: unknown }).__payText = { fromOwn, fromPicture, seen }
     const table = score(fromPicture) >= score(fromOwn) ? fromPicture : fromOwn
     return { table, pages, scanned }

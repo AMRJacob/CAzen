@@ -9,7 +9,13 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
  * under it. Only the pages on or near the screen are drawn. The wheel and a finger scroll;
  * Ctrl + wheel, a pinch, and the − / + buttons change the size of every page together.
  */
-export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo }: {
+/** A box on one page, as fractions of it, that can be moved and resized (where a figure was read). */
+export interface StripMark { page: number; x: number; y: number; w: number; h: number; /** Changed to bring the box into view again. */ ask?: number }
+
+export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo, mark, onMark }: {
+  mark?: StripMark | null
+  /** The box moved or resized; without it the box is only shown. */
+  onMark?: (m: StripMark) => void
   pdf: PDFDocumentProxy
   /** 1 is the whole page fitted to the window. */
   zoom: number
@@ -85,7 +91,12 @@ export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo }: {
     if (!goTo.ask || answered.current === goTo.ask) return
     const el = scroller.current
     const p = el?.querySelector<HTMLElement>(`.ps-page[data-n="${goTo.page}"]`)
-    if (el && p) { el.scrollTo({ top: p.offsetTop - GAP }); answered.current = goTo.ask }
+    if (el && p) {
+      // With a box on the page, bring the box to the middle of the window rather than the page's top.
+      const y = mark && mark.page === goTo.page ? p.offsetTop + (mark.y + mark.h / 2) * p.offsetHeight - el.clientHeight / 2 : p.offsetTop - GAP
+      const x = mark && mark.page === goTo.page ? p.offsetLeft + (mark.x + mark.w / 2) * p.offsetWidth - el.clientWidth / 2 : el.scrollLeft
+      el.scrollTo({ top: Math.max(0, y), left: Math.max(0, x) }); answered.current = goTo.ask
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goTo.ask, aspects])
 
@@ -138,6 +149,7 @@ export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo }: {
         return (
           <div key={n} className="ps-page" data-n={n} style={{ width: s.w, height: s.h }}>
             {near.has(n) && <PageCanvas pdf={pdf} n={n} width={s.w} />}
+            {mark && mark.page === n && <MarkBox mark={mark} onMark={onMark} />}
           </div>
         )
       })}
@@ -146,6 +158,39 @@ export function PdfStrip({ pdf, zoom, onZoom, onPage, goTo }: {
 }
 
 const GAP = 12
+
+/** The box over its page: drag inside it to move it, drag a corner to size it. */
+function MarkBox({ mark, onMark }: { mark: StripMark; onMark?: (m: StripMark) => void }) {
+  const start = (how: 'move' | 'nw' | 'ne' | 'sw' | 'se') => (e: React.PointerEvent) => {
+    if (!onMark) return
+    e.preventDefault(); e.stopPropagation()
+    const page = (e.currentTarget as HTMLElement).closest('.ps-page') as HTMLElement
+    const r = page.getBoundingClientRect()
+    const from = { x: e.clientX, y: e.clientY }, was = { ...mark }
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - from.x) / r.width, dy = (ev.clientY - from.y) / r.height
+      let { x, y, w, h } = was
+      if (how === 'move') { x += dx; y += dy }
+      if (how === 'nw' || how === 'sw') { x += dx; w -= dx }
+      if (how === 'ne' || how === 'se') w += dx
+      if (how === 'nw' || how === 'ne') { y += dy; h -= dy }
+      if (how === 'sw' || how === 'se') h += dy
+      const min = 0.004
+      if (w < min) { if (how === 'nw' || how === 'sw') x -= min - w; w = min }
+      if (h < min) { if (how === 'nw' || how === 'ne') y -= min - h; h = min }
+      onMark({ page: was.page, ask: was.ask, x: Math.max(0, Math.min(1 - w, x)), y: Math.max(0, Math.min(1 - h, y)), w: Math.min(1, w), h: Math.min(1, h) })
+    }
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  return (
+    <div className={`ps-mark${onMark ? ' live' : ''}`} onPointerDown={start('move')}
+      style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, width: `${mark.w * 100}%`, height: `${mark.h * 100}%` }}>
+      {onMark && (['nw', 'ne', 'sw', 'se'] as const).map((c) => <span key={c} className={`ps-mark-h ${c}`} onPointerDown={start(c)} />)}
+    </div>
+  )
+}
 
 /** One page, drawn at the size it is shown; drawn again a moment after that size settles. */
 function PageCanvas({ pdf, n, width }: { pdf: PDFDocumentProxy; n: number; width: number }) {
