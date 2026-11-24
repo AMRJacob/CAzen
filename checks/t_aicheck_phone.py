@@ -16,7 +16,7 @@ with sync_playwright() as p:
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.locator('.p-card, td.p-name').first.tap(); pg.wait_for_timeout(500)
     pg.goto(BASE+'#/field-notes/meetings'); pg.wait_for_selector('.nb-toc li'); pg.locator('.nb-toc li button').first.tap(); pg.wait_for_timeout(600)
     if pg.locator('.nb-tabs').count(): pg.locator('.nb-tabs button:has-text("Notes")').tap(); pg.wait_for_timeout(200)
-    pg.locator('button:has-text("Check with AI")').tap(); pg.wait_for_timeout(300)
+    heading_menu(pg, ctx, '.nb-z-notes .nb-z-top h2', 'Check with AI', touch=True)
     pg.locator('.aic-reply').fill(REPLY)
     x,y,top,bb=at(pg,'button:has-text("Review the changes")'); print('Review button at', round(x),round(y),'on top:',top, '| card box', pg.locator('.aic').bounding_box())
     pg.touchscreen.tap(x,y); pg.wait_for_timeout(300)

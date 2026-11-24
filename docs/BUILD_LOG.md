@@ -11,6 +11,15 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 17:50 CST (Spread out and Check with AI moved to the Notes heading's menu)
+
+Jacob, 16:46. A click on open space in the notes block no longer opens the spread, and the two
+links are gone from the Notes heading. Both are now in the heading's own menu: right-click
+"Notes", or hold it (or the Notes tab on a phone) — *Spread out*, *Check with AI*, then
+*Hide on this page*. Tests open them that way (`heading_menu` in `checks/common.py`).
+
+---
+
 # Checkpoint — 2026-11-24, 17:40 CST (notes spread over the screen; hidden blocks' room filled)
 
 Two asks: the notes block full screen with things placed anywhere and combined (16:2x), and

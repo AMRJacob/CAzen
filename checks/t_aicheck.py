@@ -11,7 +11,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.locator('td.p-name, .p-card').first.click(); pg.wait_for_timeout(500)
     pg.goto(BASE+'#/field-notes/meetings'); pg.wait_for_selector('.nb-toc li'); pg.click('.nb-toc li button'); pg.wait_for_selector('.nbd'); pg.wait_for_timeout(600)
-    pg.click('button:has-text("Check with AI")'); pg.click('button:has-text("Copy the notes for AI")'); pg.wait_for_timeout(200)
+    heading_menu(pg, ctx, '.nb-z-notes .nb-z-top h2', 'Check with AI'); pg.click('button:has-text("Copy the notes for AI")'); pg.wait_for_timeout(200)
     clip=pg.evaluate('navigator.clipboard.readText()'); print('copied:', clip.split('\n')[0], '… ends with the notes:', clip.endswith('Call roofer about flashing'))
     pg.evaluate('t=>navigator.clipboard.writeText(t)', REPLY); pg.click('button:has-text("Paste from the clipboard")'); pg.wait_for_timeout(150)
     pg.click('button:has-text("Review the changes")'); pg.wait_for_timeout(200)

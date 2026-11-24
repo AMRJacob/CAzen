@@ -30,3 +30,15 @@ def install(ctx, extra=None, log=None):
 def signed_in(ctx):
     ctx.add_init_script("try{if(!localStorage.getItem('sb-stand-in-auth-token'))localStorage.setItem('sb-stand-in-auth-token',%s)}catch(e){}"%json.dumps(json.dumps(SESSION)))
 PHONE=dict(viewport={'width':402,'height':874},device_scale_factor=3,is_mobile=True,has_touch=True)
+def heading_menu(pg, ctx, heading_sel, item, touch=False):
+    """A block's heading menu: right-click it, or by touch hold it; then choose an item."""
+    if touch:
+        h=pg.locator(heading_sel).first.bounding_box(); x,y=h['x']+h['width']/2,h['y']+h['height']/2
+        cdp=ctx.new_cdp_session(pg)
+        cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y,'id':1}]}); pg.wait_for_timeout(750)
+        cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); pg.wait_for_timeout(250)
+        pg.locator(f'.nbd-menu button:has-text("{item}")').tap()
+    else:
+        pg.locator(heading_sel).first.click(button='right'); pg.wait_for_timeout(200)
+        pg.click(f'.nbd-menu button:has-text("{item}")')
+    pg.wait_for_timeout(400)

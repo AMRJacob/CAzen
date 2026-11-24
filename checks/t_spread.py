@@ -1,4 +1,4 @@
-"""The notes spread: open from open space on the board, move things anywhere, combine two loose notes, file one, take one out."""
+"""The notes spread: open from the Notes heading's menu, move things anywhere, combine two loose notes, file one, take one out."""
 from common import *
 import json, sys
 phone = len(sys.argv) > 1
@@ -13,12 +13,11 @@ with sync_playwright() as p:
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); tap('td.p-name, .p-card'); pg.wait_for_timeout(500)
     pg.goto(BASE+'#/field-notes/reports'); pg.wait_for_selector('.nb-toc li'); tap('.nb-toc li button'); pg.wait_for_timeout(700)
     if phone: tap('.nb-tabs button:has-text("Notes")'); pg.wait_for_timeout(300)
-    # open space on the board
-    bb=pg.locator('.nbd-board').bounding_box(); last=pg.locator('.nbd-board > *').last.bounding_box()
-    (pg.touchscreen.tap if phone else pg.mouse.click)(bb['x']+bb['width']-8, last['y']+last['height']+4 if last['y']+last['height']+4 < bb['y']+bb['height'] else bb['y']+bb['height']-4)
-    pg.wait_for_timeout(500)
-    if not pg.locator('.nsp').count():
-        print('open space did not open it; using the link'); tap('button:has-text("Spread out")'); pg.wait_for_timeout(500)
+    # Spread out is in the Notes heading's menu; open space on the board does not open it.
+    bb=pg.locator('.nbd-board').bounding_box()
+    (pg.touchscreen.tap if phone else pg.mouse.click)(bb['x']+bb['width']-8, bb['y']+bb['height']-4); pg.wait_for_timeout(400)
+    print('open space opens nothing:', pg.locator('.nsp').count()==0)
+    heading_menu(pg, ctx, '.nb-z-notes .nb-z-top h2', 'Spread out', touch=phone)
     print('spread open:', pg.locator('.nsp').count()==1, '| things:', pg.locator('.nsp-at').count())
     def drag(src, x, y):
         s=src.bounding_box(); sx,sy=s['x']+20,s['y']+s['height']/2

@@ -1056,15 +1056,10 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
       case 'names': return <Names projectId={project.id} names={page.names} earlier={earlier} onChange={(names) => change({ names })} onTrouble={onTrouble} />
       case 'notes': return (
         <section className="nb-z nb-z-notes">
-          <div className="nb-z-top"><h2>Notes</h2>
-            <span className="nb-z-do">
-              <button className="link" onClick={() => setSpreading(true)} title="The notes over the whole screen, to lay out by hand">Spread out</button>
-              <button className="link" onClick={() => setChecking(true)} disabled={!notes.trim()}>Check with AI</button>
-            </span>
-          </div>
-          {/* Typed, then dragged where it belongs. The numbered outline is on the report's page.
-              A click on open space in it spreads the notes over the screen, as the sketch opens the pad. */}
-          <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} onOpen={() => setSpreading(true)} />
+          {/* Spread out and Check with AI are in the heading's own menu: right-click or hold "Notes" (Jacob, 11/24). */}
+          <div className="nb-z-top"><h2 title="Right-click, or hold, for Spread out and Check with AI">Notes</h2></div>
+          {/* Typed, then dragged where it belongs. The numbered outline is on the report's page. */}
+          <NoteBoard notes={notes} onChange={(next) => { setNotes(next); change({ notes: next }) }} />
           {checking && <AiCheck notes={notes} kind={page.kind} onClose={() => setChecking(false)}
             onApply={(next) => { setChecking(false); setNotes(next); change({ notes: next }) }} />}
         </section>
@@ -1178,6 +1173,10 @@ function Page({ project, page, turn, bar, adds, pages, earlier, observations, ty
               <div className="padctx nbd-menu" role="menu" onPointerDown={(e) => e.stopPropagation()}
                 style={{ left: Math.min(blockMenu.x, window.innerWidth - 250), top: Math.min(blockMenu.y, window.innerHeight - 160) }}>
                 <span className="nb-tear-say">{name}</span>
+                {b.kind === 'notes' && <>
+                  <button role="menuitem" onClick={() => { close(); setSpreading(true) }}>Spread out</button>
+                  <button role="menuitem" disabled={!notes.trim()} onClick={() => { close(); setChecking(true) }}>Check with AI</button>
+                </>}
                 <button role="menuitem" disabled={!canChoose} onClick={() => { close(); hideBlock(b.id) }}
                   title={canChoose ? 'What is in it stays with the page and in its report' : 'Needs the database update for added blocks'}>Hide on this page</button>
                 {added && <button role="menuitem" className="danger" disabled={!canChoose} onClick={() => {

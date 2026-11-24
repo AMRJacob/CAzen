@@ -3968,9 +3968,6 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 .nsp-at > .nbd-card { box-shadow: 0 2px 5px rgba(43, 45, 44, 0.12); }
 .nsp .nbd-box-in .nbd-card { position: relative; }
 .nsp .holding > .nbd-box-in, .nsp .nbd-box.holding { position: relative; z-index: 20; }
-.nbd-board { cursor: pointer; }
-.nbd-board .nbd-box { cursor: default; }
-.nbd-board .nbd-card, .nbd-board .nbd-box-head { cursor: grab; }
 @media (max-width: 759px) {
   .nsp-bar { gap: 6px; padding: calc(8px + env(safe-area-inset-top)) 10px 6px; }
   .nsp-type { order: 9; flex-basis: 100%; max-width: none; }
