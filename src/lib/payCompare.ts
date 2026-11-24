@@ -5,6 +5,9 @@ import type { CoKey, G702Key, G702Read } from './payTable'
 /** What was read off the contractor's application, kept on the application (migration 0048). */
 export interface PdfRead {
   file?: string
+  /** The application's period and date as the PDF prints them. */
+  periodTo?: string
+  appliedOn?: string
   /** Where the PDF itself is kept, to look at beside the figures. */
   path?: string
   read_at: string
@@ -79,4 +82,124 @@ export function againstPdf(figures: Figures, pdf: PdfRead): Discrepancy[] {
     }
   }
   return out
+}
+
+// ---------- Why they differ ----------
+
+export interface DiffGroup {
+  key: 'co' | 'previous' | 'scheduled' | 'entered' | 'retainage' | 'cover' | 'other'
+  title: string
+  detail?: string
+  /** The differences to show: on a line, only the one the others follow from. */
+  rows: Discrepancy[]
+  /** Differences left out of `rows` because they follow from one shown. */
+  follow: number
+}
+
+export interface WhyContext {
+  /** Line 2 as CAzen has it on this application. */
+  coHere: number
+  /** This application's period end. */
+  periodTo: string
+  /** The period end the PDF prints, where it was read. */
+  pdfPeriodTo?: string
+  /** The change order lines on this application, by approval date (null: undated). */
+  coDates: { date: string | null; total: number }[]
+  /** A way of rounding retainage that would make every retainage figure agree, if there is one. */
+  retainageFix?: { label: string } | null
+}
+
+const near = (a: number, b: number, by = 0.5) => Math.abs(a - b) < by
+const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+const usDay = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}`
+
+/**
+ * Differences sorted by what causes them, so twenty red figures that come from one change order
+ * dated wrong read as one thing: the cause, in words, with the figure it starts from. A line
+ * whose "from previous" differs also differs in completed, balance, % and retainage; only the
+ * first is shown, and the rest are counted as following from it.
+ */
+export function whyTheyDiffer(diffs: Discrepancy[], ctx: WhyContext): DiffGroup[] {
+  const groups: DiffGroup[] = []
+  const used = new Set<Discrepancy>()
+  const take = (g: DiffGroup) => { if (g.rows.length) { groups.push(g); g.rows.forEach((d) => used.add(d)) } }
+
+  // Change orders: line 2, and what line 2 carries into lines 3 and 9 and the sheet's totals.
+  const theirs = diffs.find((d) => d.col === 'changeOrders')
+  const coGap = theirs ? theirs.app - theirs.pdf : 0
+  const isCo = (d: Discrepancy) => d.col in CO_SAYS
+  if (theirs || diffs.some(isCo)) {
+    const rows = diffs.filter((d) => d === theirs || isCo(d))
+    const follows = diffs.filter((d) => !rows.includes(d) && coGap && (
+      (d.where === 'g702' && (d.col === 'contractSum' || d.col === 'balanceToFinish') && near(d.app - d.pdf, coGap, 2)) ||
+      (d.where === 'total' && (d.col === 'C' || d.col === 'H') && near(d.app - d.pdf, coGap, 2)) ||
+      (d.where === 'total' && d.col === 'pct')))
+    follows.forEach((d) => used.add(d))
+    const dated = ctx.coDates.filter((c) => Math.abs(c.total) > 0.005)
+    const when = dated.map((c) => `${usd(c.total)} ${c.date ? `approved ${usDay(c.date)}` : 'with no approval date'}`).join(', ')
+    take({
+      key: 'co', rows, follow: follows.length,
+      title: theirs
+        ? `Change orders: the contractor’s cover sheet has ${usd(theirs.pdf)}; CAzen counts ${usd(theirs.app)} on this application`
+        : 'Change orders: the change order summary differs',
+      detail: theirs && theirs.app > theirs.pdf
+        ? `CAzen counts a change order on every application whose period ends on or after its approval date. This application’s period ends ${usDay(ctx.periodTo)}${ctx.pdfPeriodTo && ctx.pdfPeriodTo !== ctx.periodTo ? ` (the PDF’s ends ${usDay(ctx.pdfPeriodTo)})` : ''}; ${when || 'the change order lines'} — so CAzen puts them here. A wrong date on either side is the thing to change: the application’s period, or the change order’s approval date on its heading row.`
+        : theirs
+          ? `Lines marked as change order lines here, dated on or before ${usDay(ctx.periodTo)}, total ${usd(theirs.app)}. The rest are not marked as change order lines, or are dated after this period.`
+          : undefined,
+    })
+  }
+
+  // Line by line: the first column that differs is the cause; the columns after it follow.
+  const ORDER = ['C', 'D', 'E', 'F', 'G', 'H', 'pct', 'I']
+  const byLine = new Map<string, Discrepancy[]>()
+  for (const d of diffs) if (d.where === 'line' && d.lineId) byLine.set(d.lineId, [...(byLine.get(d.lineId) ?? []), d])
+  const roots: Record<string, Discrepancy[]> = { C: [], D: [], E: [], I: [], other: [] }
+  let followers: Record<string, number> = { C: 0, D: 0, E: 0, I: 0, other: 0 }
+  for (const ds of byLine.values()) {
+    ds.sort((a, b) => ORDER.indexOf(String(a.col)) - ORDER.indexOf(String(b.col)))
+    const root = ds[0]
+    const bucket = root.col === 'C' ? 'C' : root.col === 'D' ? 'D' : root.col === 'E' || root.col === 'F' ? 'E'
+      : ds.every((d) => d.col === 'I') ? 'I' : 'other'
+    roots[bucket].push(root)
+    followers[bucket] += ds.length - 1
+    ds.slice(1).forEach((d) => used.add(d))
+  }
+  take({ key: 'scheduled', rows: roots.C, follow: followers.C,
+    title: `Scheduled value differs on ${roots.C.length} ${roots.C.length === 1 ? 'line' : 'lines'}`,
+    detail: 'The PDF moves money between lines (or adds to them) and the schedule of values here has not followed.' })
+  take({ key: 'previous', rows: roots.D, follow: followers.D,
+    title: `“From previous” differs on ${roots.D.length} ${roots.D.length === 1 ? 'line' : 'lines'}`,
+    detail: 'What the PDF says was billed before this application is not what CAzen’s earlier applications billed on these lines: an earlier application here is missing a figure or has a different one.' })
+  take({ key: 'entered', rows: roots.E, follow: followers.E,
+    title: `This period or stored differs on ${roots.E.length} ${roots.E.length === 1 ? 'line' : 'lines'}`,
+    detail: 'These were changed here after the PDF was read, or put in by hand.' })
+
+  // Retainage alone, by a dollar or two: the contractor rounds it another way. With no line read
+  // (an older reading), the retainage figures on the cover sheet and totals row say the same.
+  if (!roots.I.length) {
+    const lone = diffs.filter((d) => !used.has(d) && Math.abs(d.pdf - d.app) <= 3 && ((d.where === 'total' && d.col === 'I') || (d.where === 'g702' && ['retainageTotal', 'earnedLessRetainage', 'previousCertificates', 'due'].includes(String(d.col)))))
+    if (lone.some((d) => d.col === 'I' || d.col === 'retainageTotal' || d.col === 'previousCertificates')) roots.I.push(...lone)
+  }
+  const small = roots.I.every((d) => Math.abs(d.pdf - d.app) <= 3)
+  const retFollow = diffs.filter((d) => !used.has(d) && !roots.I.includes(d) && roots.I.length && small && (
+    (d.where === 'total' && d.col === 'I') ||
+    (d.where === 'g702' && ['retainageTotal', 'earnedLessRetainage', 'previousCertificates', 'due', 'balanceToFinish'].includes(String(d.col)) && Math.abs(d.pdf - d.app) <= 3 * Math.max(1, roots.I.length))))
+  retFollow.forEach((d) => used.add(d))
+  take({ key: 'retainage', rows: roots.I, follow: followers.I + retFollow.length,
+    title: roots.I.some((d) => d.where === 'line')
+      ? `Retainage differs ${small ? 'by a dollar or two ' : ''}on ${roots.I.length} ${roots.I.length === 1 ? 'line' : 'lines'}`
+      : `Retainage differs ${small ? 'by a dollar or two' : ''}`,
+    detail: small
+      ? (ctx.retainageFix
+        ? `The contractor rounds retainage another way: “${ctx.retainageFix.label}” makes every retainage figure agree.`
+        : 'The contractor rounds retainage another way; the Retainage column’s heading (right-click) sets how it is rounded.')
+      : undefined })
+  take({ key: 'other', rows: roots.other, follow: followers.other, title: `Completed, balance or % differs on ${roots.other.length} ${roots.other.length === 1 ? 'line' : 'lines'}` })
+
+  // Whatever is left on the cover sheet and the totals row.
+  const rest = diffs.filter((d) => !used.has(d))
+  take({ key: 'cover', rows: rest, follow: 0,
+    title: groups.length ? 'Cover sheet and totals, which follow from the above' : 'Cover sheet and totals' })
+  return groups
 }

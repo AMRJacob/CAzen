@@ -61,3 +61,14 @@ console.log(bad ? `rounding: ${bad} of ${n} failed` : `rounding: ${n} checks pas
   eq(per.g702.previousCertificates, (29771 - 1489) + (9924 - 496) + (7144 - 357), 'line 7 from the earlier applications, each rounded when billed')
   console.log(bad ? `rounding+period: ${bad} of ${n} failed` : `rounding+period: ${n} checks pass`)
 }
+{ // Differences sorted by cause: a change order dated into this period, a missing earlier billing, retainage rounding.
+  const { whyTheyDiffer } = await import('../src/lib/payCompare.ts')
+  const D = (where: string, col: string, pdf: number, app: number, lineId?: string) => ({ where, col, pdf, app, label: lineId ?? col, ...(lineId ? { lineId } : {}) } as any)
+  const g = whyTheyDiffer([
+    D('g702', 'changeOrders', 0, 1682671), D('g702', 'contractSum', 8000000, 9682671), D('g702', 'balanceToFinish', 7654208, 9336878), D('total', 'C', 8000000, 9682671),
+    D('line', 'D', 1000, 0, 'a'), D('line', 'G', 2000, 1000, 'a'), D('line', 'H', 0, 1000, 'a'),
+    D('line', 'I', 4102, 4101, 'b'), D('total', 'I', 18202, 18201), D('g702', 'retainageTotal', 18202, 18201),
+  ], { coHere: 1682671, periodTo: '2026-03-31', coDates: [{ date: '2026-11-23', total: 1682671 }], retainageFix: { label: 'Round each application’s retainage' } })
+  eq(g.map((x) => [x.key, x.rows.length, x.follow]), [['co', 1, 3], ['previous', 1, 2], ['retainage', 1, 2]], 'grouped by cause, with what follows counted')
+  eq(/approved 11\/23\/2026/.test(g[0].detail!), true, 'the change order group says which approval date put it here')
+}

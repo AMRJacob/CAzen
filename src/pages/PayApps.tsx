@@ -13,7 +13,7 @@ import { money, percent, roughPercent } from '../lib/money'
 import { Money } from '../components/Money'
 import { PdfPreview } from '../components/PdfPreview'
 import { putFile, readFile, safeName, SECTIONS } from '../lib/files'
-import { againstPdf, COL_SAYS, type Discrepancy, type PdfCol } from '../lib/payCompare'
+import { againstPdf, COL_SAYS, whyTheyDiffer, type Discrepancy, type PdfCol, type WhyContext } from '../lib/payCompare'
 import { changeCost, listRegister, type RegisterRow } from '../lib/issued'
 import { compare, listActivities, ScheduleNotSetUp, type Comparison } from '../lib/schedule'
 import {
@@ -595,7 +595,32 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       onChanged()
     } catch (e) { onTrouble(`The PDF is open beside the figures but couldn’t be kept for next time: ${message(e)}`) }
   }
+  // A way of rounding retainage that would make every retainage figure agree with the PDF.
+  const retainageFix = useMemo(() => {
+    if (!pdf) return null
+    const iDiffs = (f: Figures) => againstPdf(f, pdf).filter((d) => d.col === 'I' || d.col === 'retainageTotal').length
+    const now = iDiffs(figures)
+    if (!now) return null
+    const i = data.applications.findIndex((a) => a.id === app.id)
+    const history = data.applications.map((a) => ({ billed: data.billed.get(a.id) ?? new Map<string, Billed>(), period_to: a.period_to, rounding: a.rounding }))
+    for (const way of ['period', 'nearest', 'up', 'down'] as RoundWay[]) {
+      if (way === data.contract.rounding?.I) continue
+      const f = figure({ ...data.contract, rounding: { ...(data.contract.rounding ?? {}), I: way } }, data.lines, app, history[i].billed, history.slice(0, i), data.steps)
+      if (!iDiffs(f)) return { way, label: ROUND_SAYS[way] }
+    }
+    return null
+  }, [pdf, figures, data, app])
   const diffs = useMemo(() => (pdf ? againstPdf(figures, pdf) : []), [figures, pdf])
+  const why = useMemo(() => {
+    const dates = new Map<string, number>()
+    for (const f of figures.lines) if (f.line.change_order_id) dates.set(f.line.approved_on ?? '', (dates.get(f.line.approved_on ?? '') ?? 0) + f.line.scheduled_value)
+    const ctx: WhyContext = {
+      coHere: figures.g702.changeOrders, periodTo: app.period_to, pdfPeriodTo: pdf?.periodTo,
+      coDates: [...dates].map(([date, total]) => ({ date: date || null, total })),
+      retainageFix: retainageFix ? { label: retainageFix.label } : null,
+    }
+    return whyTheyDiffer(diffs, ctx)
+  }, [diffs, figures, app.period_to, retainageFix, pdf?.periodTo])
   const diffAt = (lineId: string | null, col: PdfCol) =>
     diffs.find((d) => (lineId ? d.where === 'line' && d.lineId === lineId : d.where === 'total') && d.col === col)
   // The register's change orders, for adding lines to.
@@ -818,7 +843,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
       </div>
 
       {beside && <PdfPreview bytes={beside} title={pdf?.file ?? `Application ${app.number} — contractor’s PDF`} flow docked onClose={() => setBeside(null)} />}
-      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening} coHere={g.changeOrders}
+      {pdf && <AgainstPdf pdf={pdf} diffs={diffs} beside={!!beside} opening={opening} coHere={g.changeOrders} why={why}
+        onRoundRetainage={retainageFix ? async () => {
+          try { await setContract(data.contract.id, { rounding: { ...(data.contract.rounding ?? {}), I: retainageFix.way } }); onChanged() } catch (e) { onTrouble(message(e)) }
+        } : undefined}
         onBeside={() => (beside ? setBeside(null) : void showBeside())} onAttach={(f) => void attachPdf(f)} onForget={async () => {
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
       }} />}
@@ -856,6 +884,14 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
             }}
             onKeep={async (rows, pdf, bytes) => {
               for (const r of rows) await setBilled(app.id, r.id, r.value)
+              // The application's period and date as the contractor printed them: change orders and
+              // the change order summary are counted by them.
+              if (pdf?.periodTo || pdf?.appliedOn) {
+                const patch: Record<string, string> = {}
+                if (pdf.periodTo && pdf.periodTo !== app.period_to) patch.period_to = pdf.periodTo
+                if (pdf.appliedOn && pdf.appliedOn !== app.applied_on) patch.applied_on = pdf.appliedOn
+                if (Object.keys(patch).length) await setApplication(app.id, patch as never)
+              }
               if (pdf) {
                 // The PDF itself is kept too, to read beside the figures. Not keeping it costs only that.
                 if (bytes && project) {
@@ -1054,9 +1090,13 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
  * CAzen works out differently. It is worked out again on every change, so a figure put right, or
  * a column rounded as the contractor rounds it, drops off the list.
  */
-function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, coHere }: {
+function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach, why, onRoundRetainage }: {
   /** Line 2 as CAzen has it: the change order lines on this application. */
   coHere: number
+  /** The differences sorted by what causes them. */
+  why: import('../lib/payCompare').DiffGroup[]
+  /** Round retainage the way that makes it agree, where there is one. */
+  onRoundRetainage?: () => void
   pdf: import('../lib/payCompare').PdfRead
   diffs: Discrepancy[]
   onForget: () => void
@@ -1067,12 +1107,6 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
 }) {
   const attach = useRef<HTMLInputElement>(null)
   const say = (d: Discrepancy, n: number) => (d.col === 'pct' ? `${n.toFixed(2)}%` : n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }))
-  const g = diffs.filter((d) => d.where === 'g702')
-  const rest = diffs.filter((d) => d.where !== 'g702')
-  // Small differences all in one column, line after line, are usually the contractor rounding it.
-  const byCol = new Map<string, Discrepancy[]>()
-  for (const d of rest) if (d.where === 'line') byCol.set(String(d.col), [...(byCol.get(String(d.col)) ?? []), d])
-  const rounds = [...byCol.entries()].filter(([c, ds]) => ['G', 'H', 'I', 'pct'].includes(c) && ds.length >= 2 && ds.every((d) => Math.abs(d.pdf - d.app) < 1))
   const read = new Date(pdf.read_at)
   return (
     <div className={`card pay-against${diffs.length ? ' has-diffs' : ''}`}>
@@ -1092,44 +1126,35 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
         {pdf.file ? <>{pdf.file}, read </> : 'Read '}{read.toLocaleDateString('en-US')}. CAzen does its own arithmetic from the schedule of values and the earlier
         applications; only this period and stored were taken from the PDF.
       </p>
-      {(() => {
-        // The cover sheet's change orders with nothing (or not enough) here to show for them.
-        const theirs = pdf.g702?.changeOrders
-        if (theirs == null || Math.abs(theirs - coHere) < 0.005) return null
-        return (
-          <div className="notice warn pay-co-warn">
-            <strong>The contractor’s cover sheet has {money(theirs)} of change orders (line 2)</strong>
-            {Math.abs(coHere) < 0.005
-              ? <> and no line here is marked as a change order line.</>
-              : <>; the lines marked as change order lines here total {money(coHere)}.</>}
-            {' '}Lines are marked by selecting them (shift-click) and right-clicking.
-          </div>
-        )
-      })()}
       {!diffs.length
         ? <p className="pay-read-ok">Every figure on the contractor’s PDF agrees with CAzen’s arithmetic.</p>
         : (
           <>
-            <p><strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong> from CAzen’s arithmetic. They are marked red on the sheet below, with both figures on hover.</p>
-            <table className="pay-against-table">
-              <thead><tr><th>Where</th><th>Column</th><th className="right">Contractor’s PDF</th><th className="right">CAzen</th><th className="right">Difference</th></tr></thead>
-              <tbody>
-                {[...g, ...rest].map((d, i) => (
-                  <tr key={i}>
-                    <td>{d.where === 'g702' ? 'G702' : d.label}</td>
-                    <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
-                    <td className="right mono">{say(d, d.pdf)}</td>
-                    <td className="right mono">{say(d, d.app)}</td>
-                    <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rounds.map(([c, ds]) => (
-              <p key={c} className="muted small">
-                {COL_SAYS[c as PdfCol][0].toUpperCase() + COL_SAYS[c as PdfCol].slice(1)} differs by less than a dollar on {ds.length} lines — the contractor may be rounding that column.
-                Right-clicking its heading on the sheet sets how it is rounded.
-              </p>
+            <p className="pay-against-lead">
+              <strong className="pay-read-warn">{diffs.length} {diffs.length === 1 ? 'figure differs' : 'figures differ'}</strong>
+              {why.length > 1 ? `, for ${why.length} reasons:` : ':'} <span className="muted small">red on the sheet below, with both figures on hover.</span>
+            </p>
+            {why.map((grp) => (
+              <div key={grp.key} className={`pay-why pay-why-${grp.key}`}>
+                <div className="pay-why-title">{grp.title}</div>
+                {grp.detail && <p className="small pay-why-detail">{grp.detail}</p>}
+                {grp.key === 'retainage' && onRoundRetainage && <button className="primary-lite small" onClick={onRoundRetainage}>Round retainage that way</button>}
+                <table className="pay-against-table">
+                  <thead><tr><th>Where</th><th>Column</th><th className="right">Contractor’s PDF</th><th className="right">CAzen</th><th className="right">Difference</th></tr></thead>
+                  <tbody>
+                    {grp.rows.map((d, i) => (
+                      <tr key={i}>
+                        <td>{d.where === 'g702' ? 'Cover sheet' : d.label}</td>
+                        <td>{d.where === 'g702' ? d.label : COL_SAYS[d.col as PdfCol]}</td>
+                        <td className="right mono">{say(d, d.pdf)}</td>
+                        <td className="right mono">{say(d, d.app)}</td>
+                        <td className="right mono">{d.col === 'pct' ? `${(d.pdf - d.app).toFixed(2)}` : (d.pdf - d.app).toLocaleString('en-US', { style: 'currency', currency: 'USD', signDisplay: 'always' })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {grp.follow > 0 && <p className="muted small pay-why-follow">and {grp.follow} more {grp.follow === 1 ? 'figure that follows' : 'figures that follow'} from {grp.rows.length === 1 ? 'it' : 'these'}.</p>}
+              </div>
             ))}
           </>
         )}

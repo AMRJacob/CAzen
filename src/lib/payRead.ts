@@ -21,6 +21,10 @@ export interface ReadRow {
   stored: number
   /** Why a figure should be looked at; absent when the row's own arithmetic bears it out. */
   unsure?: string
+  /** What kinds of reason there are, so they can be counted and explained together. */
+  causes?: ('previous' | 'scan' | 'numbering')[]
+  /** "From previous": the PDF's and the sum of CAzen's earlier applications, where they differ. */
+  previous?: { pdf: number; ours: number }
   /** Said for the record, not to be looked at: a figure mended and borne out by the column's total. */
   note?: string
   /** The line of the PDF it was read from. */
@@ -167,6 +171,8 @@ export interface MatchRead {
   /** Where a column's total and its lines disagree, and which row accounts for it. */
   totalNotes: string[]
   application?: string
+  periodTo?: string
+  appliedOn?: string
   g702?: G702Read
   /** The grand total row as printed. */
   total?: PdfLine
@@ -256,22 +262,25 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     const dotless = new Set<Fig>()
     const s = settle(r.read, { C: k.scheduled, D: k.previous }, dotless)
     const red: string[] = [], grey: string[] = []
-    if (s.doubt) red.push(s.doubt)
+    const causes = new Set<'previous' | 'scan' | 'numbering'>()
+    if (s.doubt) { red.push(s.doubt); causes.add('scan') }
     for (const col of s.mended) {
       const was = r.read[col]
       const said = was == null ? 'was not read' : `was read as ${fmt(was)}`
       const msg = `${COLUMN_NAME[col]} ${said}; the row’s other figures make it ${fmt(s.value[col])}`
-      if ((col === 'E' || col === 'F') && doubtful(col)) red.push(msg)
+      if ((col === 'E' || col === 'F') && doubtful(col)) { red.push(msg); causes.add('scan') }
       else grey.push(msg)
     }
-    if (!near(s.value.D, k.previous)) red.push(`“from previous” on the PDF is ${fmt(s.value.D)}; earlier applications add up to ${fmt(k.previous)}`)
-    if (k.item_no && r.item && sameItem(r.item, k.item_no) && alike(names.get(r) ?? '', k.description) < 0.2 && !near(s.value.C, k.scheduled))
-      red.unshift(`line ${r.item} on the PDF is “${names.get(r)}” — is the numbering the same as the schedule of values?`)
+    if (!near(s.value.D, k.previous)) { red.push(`“From previous” on the PDF is ${fmt(s.value.D)}; CAzen’s earlier applications billed ${fmt(k.previous)} on this line`); causes.add('previous') }
+    if (k.item_no && r.item && sameItem(r.item, k.item_no) && alike(names.get(r) ?? '', k.description) < 0.2 && !near(s.value.C, k.scheduled)) {
+      red.unshift(`line ${r.item} on the PDF is “${names.get(r)}” — is the numbering the same as the schedule of values?`); causes.add('numbering')
+    }
     if (r.itemFixed) grey.push(`its item number was read wrong and was taken from the numbers either side`)
     return {
       id: k.id, found: true, this_period: s.value.E, stored: s.value.F,
-      ...(red.length ? { unsure: red.join('; ') } : {}),
+      ...(red.length ? { unsure: red.join('; '), causes: [...causes] } : {}),
       ...(grey.length ? { note: grey.join('; ') } : {}),
+      ...(!near(s.value.D, k.previous) ? { previous: { pdf: s.value.D, ours: k.previous } } : {}),
       pdf: pdfLine(r, s.value),
       page: r.page,
       ...(!near(s.value.C, k.scheduled) ? { pdfScheduled: s.value.C } : {}),
@@ -327,6 +336,7 @@ export function matchTable(table: TableRead, known: Known[]): MatchRead {
     extra, missing: table.missing.filter((n) => !known.some((k) => sameItem(k.item_no, n) && pick.has(k.id))),
     totals, totalNotes, ...(table.application ? { application: table.application } : {}),
     ...(table.g702 ? { g702: table.g702 } : {}),
+    ...(table.periodTo ? { periodTo: table.periodTo } : {}), ...(table.appliedOn ? { appliedOn: table.appliedOn } : {}),
     ...(() => { const t = table.rows.find((x) => x.kind === 'total'); return t ? { total: Object.fromEntries(Object.entries(t.read).filter(([, v]) => v != null)) as PdfLine } : {} })(),
   }
 }

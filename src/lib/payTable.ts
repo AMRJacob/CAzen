@@ -61,10 +61,24 @@ export interface TableRead {
   totals: { col: Fig; printed: number; added: number; agree: boolean }[]
   /** "Application No." as printed, where it could be read. */
   application?: string
+  /** "Period To" as printed, as an ISO date. */
+  periodTo?: string
+  /** "Application Date" as printed, as an ISO date. */
+  appliedOn?: string
   /** The G702's numbered lines as printed, where they could be read. */
   g702?: G702Read
   /** Lines of a description with no figures on them — a name run onto a second line — with the rows above and below. */
   wraps: { text: string; above: number | null; below: number | null }[]
+}
+
+/** "6/30/2026", "06/30/26", "6-30-26" as an ISO date; undefined if it is not a real date. */
+export function isoOf(t: string): string | undefined {
+  const m = t.replace(/\s+/g, '').match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
+  if (!m) return undefined
+  const mo = Number(m[1]), d = Number(m[2]); let y = Number(m[3])
+  if (y < 100) y += 2000
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return undefined
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
 // ── the G702 page ──
@@ -361,7 +375,7 @@ function rolesOf(cols: Column[], rows: (number | null)[][]): Roles | null {
 export function readTable(pages: PlacedWord[][]): TableRead {
   const rows: TableRow[] = []
   const wraps: TableRead['wraps'] = []
-  let tablePages = 0, application: string | undefined, g702: G702Read | undefined
+  let tablePages = 0, application: string | undefined, g702: G702Read | undefined, periodTo: string | undefined, appliedOn: string | undefined
   pages.forEach((all, pi) => {
     const words = all.filter((w) => w.text.trim() && !JUNK.test(w.text.trim()))
     if (!words.length) return
@@ -370,6 +384,11 @@ export function readTable(pages: PlacedWord[][]): TableRead {
     {
       const found = g702From(lines.map((l) => l.words.map((w) => w.text).join(' ')))
       if (Object.keys(found).length >= 3) g702 = { ...found, ...g702 }
+    }
+    for (const l of lines) {
+      const s = l.words.map((w) => w.text).join(' ')
+      if (!periodTo) { const m = s.match(/PERIOD\s*TO\s*:?\s*(\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4})/i); if (m) periodTo = isoOf(m[1]) }
+      if (!appliedOn) { const m = s.match(/APPLICATION\s*DATE\s*:?\s*(\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4})/i); if (m) appliedOn = isoOf(m[1]) }
     }
     if (!application) {
       for (const l of lines) {
@@ -507,7 +526,8 @@ export function readTable(pages: PlacedWord[][]): TableRead {
       totals.push({ col, printed, added, agree: near(printed, added) })
     }
   }
-  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}), ...(g702 ? { g702 } : {}) }
+  return { rows, pages: tablePages, missing, totals, wraps, ...(application ? { application } : {}), ...(g702 ? { g702 } : {}),
+    ...(periodTo ? { periodTo } : {}), ...(appliedOn ? { appliedOn } : {}) }
 }
 
 /** A row with no number whose first word is junk the reader made of one. */

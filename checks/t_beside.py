@@ -13,7 +13,7 @@ with sync_playwright() as p:
     pg=ctx.new_page(); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(BASE); pg.wait_for_selector('text=Stand-in Office'); pg.click('td.p-name'); pg.wait_for_selector('.overview'); pg.goto(BASE+'#/pay'); pg.wait_for_timeout(1500)
     pg.locator('.tabs button').filter(has_text=re.compile('2')).first.click(); pg.wait_for_selector('.pay-against')
-    print('card:',pg.inner_text('.pay-against').replace('\n',' | ')[:300]); print('co warning:',pg.inner_text('.pay-co-warn'))
+    print('card:',pg.inner_text('.pay-against').replace('\n',' | ')[:300]); print('co cause:',pg.inner_text('.pay-why-co .pay-why-title'))
     pg.set_input_files('.pay-against input[type=file]','g703.pdf'); pg.wait_for_timeout(4000); print('notice:',[t[:200] for t in pg.locator('.notice.error').all_inner_texts()],errs); pg.wait_for_selector('.sheet-viewer.docked',timeout=30000); pg.wait_for_timeout(1500)
     print('kept path:',bool(apps[1]['pdf_read'].get('path')),'| docked:',pg.evaluate("(()=>{const v=document.querySelector('.sheet-viewer.docked').getBoundingClientRect(),c=document.querySelector('.content').getBoundingClientRect();return {viewerLeft:Math.round(v.left),viewerWidth:Math.round(v.width),contentRight:Math.round(c.right)}})()"))
     y0=pg.evaluate('scrollY'); pg.mouse.move(400,500); pg.mouse.wheel(0,600); pg.wait_for_timeout(400); y1=pg.evaluate('scrollY')

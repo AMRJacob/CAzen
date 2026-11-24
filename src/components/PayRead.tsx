@@ -166,6 +166,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
       ], checks ? {
         file: fileName, read_at: new Date().toISOString(),
         ...(checks.application ? { application: checks.application } : {}),
+        ...(checks.periodTo ? { periodTo: checks.periodTo } : {}), ...(checks.appliedOn ? { appliedOn: checks.appliedOn } : {}),
         ...(checks.g702 ? { g702: checks.g702 } : {}),
         ...(checks.total ? { total: checks.total } : {}),
         lines: Object.fromEntries([
@@ -242,11 +243,34 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                   {!lines.length
                     ? <>No schedule of values on record yet: the PDF’s {extra.length} lines are offered as the schedule of values.</>
                     : <>{rows.filter((r) => r.found).length} of {lines.length} lines found.</>}
-                  {unsure > 0 ? <> <strong className="pay-read-warn">{unsure} to check</strong> (in red).</> : ' Every row’s figures add up.'}
+                  {unsure > 0 ? <> <strong className="pay-read-warn">{unsure} to check</strong>, in red — why is below.</> : ' Every row’s figures add up.'}
                   {' '}Click a line to see it on the PDF.
                 </p>
+                {unsure > 0 && (() => {
+                  // The reasons counted together, so a pattern reads as one thing rather than many red rows.
+                  const reds = rows.filter(red)
+                  const of = (c: string) => reds.filter((x) => x.causes?.includes(c as never))
+                  const prev = of('previous'), scan = of('scan'), numbering = of('numbering')
+                  const pdfNo = checks?.application ? Number(checks.application) : null
+                  const wrongApp = pdfNo != null && number != null && pdfNo !== number
+                  const sumOf = (xs: ReadRow[], k: 'pdf' | 'ours') => xs.reduce((n, x) => n + (x.previous?.[k] ?? 0), 0)
+                  return (
+                    <ul className="pay-read-causes small">
+                      {prev.length > 0 && (
+                        <li>
+                          <strong>{prev.length} {prev.length === 1 ? 'line' : 'lines'}: “from previous” is not what CAzen’s earlier applications billed.</strong>{' '}
+                          {wrongApp
+                            ? <>The PDF is Application No. {pdfNo} and this is Application {number}, so the PDF counts {pdfNo! > number! ? `${pdfNo! - number!} application${pdfNo! - number! === 1 ? '' : 's'} CAzen does not have yet` : 'fewer applications than CAzen'}.</>
+                            : <>On these lines the PDF has {money(sumOf(prev, 'pdf'))} billed before this application and CAzen’s applications 1–{(number ?? 1) - 1} have {money(sumOf(prev, 'ours'))}. An earlier application in CAzen is missing figures or has different ones; the earlier applications’ “Against the contractor’s PDF” shows which.</>}
+                        </li>
+                      )}
+                      {scan.length > 0 && <li><strong>{scan.length} {scan.length === 1 ? 'line' : 'lines'}: the scan could be read more than one way.</strong> The likeliest reading is filled in; the PDF is beside it to check.</li>}
+                      {numbering.length > 0 && <li><strong>{numbering.length} {numbering.length === 1 ? 'line' : 'lines'}: the PDF’s line of that number has a different name.</strong> The PDF may be numbered differently from the schedule of values.</li>}
+                    </ul>
+                  )
+                })()}
                 <div className="pay-read-scroll">
-                  {checks && <ReadChecks checks={checks} number={number} listed={extra.length > 0} />}
+                  {checks && <ReadChecks checks={checks} number={number} listed={extra.length > 0} periodTo={periodTo} />}
 
                   {svRows.length > 0 && onSetScheduled && (
                     <div className={`pay-read-decide${svWaiting ? ' waiting' : ''}`}>
@@ -272,10 +296,13 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                           </tbody>
                         </table>
                       )}
-                      <label className="pay-read-opt"><input type="radio" name="sv" checked={svChoice === 'pdf'} onChange={() => setSvChoice('pdf')} />
-                        {' '}Use the PDF’s scheduled values <span className="muted small">— CAzen keeps one scheduled value per line, so earlier applications will show the new values too</span></label>
-                      <label className="pay-read-opt"><input type="radio" name="sv" checked={svChoice === 'keep'} onChange={() => setSvChoice('keep')} />
-                        {' '}Keep CAzen’s <span className="muted small">— the difference stays visible when the figures are set against the PDF</span></label>
+                      <div className="pay-read-choose">
+                        <button className={svChoice === 'pdf' ? 'on' : ''} onClick={() => setSvChoice('pdf')}>Use the PDF’s scheduled values</button>
+                        <button className={svChoice === 'keep' ? 'on' : ''} onClick={() => setSvChoice('keep')}>Keep CAzen’s</button>
+                      </div>
+                      <span className="muted small">{svChoice === 'pdf'
+                        ? 'CAzen keeps one scheduled value per line, so earlier applications will show the new values too.'
+                        : svChoice === 'keep' ? 'The difference stays visible when the figures are set against the PDF.' : ''}</span>
                     </div>
                   )}
 
@@ -326,7 +353,13 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                             <td>{k.description}
                               {r.pdfScheduled != null && svChoice !== 'pdf' && <span className="tag pay-read-svtag" title={`Scheduled value: ${money(k.scheduled)} in CAzen, ${money(r.pdfScheduled)} on the PDF`}>SV</span>}
                               {r.unsure && (bad || hereRow === r.id) && <div className={`small ${bad ? 'pay-read-warn' : 'muted'}`}>{r.unsure}</div>}
-                              {hereRow === r.id && r.from && <div className="muted small pay-read-from">PDF: {r.from}</div>}
+                              {hereRow === r.id && r.pdf && (
+                                <dl className="pay-read-pdfline small">
+                                  {([['C', 'Scheduled'], ['D', 'From previous'], ['E', 'This period'], ['F', 'Stored'], ['G', 'Completed'], ['H', 'Balance']] as const).map(([c, label]) => (
+                                    <div key={c} className={c === 'D' && r.previous ? 'off' : ''}><dt>{label}</dt><dd className="mono">{r.pdf![c] == null ? '—' : money(r.pdf![c]!)}</dd></div>
+                                  ))}
+                                </dl>
+                              )}
                             </td>
                             <td className="right"><MoneyInput className="cell mono right" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
                               onChange={(raw) => setEdits((x) => ({ ...x, [r.id]: { ...v, e: raw } }))} /></td>
@@ -382,9 +415,12 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
 }
 
 /** What the sheet's own checks said: the grand total, the run of line numbers, rows not on record. */
-function ReadChecks({ checks, number, listed }: { checks: Omit<MatchRead, 'rows'>; number?: number; listed?: boolean }) {
+function ReadChecks({ checks, number, listed, periodTo }: { checks: Omit<MatchRead, 'rows'>; number?: number; listed?: boolean; periodTo?: string }) {
   const agree = checks.totals.filter((t) => t.agree).length
   const items: { warn: boolean; text: string }[] = []
+  const us = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}/${d.slice(0, 4)}`
+  if (checks.periodTo && periodTo && checks.periodTo !== periodTo)
+    items.push({ warn: false, text: `The PDF’s period runs to ${us(checks.periodTo)}${checks.appliedOn ? `, applied ${us(checks.appliedOn)}` : ''}; this application has ${us(periodTo)}, and takes the PDF’s dates when these figures are put in. Change orders count by these dates.` })
   if (checks.application && number != null && Number(checks.application) !== number)
     items.push({ warn: true, text: `The PDF says it is Application No. ${checks.application}; this is Application ${number}.` })
   if (checks.totals.length && agree === checks.totals.length)

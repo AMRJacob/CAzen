@@ -3671,3 +3671,21 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 @media (max-width: 900px) {
   .pay-read-sheet { grid-template-columns: 1fr; grid-template-rows: 38vh 1fr; }
 }
+
+.pay-read-causes { margin: 4px 0 10px; padding: 8px 12px 8px 26px; background: #fbf3ee; border: 1px solid rgba(181, 83, 28, 0.25); border-radius: 8px; }
+.pay-read-causes li { margin: 3px 0; }
+.pay-read-pdfline { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 2px; }
+.pay-read-pdfline div { display: flex; flex-direction: column; }
+.pay-read-pdfline dt { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.pay-read-pdfline dd { margin: 0; }
+.pay-read-pdfline .off dd { color: #b5531c; font-weight: 600; }
+.pay-read-choose { display: inline-flex; margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.pay-read-choose button { border: 0; border-radius: 0; background: var(--panel, #fff); padding: 6px 12px; font-size: 13px; }
+.pay-read-choose button + button { border-left: 1px solid var(--line); }
+.pay-read-choose button.on { background: var(--moss); color: #fff; }
+
+.pay-against-lead { margin: 8px 0 6px; }
+.pay-why { border-top: 1px solid var(--line); padding: 10px 0 4px; }
+.pay-why-title { font-weight: 600; }
+.pay-why-detail { margin: 3px 0 6px; color: var(--ink); max-width: 80ch; }
+.pay-why-follow { margin: 0 0 4px; }

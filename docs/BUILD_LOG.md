@@ -11,6 +11,29 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 09:20 CST (pay app differences explained by cause; the PDF's dates)
+
+Jacob: the pay app screens still didn't make clear what was in error or why. Reproduced against
+production's UCA CW Loop data (read-only; not committed): every application's period was the day
+it was entered (11/23/2026) and CO 1's lines were dated approved 11/23/2026, so CAzen counted CO 1
+on Applications 1–4, whose PDFs show no change orders — nine red figures on App 3 from one cause.
+Separately, Kinco rounds retainage application by application, a dollar off rounding the total.
+
+- **The PDF's dates.** "Period To" and "Application Date" are read off the PDF (`isoOf`,
+  `TableRead.periodTo/appliedOn`); when figures are put in, the application takes them, and the
+  review says so. Production's existing dates are unchanged (that needs Jacob's say-so).
+- **Comparison card by cause** (`whyTheyDiffer` in `payCompare.ts`): change orders (with the
+  approval dates and period end that put them on this application), scheduled values, "from
+  previous", this period/stored, retainage (with the rounding that would make it agree and a
+  button to set it), anything else, then the cover-sheet totals that follow. On a line, only the
+  column the others follow from is listed; the rest are counted. The separate change order
+  warning at the top is gone (its content is the change order group).
+- **Review window.** The red rows' reasons are counted together above the list ("12 lines:
+  'from previous' is not what CAzen's earlier applications billed", naming the PDF's application
+  number when it differs); a selected row shows the PDF's figures labelled by column instead of an
+  unlabelled run of numbers; the scheduled-value decision is two buttons, not radio buttons.
+- Checks updated for the review window's current class names and per-line choice.
+
 # Checkpoint — 2026-11-24, 08:40 CST (retainage per application; addenda in the register)
 
 - **Retainage kept application by application.** Kinco rounds each application's retainage on
