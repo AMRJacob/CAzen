@@ -11,6 +11,17 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:50 CST ("Set Cover")
+
+Jacob, 10:13: call the upload's "Cover" option "Set Cover", so it is not confused with the
+drawing cover sheet. In the upload screen: the Part dropdown (*Set Cover*), the right-click menu
+(*Make part of the set cover*), the chosen-pages bar (*Set Cover*), a row's result ("set cover"),
+the note under the fields ("marked as the set cover"), the corner card and its messages, and the
+*Pages* button's tooltip. The drawing cover sheet keeps its own wording (*Drawing cover sheet*).
+Nothing stored changed. `t_resort.py` updated for the menu wording.
+
+---
+
 # Checkpoint — 2026-11-24, 11:40 CST (the drawing cover sheet: chosen by right-click, numbered as earlier sets have it)
 
 Jacob, 10:06: the drawing cover sheet has no ordinary title block and keeps being missed — a

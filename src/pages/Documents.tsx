@@ -760,7 +760,7 @@ function SetsList({ project, order, isAdmin, onChanged, onResort, reloadKey }: {
                       setEditing({ id: r.id, kind: r.kind, number: r.number ?? '', title: r.title ?? '', issuedOn: r.issued_on.slice(0, 10) })
                     }}>Rename</button>
                   )}
-                  {isAdmin && onResort && <> <button className="link" title="Open its pages again to move them between drawings, cover and project manual" onClick={() => onResort(r.id)}>Pages</button></>}
+                  {isAdmin && onResort && <> <button className="link" title="Open its pages again to move them between drawings, set cover and project manual" onClick={() => onResort(r.id)}>Pages</button></>}
                   {isAdmin && <> <button className="link danger-link" onClick={() => setDeleting(deleting === r.id ? null : r.id)}>Delete set</button></>}
                 </td>
               </tr>
@@ -892,7 +892,8 @@ function sortRoles(list: Draft[]): Draft[] {
   })
 }
 
-const ROLE_LABEL: Record<PageRole, string> = { sheet: 'Drawing', cover: 'Cover', spec: 'Manual' }
+// "Set Cover": the cover of the change document or set, not the drawing cover sheet.
+const ROLE_LABEL: Record<PageRole, string> = { sheet: 'Drawing', cover: 'Set Cover', spec: 'Manual' }
 
 /** Which part of the upload a page is, as a select. */
 function RolePick({ value, onChange, label }: { value: PageRole; onChange: (r: PageRole) => void; label: string }) {
@@ -1349,7 +1350,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         let coverPath: string | null = null
         if (covers.length) {
           try {
-            setProgress('Filing the cover')
+            setProgress('Filing the set cover')
             const bytes = await joinPages(covers.map((d) => d.page.bytes))
             const setName = number || ISSUANCE_LABELS[kind]
             const name = `${issuedOn} ${setName} cover.pdf`
@@ -1359,7 +1360,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
             await setIssuanceCover(saved.id, coverPath)
           } catch (e) {
             // Drawings are already in; losing the cover is worth saying, not worth undoing them.
-            setError(`The sheets went in, but the cover didn’t: ${message(e)}`)
+            setError(`The sheets went in, but the set cover didn’t: ${message(e)}`)
           }
         }
         if (DOCUMENT_FOR[kind]) {
@@ -1378,7 +1379,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         const d = chosen.find((x) => x.templateId === t.id && x.pinned === t.id) ?? chosen.find((x) => x.templateId === t.id && !x.unsure)
         if (d) await saveTemplate({ ...t, page_size: { w: Math.round(d.page.text.width), h: Math.round(d.page.text.height) } }).catch(() => {})
       }
-      onDone(`${number || ISSUANCE_LABELS[kind]} saved — ${[chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '', sections.length ? `${sections.length} manual ${sections.length === 1 ? 'section' : 'sections'}` : ''].filter(Boolean).join(', ') || 'the cover'}`)
+      onDone(`${number || ISSUANCE_LABELS[kind]} saved — ${[chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '', sections.length ? `${sections.length} manual ${sections.length === 1 ? 'section' : 'sections'}` : ''].filter(Boolean).join(', ') || 'the set cover'}`)
     } catch (err) {
       setError(message(err))
       setStep('review')
@@ -1463,8 +1464,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               ].filter(Boolean).join(' · ')}.{' '}</>
             )}
             {covers.length > 0
-              ? <>{covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the cover, so {covers.length === 1 ? 'it is' : 'they are'} kept with the set rather than filed as {covers.length === 1 ? 'a drawing' : 'drawings'}{DOCUMENT_FOR[kind] ? ' and attached to that entry' : ''}.</>
-              : DOCUMENT_FOR[kind] ? <>No page is marked as the cover, which is fine — one can be added to it later.</> : null}
+              ? <>{covers.length} {covers.length === 1 ? 'page is' : 'pages are'} marked as the set cover, so {covers.length === 1 ? 'it is' : 'they are'} kept with the set rather than filed as {covers.length === 1 ? 'a drawing' : 'drawings'}{DOCUMENT_FOR[kind] ? ' and attached to that entry' : ''}.</>
+              : DOCUMENT_FOR[kind] ? <>No page is marked as the set cover, which is fine — one can be added to it later.</> : null}
           </p>
         )}
         <label>Revision mark<input value={setRev} onChange={(e) => setSetRev(e.target.value)} placeholder={number || '1, A, Δ2…'} />
@@ -1505,7 +1506,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                       <div className="muted small pick-menu-title">{ds.length === 1 ? `Page ${ds[0].pageIndex + 1}` : `${ds.length} pages`}</div>
                       {some('spec') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'spec'); done() }}>Move to the project manual</button>}
                       {some('sheet') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'sheet'); done() }}>Move to drawings</button>}
-                      {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the cover</button>}
+                      {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the set cover</button>}
                       {ds.length === 1 && (
                         <button role="menuitem" title={`Files it as ${priorCover.number} — ${priorCover.title}, as the project's earlier sets have it`} onClick={() => {
                           const at = ds[0].pageIndex
@@ -1556,7 +1557,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               <span className="muted small">make {sel.size === 1 ? 'it' : 'them'}:</span>
               <button onClick={() => moveChosen('sheet')}>Drawings</button>
               <button onClick={() => moveChosen('spec')}>Project manual</button>
-              <button onClick={() => moveChosen('cover')}>Cover</button>
+              <button onClick={() => moveChosen('cover')}>Set Cover</button>
               <button onClick={() => { includePages([...sel], false); setSel(new Set()) }}>Remove from the upload</button>
               <button className="link" onClick={() => setSel(new Set())}>Clear</button>
             </div>
@@ -1640,7 +1641,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           <p className="muted small drop-hint">Drawings and cover pages. Click a row to choose it — Shift-click for a run, Ctrl-click for one more — then right-click, or use the bar above, to move or remove them.</p>
           <table>
             <thead><tr>
-              <th>Page</th><th>View</th><th title="A drawing; the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Revision date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
+              <th>Page</th><th>View</th><th title="A drawing; the set cover — the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Revision date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
                 const n = d.number.trim().toUpperCase()
@@ -1713,7 +1714,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                         </>
                       )}
                     </td>
-                    <td className="small">{!d.include ? 'skip' : d.role === 'cover' ? 'cover' : d.role === 'spec' ? 'manual' : !n ? <span className="bad-text">needs number</span> : duplicates.has(n) ? <span className="bad-text">duplicate</span> : existingNumbers.has(n) ? 'replaces current' : 'new sheet'}</td>
+                    <td className="small">{!d.include ? 'skip' : d.role === 'cover' ? 'set cover' : d.role === 'spec' ? 'manual' : !n ? <span className="bad-text">needs number</span> : duplicates.has(n) ? <span className="bad-text">duplicate</span> : existingNumbers.has(n) ? 'replaces current' : 'new sheet'}</td>
                   </tr>
                 )
               })}
@@ -1734,7 +1735,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               {step === 'saving' ? `Saving ${progress}…` : `Save ${[
                 chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '',
                 sections.length ? `${sections.length} manual ${sections.length === 1 ? 'section' : 'sections'}` : '',
-                covers.length && !chosen.length && !sections.length ? 'the cover' : '',
+                covers.length && !chosen.length && !sections.length ? 'the set cover' : '',
               ].filter(Boolean).join(' and ')}`}
             </button>
             )}
