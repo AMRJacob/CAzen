@@ -993,12 +993,13 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         try { await setApplication(app.id, { pdf_read: null } as never); onChanged() } catch (e) { onTrouble(message(e)) }
       }} />}
 
-      {index > 0 && (() => {
-        const rows = figures.lines.filter((f) => Math.abs(changeOf(f.line.id)) >= 0.005).map((f) => ({
+      {(index > 0 || moves.length > 0) && (() => {
+        // A line with a move linked to it stays listed even once its change is gone, so the move can be undone.
+        const rows = figures.lines.filter((f) => Math.abs(changeOf(f.line.id)) >= 0.005 || moves.some((m) => m.from === f.line.id || m.to === f.line.id)).map((f) => ({
           id: f.line.id, item: f.line.item_no ?? '', name: f.line.description,
           before: f.carried, now: Math.round((f.carried + changeOf(f.line.id)) * 100) / 100, change: changeOf(f.line.id), left: unlinked(f.line.id),
         }))
-        return rows.length ? <ScheduleChanges rows={rows} moves={moves} onSave={(m) => void saveMoves(m)} before={`Application ${data.applications[index - 1].number}`} linkState={linkState} /> : null
+        return rows.length ? <ScheduleChanges rows={rows} moves={moves} onSave={(m) => void saveMoves(m)} before={index ? `Application ${data.applications[index - 1].number}` : 'the schedule of values'} linkState={linkState} /> : null
       })()}
 
       <div className="card">
