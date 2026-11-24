@@ -554,7 +554,11 @@ const CAUSE_SHORT: Record<string, string> = {
 function PdfChecks({ data, all, onOpen, onChanged, onTrouble }: { data: LoadedContract; all: Figures[]; onOpen: (id: string) => void; onChanged: () => void; onTrouble: (m: string) => void }) {
   const rows = data.applications.map((a, i) => ({ a, f: all[i], c: checkAgainstPdf(data, i, all[i]) }))
   // Applications whose scheduled values aren't yet the ones on the PDF read for them.
-  const behind = data.applications.filter((a) => a.pdf_read && scheduledFromPdf(data.lines, a.pdf_read).some((v) => {
+  // Applications this notice was told to leave alone, in this browser (per contract).
+  const ignoreKey = `cazen.svIgnore.${data.contract.id}`
+  const [ignored, setIgnored] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(ignoreKey) ?? '[]') } catch { return [] } })
+  const ignore = (ids: string[]) => { const next = [...new Set([...ignored, ...ids])]; setIgnored(next); try { localStorage.setItem(ignoreKey, JSON.stringify(next)) } catch { /* kept for this visit only */ } }
+  const behind = data.applications.filter((a) => !ignored.includes(a.id) && a.pdf_read && scheduledFromPdf(data.lines, a.pdf_read).some((v) => {
     const set = data.billed.get(a.id)?.get(v.id)?.scheduled
     return set == null || Math.abs(set - v.scheduled) >= 0.005
   }))
@@ -577,7 +581,10 @@ function PdfChecks({ data, all, onOpen, onChanged, onTrouble }: { data: LoadedCo
         <div className="notice">
           <span>Application{behind.length === 1 ? '' : 's'} {behind.map((a) => a.number).join(', ')} {behind.length === 1 ? 'has' : 'have'} scheduled values that aren’t the ones on {behind.length === 1 ? 'its' : 'their'} PDF.
             Taking them sets each line’s scheduled value on that application to its PDF’s ($0 for a line the PDF doesn’t list). What was billed and certified isn’t changed.</span>
-          <div className="notice-actions"><button className="primary" disabled={taking} onClick={() => void takeAll()}>{taking ? 'Taking them…' : 'Take the scheduled values from the PDFs'}</button></div>
+          <div className="notice-actions">
+            <button className="primary" disabled={taking} onClick={() => void takeAll()}>{taking ? 'Taking them…' : 'Take the scheduled values from the PDFs'}</button>
+            <button className="link" onClick={() => ignore(behind.map((a) => a.id))} title="Stop showing this for these applications">Ignore</button>
+          </div>
         </div>
       )}
       <table className="pay-checks-table">

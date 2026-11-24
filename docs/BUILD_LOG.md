@@ -3683,3 +3683,4 @@ Jacob, 16:00: UCA's drawings look pixelated, as CAW's did before the viewer fix;
 - With a PDF read, the cover sheet (lines 1–9 and the change order summary) shows the contractor's PDF's figures; CAzen's own arithmetic is the check. A figure CAzen works out differently is outlined red with "CAzen $…" under it and the difference on hover.
 - Money linked from a contract line into a change order line (contingency moved into CO 1's lines) is no longer counted in line 2, on that application and those after it: line 2 is the change order lines less what was moved into them. So once the contingency moves are linked, CAzen's line 2 comes to the PDF's.
 - The summary line above the sheet says when the change order lines come to more or less than the PDF's line 2.
+- Summary: the "scheduled values that aren't the ones on their PDF" notice has "Ignore", which stops showing it for those applications (kept in this browser, per contract).
