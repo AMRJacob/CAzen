@@ -51,6 +51,35 @@ export async function saveIssued(project: ProjectStore, kind: FormKind, values: 
 }
 
 /**
+ * A change order started before its document exists: a heading in the register for the proposal
+ * requests going into it, with no file. Its document is added later (attachIssuedFile), or it is
+ * written on the form. Numbered after the project's last change order.
+ */
+export async function startChangeOrder(projectId: string, prIds: string[], lastNumber: string | null): Promise<IssuedForm> {
+  const client = db()
+  const { data: u } = await client.auth.getSession()
+  const number = nextNumber('change_order', lastNumber)
+  const row = {
+    id: crypto.randomUUID(), project_id: projectId, kind: 'change_order' as FormKind,
+    number, title: null, values: { 'co.number': number }, file_path: null,
+    issued_by: u.session?.user.id ?? null,
+  }
+  const { data, error } = await client.from('issued_forms').insert(row).select('*').single()
+  if (error) throw error
+  await coverWith(projectId, row.id, prIds)
+  return data as IssuedForm
+}
+
+/** Put a document's PDF on an entry that was logged without one (a change order started early). */
+export async function attachIssuedFile(project: ProjectStore, row: IssuedForm, pdf: Uint8Array): Promise<string> {
+  const label = [row.number, row.title].filter(Boolean).join(' ').replace(/\//g, '-') || row.id
+  const path = await putFile(project, pdf, `${project.id}/forms/${row.kind}/${row.id}.pdf`, { dirs: [SECTION_FOR[row.kind]], name: `${label}.pdf` })
+  const { error } = await db().from('issued_forms').update({ file_path: path }).eq('id', row.id)
+  if (error) throw error
+  return path
+}
+
+/**
  * Correct what the register says about a document: its number, its subject, the day it went
  * out. The register's record only — the PDF that was issued is what was issued, and is not
  * rewritten.
@@ -289,6 +318,26 @@ export const prPrice = (row: IssuedForm): number | null => {
 export const prDecision = (row: IssuedForm): PrDecision => {
   const v = row.values?.['pr.decision']
   return v === 'approved' || v === 'rejected' ? v : 'pending'
+}
+
+/**
+ * A proposal request is approved or not; an ASI is accepted or not. Both are kept the same way,
+ * in the document's own values, under its kind ('pr.decision', 'asi.decision'). 'approved' is
+ * stored for an accepted ASI too; only the word shown differs.
+ */
+export const DECIDED_KINDS = ['pr', 'asi'] as const
+export const decisionOf = (row: IssuedForm): PrDecision | null => {
+  if (!(DECIDED_KINDS as readonly string[]).includes(row.kind)) return null
+  const v = row.values?.[`${row.kind}.decision`]
+  return v === 'approved' || v === 'rejected' ? v : 'pending'
+}
+export const decisionLabel = (kind: string, d: PrDecision) =>
+  d === 'pending' ? 'Pending' : d === 'rejected' ? 'Rejected' : kind === 'asi' ? 'Accepted' : 'Approved'
+export async function setDecision(row: IssuedForm, d: PrDecision): Promise<Record<string, string>> {
+  const values = { ...(row.values ?? {}), [`${row.kind}.decision`]: d }
+  const { error } = await db().from('issued_forms').update({ values }).eq('id', row.id)
+  if (error) throw error
+  return values
 }
 
 export async function setPrResponse(row: IssuedForm, patch: { price?: number | null; decision?: PrDecision }): Promise<Record<string, string>> {

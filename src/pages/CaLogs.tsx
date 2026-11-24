@@ -2,7 +2,7 @@ import { PageTitle } from '../components/PageTitle'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
-import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
+import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, decisionLabel, decisionOf, setDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, startChangeOrder, attachIssuedFile, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
 import { money as asMoney, NOTHING } from '../lib/money'
 import { money as readMoney } from '../lib/sovPaste'
 import { MoneyInput } from '../components/MoneyInput'
@@ -86,11 +86,21 @@ export default function CaLogs() {
         ALL_KINDS.indexOf(a.kind) - ALL_KINDS.indexOf(b.kind) ||
         (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true }))
     }
-    return r
+    // A change order heads the proposal requests that are in it: they follow it, and leave their own place.
+    const byId = new Map(r.map((x) => [x.id, x]))
+    const out: RegisterRow[] = []
+    for (const x of r) {
+      if (x.kind === 'pr' && x.rolledInto && byId.has(x.rolledInto.id)) continue
+      out.push(x)
+      if (x.kind === 'change_order') for (const c of x.covers ?? []) { const full = byId.get(c.id); if (full) out.push(full) }
+    }
+    return out
   }, [rows, sort])
 
   // Proposal requests no change order has taken up yet, for the attach picker.
   const loose = useMemo(() => (rows ?? []).filter((r) => r.kind === 'pr' && !r.rolledInto), [rows])
+  const orders = useMemo(() => (rows ?? []).filter((r) => r.kind === 'change_order')
+    .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true })), [rows])
   const standing = useMemo(() => prStanding(rows ?? []), [rows])
   // Over everything on the project, not only what the filter is showing.
   const totals = useMemo(() => changeTotals(rows ?? []), [rows])
@@ -178,15 +188,15 @@ export default function CaLogs() {
         : !listed.length ? <div className="card muted">Nothing issued yet.</div> : (
         <table className="register">
           <thead>
-            <tr><th>Number</th><th>Type</th><th className="col-title">Subject</th><th className="col-date">Issued</th><th className="right col-chg">Cost</th><th className="right col-chg">Time</th><th /></tr>
+            <tr><th>Number</th><th>Type</th><th className="col-title">Subject</th><th className="col-status">Status</th><th className="col-date">Issued</th><th className="right col-chg">Cost</th><th className="right col-chg">Time</th><th /></tr>
             <tr className="reg-total">
-              <td colSpan={4}>Change orders to date{totals.orders.count ? ` (${totals.orders.count})` : ''}</td>
+              <td colSpan={5}>Change orders to date{totals.orders.count ? ` (${totals.orders.count})` : ''}</td>
               <td className="right nowrap">{totals.orders.count ? asMoney(totals.orders.cost) : NOTHING}</td>
               <td className="right nowrap">{totals.orders.count ? daysText(totals.orders.days) : NOTHING}</td><td />
             </tr>
             {totals.loose.count > 0 && (
               <tr className="reg-total reg-total-loose">
-                <td colSpan={4}>Proposal requests not yet in a change order ({totals.loose.count})</td>
+                <td colSpan={5}>Proposal requests not yet in a change order ({totals.loose.count})</td>
                 <td className="right nowrap">{asMoney(totals.loose.cost)}</td>
                 <td className="right nowrap">{daysText(totals.loose.days)}</td><td />
               </tr>
@@ -194,7 +204,12 @@ export default function CaLogs() {
           </thead>
           <tbody>
             {listed.map((r) => (
-              <Row key={r.id} row={r} project={current} loose={loose} onValues={patchRow}
+              <Row key={r.id} row={r} project={current} loose={loose} orders={orders} onValues={patchRow}
+                inOrder={!!r.rolledInto && r.kind === 'pr'}
+                onNewOrder={async () => {
+                  if (!current) return
+                  try { await startChangeOrder(current.id, [r.id], orders[orders.length - 1]?.number ?? null); load() } catch (e) { setError(message(e)) }
+                }}
                 attaching={attaching === r.id}
                 onAttach={() => setAttaching(attaching === r.id ? null : r.id)}
                 onChanged={load} onError={setError} />
@@ -238,7 +253,13 @@ function DownloadChange({ row, project, onError }: { row: RegisterRow; project: 
   )
 }
 
-function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, onError }: {
+function Row({ row, project, loose, orders, inOrder, onNewOrder, onValues, attaching, onAttach, onChanged, onError }: {
+  /** The project's change orders, for an approved proposal request to go in. */
+  orders: RegisterRow[]
+  /** Start a new change order with this proposal request in it. */
+  onNewOrder: () => void
+  /** A proposal request listed under the change order it is in. */
+  inOrder: boolean
   onValues: (id: string, values: Record<string, string>) => void
   row: RegisterRow
   project: { id: string; name: string } | null
@@ -253,14 +274,37 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
   /** The status menu of a proposal request, where it was opened. */
   const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null)
   const press = useRef<{ timer: number; x: number; y: number } | null>(null)
-  const decision = row.kind === 'pr' ? prDecision(row) : null
+  const decision = decisionOf(row)
+  const [costTyped, setCostTyped] = useState<string | null>(null)
+  async function saveCost() {
+    if (costTyped === null) return
+    const n = costTyped.trim() ? readMoney(costTyped) : null
+    setCostTyped(null)
+    if (costTyped.trim() && n == null) { onError('That cost is not a figure.'); return }
+    if (n === prPrice(row)) return
+    try { onValues(row.id, await setPrResponse(row, { price: n })); onChanged() } catch (e) { onError(message(e)) }
+  }
+  const [uploading, setUploading] = useState(false)
+  async function uploadOrder(f: File) {
+    if (!project) return
+    setUploading(true)
+    try { await attachIssuedFile(project, row, new Uint8Array(await f.arrayBuffer())); onChanged() } catch (e) { onError(message(e)) } finally { setUploading(false) }
+  }
   async function setStatus(d: PrDecision) {
-    setStatusMenu(null)
+    // Approving a proposal request leaves the menu open on its change orders, to put it in one.
+    if (!(row.kind === 'pr' && d === 'approved')) setStatusMenu(null)
     if (d === decision) return
-    try { onValues(row.id, await setPrResponse(row, { decision: d })) } catch (e) { onError(message(e)) }
+    try { onValues(row.id, await setDecision(row, d)) } catch (e) { onError(message(e)) }
+  }
+  async function putIn(orderId: string | null) {
+    setStatusMenu(null)
+    try {
+      if (orderId) await coverWith(row.project_id, orderId, [row.id]); else await uncover([row.id])
+      onChanged()
+    } catch (e) { onError(message(e)) }
   }
   // A long press on a touch screen does what a right-click does.
-  const touchHandlers = row.kind === 'pr' ? {
+  const touchHandlers = decision ? {
     onPointerDown: (e: React.PointerEvent) => {
       if (e.pointerType === 'mouse') return
       const x = e.clientX, y = e.clientY
@@ -309,6 +353,7 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
           <td><input className="mono" value={edit.number} onChange={(e) => setEdit({ ...edit, number: e.target.value })} onKeyDown={keys} aria-label="Number" /></td>
           <td className="nowrap">{FORM_LABELS[row.kind]}</td>
           <td className="col-title"><input autoFocus value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} onKeyDown={keys} aria-label="Subject" /></td>
+          <td className="col-status" />
           <td className="col-date"><input type="date" value={edit.day} onChange={(e) => setEdit({ ...edit, day: e.target.value })} onKeyDown={keys} aria-label="Issued" /></td>
           <td className="col-chg"><MoneyInput className="right" value={edit.cost} placeholder="$0.00" onChange={(raw) => setEdit((x) => (x ? { ...x, cost: raw } : x))} onKeyDown={keys} aria-label="Change to contract cost" /></td>
           <td className="col-chg"><input className="right" inputMode="numeric" value={edit.days} placeholder="days" onChange={(e) => setEdit({ ...edit, days: e.target.value })} onKeyDown={keys} aria-label="Change to contract time, in days" /></td>
@@ -318,10 +363,10 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
           </td>
         </tr>
       ) : (
-      <tr className={row.file_path ? 'opens' : undefined}
+      <tr className={[row.file_path ? 'opens' : '', row.kind === 'change_order' ? 'reg-co-head' : '', inOrder ? 'reg-in-co' : ''].filter(Boolean).join(' ') || undefined}
         // A right-click edits the row, as it does on the drawings and the sets.
         // A proposal request's right-click (or long press) sets its status; Edit is in that menu too.
-        onContextMenu={(e) => { e.preventDefault(); if (row.kind === 'pr') setStatusMenu({ x: e.clientX, y: e.clientY }); else beginEdit() }}
+        onContextMenu={(e) => { e.preventDefault(); if (decision) setStatusMenu({ x: e.clientX, y: e.clientY }); else beginEdit() }}
         {...touchHandlers}
         onClick={(e) => {
           if (statusMenu) return
@@ -333,22 +378,29 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
         <td className="nowrap">{FORM_LABELS[row.kind]}</td>
         <td className="col-title">
           {subject}
+          {row.kind === 'change_order' && !row.file_path && <span className="covers"> · no document yet</span>}
+        </td>
+        <td className="col-status nowrap">
           {decision && (
             <span className={`pr-status pr-${decision}`} title="Right-click, or press and hold, to change">
-              {decision === 'pending' ? 'Pending' : decision === 'approved' ? 'Approved' : 'Rejected'}
+              {decisionLabel(row.kind, decision)}
             </span>
           )}
-          {row.kind === 'change_order' && row.covers?.length ? (
-            <span className="covers"> covers {row.covers.map((c) => c.number ?? '—').join(', ')}
-              {row.covers.some((c) => prPrice(c) != null) && <> · {asMoney(row.covers.reduce((n, c) => n + (prPrice(c) ?? 0), 0))}</>}
-            </span>
-          ) : null}
-          {row.kind === 'pr' && row.rolledInto ? (
-            <span className="covers"> in {row.rolledInto.number ?? 'a change order'}</span>
-          ) : null}
         </td>
         <td className="col-date">{usDate(new Date(row.issued_at))}</td>
-        <td className={`right nowrap col-chg${costIsOwn(row) ? '' : ' summed'}`} title={costIsOwn(row) ? undefined : 'Added up from the proposal requests it covers'}>{cost == null ? NOTHING : asMoney(cost)}</td>
+        {row.kind === 'pr' ? (
+          // A proposal request's cost is typed straight into its cell; the change order it is in adds them up.
+          <td className="right nowrap col-chg pr-cost" onClick={(e) => { e.stopPropagation(); if (costTyped === null) setCostTyped(cost == null ? '' : asMoney(cost)) }}
+            title={costTyped === null ? 'Click to enter the cost' : undefined}>
+            {costTyped === null ? (cost == null ? <span className="muted">add cost</span> : asMoney(cost)) : (
+              <MoneyInput className="right" autoFocus value={costTyped} placeholder="$0.00" aria-label={`Cost of ${row.number ?? 'this proposal request'}`}
+                onChange={setCostTyped} onBlur={() => void saveCost()}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') setCostTyped(null) }} />
+            )}
+          </td>
+        ) : (
+          <td className={`right nowrap col-chg${costIsOwn(row) ? '' : ' summed'}`} title={costIsOwn(row) ? undefined : 'Added up from the proposal requests it covers'}>{cost == null ? NOTHING : asMoney(cost)}</td>
+        )}
         <td className={`right nowrap col-chg${daysAreOwn(row) ? '' : ' summed'}`}>{days == null ? NOTHING : daysText(days)}</td>
         <td className="right nowrap">
           {row.issuance_id && (
@@ -356,6 +408,15 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
               {showing ? 'Hide sheets' : 'Sheets'}
             </button>
           )}
+          {row.kind === 'change_order' && !row.file_path && project && (
+            <label className="link co-upload" onClick={(e) => e.stopPropagation()}>
+              {uploading ? 'Uploading…' : 'Upload change order'}
+              <input type="file" accept="application/pdf" hidden disabled={uploading} onChange={(e) => {
+                const f = e.target.files?.[0]; e.target.value = ''
+                if (f) void uploadOrder(f)
+              }} />
+            </label>
+          )}{' '}
           {row.kind === 'change_order' && <button className="link" onClick={onAttach}>{attaching ? 'Done' : 'Proposal requests'}</button>}
           {(row.file_path || row.issuance_id) && project && <> <DownloadChange row={row} project={project} onError={onError} /></>}
           {' '}<button className="link" onClick={(e) => { e.stopPropagation(); beginEdit() }}>Edit</button>
@@ -363,20 +424,32 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
       </tr>
       )}
       {edit && (
-        <tr className="reg-edit-note"><td /><td colSpan={6} className="muted small">This corrects the register. The PDF that was issued stays as it was issued.</td></tr>
+        <tr className="reg-edit-note"><td /><td colSpan={7} className="muted small">This corrects the register. The PDF that was issued stays as it was issued.</td></tr>
       )}
 
       {statusMenu && (
-        <tr className="pr-menu-row"><td colSpan={7}>
+        <tr className="pr-menu-row"><td colSpan={8}>
           <div className="pick-menu-shade" onClick={() => setStatusMenu(null)} onContextMenu={(e) => { e.preventDefault(); setStatusMenu(null) }}>
             <div className="pick-menu" role="menu" onClick={(e) => e.stopPropagation()}
-              style={{ left: Math.min(statusMenu.x, window.innerWidth - 290), top: Math.min(statusMenu.y, window.innerHeight - 190) }}>
-              <div className="muted small pick-menu-title">{row.number ?? 'Proposal request'}</div>
+              style={{ left: Math.min(statusMenu.x, window.innerWidth - 290), top: Math.max(8, Math.min(statusMenu.y, window.innerHeight - (row.kind === 'pr' && decision === 'approved' ? 200 + 38 * (orders.length + 2) : 190))) }}>
+              <div className="muted small pick-menu-title">{row.number ?? FORM_LABELS[row.kind]}</div>
               {(['pending', 'approved', 'rejected'] as PrDecision[]).map((d) => (
                 <button key={d} role="menuitemradio" aria-checked={decision === d} className={decision === d ? 'pick-menu-here' : undefined} onClick={() => void setStatus(d)}>
-                  {d === 'pending' ? 'Pending' : d === 'approved' ? 'Approved' : 'Rejected'}{decision === d ? ' ✓' : ''}
+                  {decisionLabel(row.kind, d)}{decision === d ? ' ✓' : ''}
                 </button>
               ))}
+              {row.kind === 'pr' && decision === 'approved' && (
+                <div className="pick-menu-list">
+                  <div className="muted small pick-menu-title">Change order</div>
+                  {orders.map((o) => (
+                    <button key={o.id} role="menuitemradio" aria-checked={row.rolledInto?.id === o.id} className={row.rolledInto?.id === o.id ? 'pick-menu-here' : undefined}
+                      onClick={() => void putIn(row.rolledInto?.id === o.id ? null : o.id)}>
+                      {o.number ?? 'Change order'}{o.title ? ` · ${o.title}` : ''}{row.rolledInto?.id === o.id ? ' ✓' : ''}
+                    </button>
+                  ))}
+                  <button role="menuitem" onClick={() => { setStatusMenu(null); onNewOrder() }}>New change order{orders.length ? '' : ' (the first)'}</button>
+                </div>
+              )}
               <button role="menuitem" onClick={() => { setStatusMenu(null); beginEdit() }}>Edit…</button>
             </div>
           </div>
@@ -384,13 +457,13 @@ function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, on
       )}
 
       {showing && row.issuance_id && (
-        <tr className="confirm-row"><td colSpan={7}>
+        <tr className="confirm-row"><td colSpan={8}>
           <IssuedSheets issuanceId={row.issuance_id} project={project} onError={onError} />
         </td></tr>
       )}
 
       {attaching && (
-        <tr className="confirm-row"><td colSpan={7}>
+        <tr className="confirm-row"><td colSpan={8}>
           <p className="small"><strong>Which proposal requests does {row.number ?? 'this change order'} cover?</strong></p>
           {!loose.length && !row.covers?.length ? (
             <p className="muted small">Every proposal request on this project is already in a change order.</p>

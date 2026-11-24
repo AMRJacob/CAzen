@@ -3983,8 +3983,21 @@ input.nb-toc-group-name { border-bottom: 1px dashed #9db3a3; outline: none; }
 .nsp .nbd-box-in .nbd-card { box-shadow: none; }
 @media (pointer: coarse) { .nsp .nbd-x { padding: 4px 9px; font-size: 18px; } }
 /* A proposal request's status, beside its subject in the change register. */
-.pr-status { display: inline-block; margin-left: 10px; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; line-height: 18px; border: 1px solid var(--line); color: var(--muted); background: var(--wash); vertical-align: 1px; }
+.pr-status { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; line-height: 18px; border: 1px solid var(--line); color: var(--muted); background: var(--wash); vertical-align: 1px; }
 .pr-status.pr-approved { background: var(--moss); border-color: var(--moss); color: #fff; }
 .pr-status.pr-rejected { background: var(--danger-soft, #f6e3df); border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .register tr.pr-menu-row td { padding: 0; border: none; }
 .register tr.opens { -webkit-touch-callout: none; }
+
+/* The change register: a change order heads the proposal requests in it. */
+.register tr.reg-co-head td { background: var(--wash); font-weight: 600; border-top: 1px solid var(--line); }
+.register tr.reg-co-head .covers { font-weight: 400; }
+.register tr.reg-in-co td:first-child { padding-left: 28px; }
+.register tr.reg-in-co td:first-child::before { content: '└ '; color: var(--muted); }
+.register td.pr-cost { cursor: text; }
+.register td.pr-cost input { width: 120px; }
+.co-upload { cursor: pointer; color: var(--moss); text-decoration: underline; text-underline-offset: 2px; font-weight: 400; }
+.register tr.reg-co-head td:first-child, .register tr.reg-in-co td:first-child, .register td.mono { white-space: nowrap; }
+
+.register th.col-status, .register td.col-status { width: 1%; }
+.register td.col-title { min-width: 220px; }

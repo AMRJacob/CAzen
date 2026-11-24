@@ -3764,3 +3764,11 @@ Jacob, 16:43 (screenshot of the register's PR rows): hide the price / decision /
 - Right-click a PR row, or press and hold it on a touch screen (0.5 s, cancelled by moving 8 px), opens Pending / Approved / Rejected and Edit…. Other kinds' right-click still opens Edit.
 - The price is still the PR's Cost, set with Edit; a PR goes into a change order from the change order's *Proposal requests* (or its pill on Contracts). The "approved — not in a change order yet" flag went with the row; the strip above the register still counts them.
 - `checks/t_pr.py` rewritten: statuses, menu, saved decisions, Edit from the menu, a CO's right-click unchanged, long press by touch. Test browser only.
+
+## 2026-11-24 — Change register: Status column, ASI status, PRs grouped under change orders, PR costs
+Jacob, 16:54–16:57: an approved PR can be added to a change order; ASIs need pending / accepted / rejected; adding a PR to a change order makes a heading for that change order, whose document can be uploaded later; cost values on PRs, totalled on the CO; a Status column so the subject can be read.
+- **Status column** after Subject. PRs: Pending / Approved / Rejected (`pr.decision`); ASIs: Pending / Accepted / Rejected (`asi.decision`, stored as 'approved' for accepted — `decisionOf`, `decisionLabel`, `setDecision` in `issued.ts`). Right-click or long press opens the menu; other kinds still open Edit.
+- **Approved PR → change order**: choosing Approved keeps the menu open on the project's change orders (✓ on the one it is in; clicking it again takes it out) and **New change order**: `startChangeOrder` logs CO-00n with no file and puts the PR in it.
+- **Grouping**: a change order is a shaded heading row with the PRs in it listed under it (└), out of their own date place. A change order with no file says "no document yet" and has **Upload change order** (`attachIssuedFile`, filed under 13 Change Orders).
+- **PR cost**: typed straight into the Cost cell ("add cost"); saved as `pr.price`; a change order with no cost of its own shows the sum of its PRs (as before), and the totals follow.
+- `checks/t_pr.py` rewritten for all of it. Test browser only.
