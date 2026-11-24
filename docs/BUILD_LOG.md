@@ -3738,3 +3738,10 @@ Jacob, 16:00: UCA's drawings look pixelated, as CAW's did before the viewer fix;
 - Money linked from a contract line into a change order line (contingency moved into CO 1's lines) is no longer counted in line 2, on that application and those after it: line 2 is the change order lines less what was moved into them. So once the contingency moves are linked, CAzen's line 2 comes to the PDF's.
 - The summary line above the sheet says when the change order lines come to more or less than the PDF's line 2.
 - Summary: the "scheduled values that aren't the ones on their PDF" notice has "Ignore", which stops showing it for those applications (kept in this browser, per contract).
+
+## 2026-11-24 — Proposal request status beside its subject
+Jacob, 16:43 (screenshot of the register's PR rows): hide the price / decision / change-order row under each PR; a status beside the title (pending, approved, rejected); right-click or long press to change it.
+- The row under each PR is gone (`PrResponse` removed). A pill after the subject: Pending (grey), Approved (moss), Rejected (red), from `pr.decision` as before.
+- Right-click a PR row, or press and hold it on a touch screen (0.5 s, cancelled by moving 8 px), opens Pending / Approved / Rejected and Edit…. Other kinds' right-click still opens Edit.
+- The price is still the PR's Cost, set with Edit; a PR goes into a change order from the change order's *Proposal requests* (or its pill on Contracts). The "approved — not in a change order yet" flag went with the row; the strip above the register still counts them.
+- `checks/t_pr.py` rewritten: statuses, menu, saved decisions, Edit from the menu, a CO's right-click unchanged, long press by touch. Test browser only.

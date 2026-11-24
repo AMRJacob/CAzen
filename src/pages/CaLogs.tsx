@@ -1,5 +1,5 @@
 import { PageTitle } from '../components/PageTitle'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import IssueForm from './IssueForm'
 import { FORM_LABELS, usDate } from '../lib/templates/fields'
 import { CHANGE_KINDS, coverWith, fileMissingChangeDocuments, listRegister, missingChangeDocuments, prDecision, prPrice, prStanding, changeCost, changeDays, changeTotals, costIsOwn, daysAreOwn, setIssuedDetails, setPrResponse, uncover, withChange, type MissingChangeDocument, type PrDecision, type RegisterRow } from '../lib/issued'
@@ -91,8 +91,6 @@ export default function CaLogs() {
 
   // Proposal requests no change order has taken up yet, for the attach picker.
   const loose = useMemo(() => (rows ?? []).filter((r) => r.kind === 'pr' && !r.rolledInto), [rows])
-  const orders = useMemo(() => (rows ?? []).filter((r) => r.kind === 'change_order')
-    .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', undefined, { numeric: true })), [rows])
   const standing = useMemo(() => prStanding(rows ?? []), [rows])
   // Over everything on the project, not only what the filter is showing.
   const totals = useMemo(() => changeTotals(rows ?? []), [rows])
@@ -196,7 +194,7 @@ export default function CaLogs() {
           </thead>
           <tbody>
             {listed.map((r) => (
-              <Row key={r.id} row={r} project={current} loose={loose} orders={orders} onValues={patchRow}
+              <Row key={r.id} row={r} project={current} loose={loose} onValues={patchRow}
                 attaching={attaching === r.id}
                 onAttach={() => setAttaching(attaching === r.id ? null : r.id)}
                 onChanged={load} onError={setError} />
@@ -240,9 +238,7 @@ function DownloadChange({ row, project, onError }: { row: RegisterRow; project: 
   )
 }
 
-function Row({ row, project, loose, orders, onValues, attaching, onAttach, onChanged, onError }: {
-  /** The project's change orders, for a proposal request to be rolled into. */
-  orders: RegisterRow[]
+function Row({ row, project, loose, onValues, attaching, onAttach, onChanged, onError }: {
   onValues: (id: string, values: Record<string, string>) => void
   row: RegisterRow
   project: { id: string; name: string } | null
@@ -254,6 +250,29 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
 }) {
   const [picked, setPicked] = useState<string[]>([])
   const [showing, setShowing] = useState(false)
+  /** The status menu of a proposal request, where it was opened. */
+  const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null)
+  const press = useRef<{ timer: number; x: number; y: number } | null>(null)
+  const decision = row.kind === 'pr' ? prDecision(row) : null
+  async function setStatus(d: PrDecision) {
+    setStatusMenu(null)
+    if (d === decision) return
+    try { onValues(row.id, await setPrResponse(row, { decision: d })) } catch (e) { onError(message(e)) }
+  }
+  // A long press on a touch screen does what a right-click does.
+  const touchHandlers = row.kind === 'pr' ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse') return
+      const x = e.clientX, y = e.clientY
+      press.current = { x, y, timer: window.setTimeout(() => { press.current = null; setStatusMenu({ x, y }) }, 500) }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const p = press.current
+      if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) { window.clearTimeout(p.timer); press.current = null }
+    },
+    onPointerUp: () => { if (press.current) { window.clearTimeout(press.current.timer); press.current = null } },
+    onPointerCancel: () => { if (press.current) { window.clearTimeout(press.current.timer); press.current = null } },
+  } : {}
   const subject = row.title ?? row.values?.[`${row.kind.split('_')[0]}.title`] ?? ''
   const cost = changeCost(row), days = changeDays(row)
   /** The row being corrected: number, subject and day, as typed so far. */
@@ -301,8 +320,11 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
       ) : (
       <tr className={row.file_path ? 'opens' : undefined}
         // A right-click edits the row, as it does on the drawings and the sets.
-        onContextMenu={(e) => { e.preventDefault(); beginEdit() }}
+        // A proposal request's right-click (or long press) sets its status; Edit is in that menu too.
+        onContextMenu={(e) => { e.preventDefault(); if (row.kind === 'pr') setStatusMenu({ x: e.clientX, y: e.clientY }); else beginEdit() }}
+        {...touchHandlers}
         onClick={(e) => {
+          if (statusMenu) return
           if (!row.file_path || !project) return
           if ((e.target as HTMLElement).closest('button, a, select, input')) return
           openFile(project, row.file_path).catch((err) => onError(message(err)))
@@ -311,6 +333,11 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
         <td className="nowrap">{FORM_LABELS[row.kind]}</td>
         <td className="col-title">
           {subject}
+          {decision && (
+            <span className={`pr-status pr-${decision}`} title="Right-click, or press and hold, to change">
+              {decision === 'pending' ? 'Pending' : decision === 'approved' ? 'Approved' : 'Rejected'}
+            </span>
+          )}
           {row.kind === 'change_order' && row.covers?.length ? (
             <span className="covers"> covers {row.covers.map((c) => c.number ?? '—').join(', ')}
               {row.covers.some((c) => prPrice(c) != null) && <> · {asMoney(row.covers.reduce((n, c) => n + (prPrice(c) ?? 0), 0))}</>}
@@ -339,9 +366,20 @@ function Row({ row, project, loose, orders, onValues, attaching, onAttach, onCha
         <tr className="reg-edit-note"><td /><td colSpan={6} className="muted small">This corrects the register. The PDF that was issued stays as it was issued.</td></tr>
       )}
 
-      {row.kind === 'pr' && (
-        <tr className="pr-response"><td /><td colSpan={6}>
-          <PrResponse row={row} orders={orders} onValues={onValues} onChanged={onChanged} onError={onError} />
+      {statusMenu && (
+        <tr className="pr-menu-row"><td colSpan={7}>
+          <div className="pick-menu-shade" onClick={() => setStatusMenu(null)} onContextMenu={(e) => { e.preventDefault(); setStatusMenu(null) }}>
+            <div className="pick-menu" role="menu" onClick={(e) => e.stopPropagation()}
+              style={{ left: Math.min(statusMenu.x, window.innerWidth - 290), top: Math.min(statusMenu.y, window.innerHeight - 190) }}>
+              <div className="muted small pick-menu-title">{row.number ?? 'Proposal request'}</div>
+              {(['pending', 'approved', 'rejected'] as PrDecision[]).map((d) => (
+                <button key={d} role="menuitemradio" aria-checked={decision === d} className={decision === d ? 'pick-menu-here' : undefined} onClick={() => void setStatus(d)}>
+                  {d === 'pending' ? 'Pending' : d === 'approved' ? 'Approved' : 'Rejected'}{decision === d ? ' ✓' : ''}
+                </button>
+              ))}
+              <button role="menuitem" onClick={() => { setStatusMenu(null); beginEdit() }}>Edit…</button>
+            </div>
+          </div>
         </td></tr>
       )}
 
@@ -440,59 +478,3 @@ function IssuedSheets({ issuanceId, project, onError }: {
 }
 
 
-/**
- * What came back on a proposal request: the contractor's price, the owner's answer, and the
- * change order it ends up in. A PR is a question; this is the answer, kept on the same line.
- */
-function PrResponse({ row, orders, onValues, onChanged, onError }: {
-  row: RegisterRow
-  orders: RegisterRow[]
-  onValues: (id: string, values: Record<string, string>) => void
-  onChanged: () => void
-  onError: (m: string) => void
-}) {
-  const price = prPrice(row)
-  const decision = prDecision(row)
-  const [typed, setTyped] = useState(price == null ? '' : asMoney(price))
-
-  async function keep(patch: { price?: number | null; decision?: PrDecision }) {
-    try { onValues(row.id, await setPrResponse(row, patch)) } catch (e) { onError(message(e)) }
-  }
-  function priceDone() {
-    const n = typed.trim() ? readMoney(typed) : null
-    if (typed.trim() && n == null) { setTyped(price == null ? '' : asMoney(price)); return }
-    if (n !== price) void keep({ price: n })
-    setTyped(n == null ? '' : asMoney(n))
-  }
-  const CHOICES: [PrDecision, string][] = [['pending', price == null ? 'Awaiting price' : 'Awaiting decision'], ['approved', 'Approved'], ['rejected', 'Not accepted']]
-
-  return (
-    <div className="pr-answer">
-      <label>Price
-        <MoneyInput className="cell" value={typed} placeholder="when it comes back"
-          aria-label={`Price for ${row.number ?? 'this proposal request'}`}
-          onChange={setTyped} onBlur={priceDone}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
-      </label>
-      <div className="pr-decide" role="radiogroup" aria-label="The owner’s decision">
-        {CHOICES.map(([d, label]) => (
-          <button key={d} role="radio" aria-checked={decision === d} className={`chip pr-${d}${decision === d ? ' on' : ''}`}
-            onClick={() => { if (decision !== d) void keep({ decision: d }) }}>{label}</button>
-        ))}
-      </div>
-      <label>Change order
-        <select value={row.rolledInto?.id ?? ''} aria-label={`Change order for ${row.number ?? 'this proposal request'}`}
-          onChange={async (e) => {
-            try {
-              if (e.target.value) await coverWith(row.project_id, e.target.value, [row.id]); else await uncover([row.id])
-              onChanged()
-            } catch (err) { onError(message(err)) }
-          }}>
-          <option value="">{orders.length ? 'Not in one yet' : 'None written yet'}</option>
-          {orders.map((o) => <option key={o.id} value={o.id}>{o.number ?? 'Change order'}{o.title ? ` · ${o.title}` : ''}</option>)}
-        </select>
-      </label>
-      {decision === 'approved' && !row.rolledInto && <span className="pr-flag">Approved — not in a change order yet</span>}
-    </div>
-  )
-}
