@@ -3527,3 +3527,4 @@ pixel ratio; and frame timing under 6× CPU throttling.
 - A PDF row that is a heading in CAzen but carries figures (UCA's "Balance of Work" on applications 1–4, before Kinco broke it out) comes in as a line item, with its figures and its value on that application; the read window says so.
 - Scheduled values from a PDF: a line the PDF doesn't list is $0 on that application only when the lines read add up to the PDF's grand total; otherwise it's left as it was, so a row the reader missed isn't zeroed.
 - Schedule changes: while linking a line, "every line that went up" (or down) spreads it over all the lines that went the other way, each taking what's left of its own change until the amount is used — for a lump like Balance of Work broken out into trades.
+- Read window: a "Scheduled (PDF)" column on every row, so a line read with nothing billed this period (UCA's Balance of Work) visibly came in.

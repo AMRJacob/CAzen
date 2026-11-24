@@ -354,7 +354,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                   )}
 
                   <table className="pay-read-list">
-                    <thead><tr><th>Item</th><th>Description</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
+                    <thead><tr><th>Item</th><th>Description</th><th className="right">Scheduled (PDF)</th><th className="right">This period</th><th className="right">Stored</th></tr></thead>
                     <tbody>
                       {lines.map((k) => {
                         const r = byId.get(k.id)
@@ -363,6 +363,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                           return (
                             <tr key={k.id} className="pay-read-missing">
                               <td className="mono">{k.item_no ?? ''}</td><td>{k.description}<span className="muted small"> · not on the PDF, left as it is</span></td>
+                              <td className="right mono muted">—</td>
                               <td className="right mono">{money(c.this_period)}</td><td className="right mono">{money(c.stored)}</td>
                             </tr>
                           )
@@ -383,6 +384,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                                 </dl>
                               )}
                             </td>
+                            <td className="right mono">{money(r.pdf?.C ?? r.pdfScheduled ?? k.scheduled)}</td>
                             <td className="right"><MoneyInput className="cell mono right" value={v.e} onFocus={touch} aria-label={`This period for ${k.description}`}
                               onChange={(raw) => setEdits((x) => ({ ...x, [r.id]: { ...v, e: raw } }))} /></td>
                             <td className="right"><MoneyInput className="cell mono right" value={v.f} onFocus={touch} aria-label={`Stored for ${k.description}`}
@@ -390,7 +392,7 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                           </tr>
                         )
                       })}
-                      {extra.length > 0 && lines.length > 0 && <tr className="pay-read-sep"><td colSpan={4}>On the PDF, not in CAzen</td></tr>}
+                      {extra.length > 0 && lines.length > 0 && <tr className="pay-read-sep"><td colSpan={5}>On the PDF, not in CAzen</td></tr>}
                       {extra.map((x, i) => {
                         const v = xval(x, i), as = asOf(i), on = as !== 'skip', head = as === 'heading'
                         return (
@@ -406,10 +408,11 @@ export function PayRead({ known, current, onKeep, onAddLines, onSetScheduled, nu
                                   <option value="skip">Don’t add</option>
                                 </select>
                               </div>
-                              {!head && <div className="small muted">scheduled {money(x.scheduled)}{x.co ? ` · under ${x.co}` : ''}</div>}
+                              {!head && x.co && <div className="small muted">under {x.co}</div>}
                               {head && (x.scheduled || x.this_period || x.stored) ? <div className="small pay-read-warn">As a heading it carries no value: {money(x.scheduled)} scheduled is left out.</div> : null}
                               {on && !head && x.previous !== 0 && <div className="small pay-read-warn">From previous on the PDF is {money(x.previous)}; added here, nothing is billed on it before this application.</div>}
                             </td>
+                            <td className="right mono">{head ? '—' : money(x.scheduled)}</td>
                             <td className="right"><MoneyInput className="cell mono right" value={v.e} disabled={!on || head} aria-label={`This period for ${x.name}`}
                               onChange={(raw) => setEdits((y) => ({ ...y, [`x${i}`]: { ...v, e: raw } }))} /></td>
                             <td className="right"><MoneyInput className="cell mono right" value={v.f} disabled={!on || head} aria-label={`Stored for ${x.name}`}
