@@ -688,15 +688,27 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
   const [beside, setBeside] = useState<Uint8Array | null>(null)
   const [opening, setOpening] = useState(false)
   // A cover-sheet figure being read again: the box on the PDF and what it reads.
-  const [fixing, setFixing] = useState<{ key: string; label: string; printed: number; mark: import('../components/PdfStrip').StripMark; reading?: boolean; got?: { n: number | null; text: string; options?: number[] } } | null>(null)
+  const [fixing, setFixing] = useState<{ key: string; label: string; printed: number; mark: import('../components/PdfStrip').StripMark; reading?: boolean; got?: { n: number | null; text: string; options?: number[] }; finding?: string } | null>(null)
   useEffect(() => { setFixing(null) }, [app.id])
   async function showFigure(d: Discrepancy) {
     if (!pdf) return
-    const at = pdf.g702At?.[d.col as keyof NonNullable<typeof pdf.g702At>]
-    // Where the figure was read; for a PDF read before places were kept, a box on the first page to drag onto it.
-    const box = at ?? { page: 1, x: 0.3, y: 0.3, w: 0.18, h: 0.025 }
-    setFixing({ key: String(d.col), label: d.label, printed: d.pdf, mark: { ...box, ask: Date.now() } })
-    if (!beside) await showBeside()
+    type Key = keyof NonNullable<typeof pdf.g702At>
+    const key = d.col as Key
+    const at = pdf.g702At?.[key]
+    const rough = { page: 1, x: 0.3, y: 0.3, w: 0.18, h: 0.025 }
+    setFixing({ key: String(d.col), label: d.label, printed: d.pdf, mark: { ...(at ?? rough), ask: Date.now() }, ...(at ? {} : { finding: 'Finding it on the PDF…' }) })
+    const bytes = beside ?? await showBeside()
+    if (at || !bytes) { if (!at) setFixing((f) => (f ? { ...f, finding: undefined } : f)); return }
+    // A PDF read before places were kept: its cover sheet is read again for where each figure is,
+    // and that is kept with the read (the figures themselves are left as they were).
+    try {
+      const { payText } = await import('../lib/pdf/payText')
+      const t = await payText(bytes, (p) => setFixing((f) => (f ? { ...f, finding: p.reading ? `Finding it on the PDF — reading page ${p.page} of ${p.pages}…` : 'Finding it on the PDF…' } : f)))
+      const found = t.table.g702At ?? {}
+      const here = found[key]
+      setFixing((f) => (f && f.key === String(d.col) ? { ...f, finding: here ? undefined : 'Couldn’t find it — drag the box onto the figure.', mark: here ? { ...here, ask: Date.now() } : f.mark } : f))
+      if (Object.keys(found).length) { await setApplication(app.id, { pdf_read: { ...pdf, g702At: { ...found, ...pdf.g702At } } } as never); onChanged() }
+    } catch (e) { setFixing((f) => (f ? { ...f, finding: `Couldn’t find it (${message(e)}) — drag the box onto the figure.` } : f)) }
   }
   async function readFixing() {
     if (!fixing || !beside) return
@@ -716,10 +728,10 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
     } catch (e) { onTrouble(message(e)) }
   }
 
-  async function showBeside() {
-    if (!pdf?.path || !project) return
+  async function showBeside(): Promise<Uint8Array | null> {
+    if (!pdf?.path || !project) return null
     setOpening(true)
-    try { setBeside(await readFile(project, pdf.path)) } catch (e) { onTrouble(message(e)) } finally { setOpening(false) }
+    try { const bytes = await readFile(project, pdf.path); setBeside(bytes); return bytes } catch (e) { onTrouble(message(e)); return null } finally { setOpening(false) }
   }
   useEffect(() => {
     document.documentElement.classList.toggle('pdf-docked', !!beside)
@@ -1044,8 +1056,8 @@ function OneApplication({ data, index, figures, onChanged, onRemoved, onTrouble,
         mark={fixing?.mark} onMark={fixing ? (m) => setFixing((f) => (f ? { ...f, mark: m, got: undefined } : f)) : undefined}
         extra={fixing ? (
           <div className="pay-fix-bar">
-            <span><strong>{fixing.label}</strong> — read as {money(fixing.printed)}. Move or resize the box over the whole figure.</span>
-            <button className="primary-lite small" onClick={() => void readFixing()} disabled={fixing.reading}>{fixing.reading ? 'Reading…' : 'Read the box'}</button>
+            <span><strong>{fixing.label}</strong> — read as {money(fixing.printed)}. {fixing.finding ?? 'Move or resize the box over the whole figure.'}</span>
+            <button className="primary-lite small" onClick={() => void readFixing()} disabled={fixing.reading || !!fixing.finding?.endsWith('…')}>{fixing.reading ? 'Reading…' : 'Read the box'}</button>
             {fixing.got && (fixing.got.n == null
               ? fixing.got.options
                 ? <><span className="small">The box holds {fixing.got.options.length} figures:</span>
