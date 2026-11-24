@@ -1,4 +1,4 @@
-"""On the spread: right-click (or hold still and let go) a note or category for its menu; Edit the words changes it."""
+"""On the spread: right-click (or hold still and let go) a note or category and its words open to change."""
 from common import *
 import json
 V={'id':'cccccccc-cccc-4ccc-8ccc-ccccccccc001','project_id':PROJ,'kind':'visit','visited_on':'2026-11-18','visited_at':'15:00:00','title':'Walk','weather':'x','names':None,
@@ -20,14 +20,13 @@ for name,vp in (('desk',dict(viewport={'width':1440,'height':900})),('phone',PHO
                 cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y,'id':1}]}); pg.wait_for_timeout(550)
                 cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
             else: pg.mouse.click(x,y,button='right')
-            pg.wait_for_timeout(300); return pg.locator('.nbd-menu button').all_inner_texts()
+            pg.wait_for_timeout(300); return {'menu': pg.locator('.nbd-menu').count(), 'editing': pg.locator('.nsp .nbd-edit').input_value() if pg.locator('.nsp .nbd-edit').count() else None}
         print(name,'| filed note menu:', ask(pg.locator('.nsp .nbd-card:has-text("Anchor")')))
-        pg.locator('.nbd-menu button:has-text("Edit the words")').click(); pg.wait_for_timeout(200)
         pg.keyboard.type('Anchor bolts plumbed'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
         print('  saved:', repr(saved[-1]) if saved else None)
         print('  loose note menu:', ask(pg.locator('.nsp .nbd-card:has-text("Sealant")')))
-        pg.locator('.nbd-menu button:has-text("Edit the words")').click(); pg.wait_for_timeout(200); pg.keyboard.type('Sealant at storefront'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
+        pg.keyboard.type('Sealant at storefront'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
         print('  category menu:', ask(pg.locator('.nsp .nbd-box-head:has-text("Structure")')))
-        pg.locator('.nbd-menu button:has-text("Edit the words")').click(); pg.wait_for_timeout(200); pg.keyboard.type('Structural'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
+        pg.keyboard.type('Structural'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
         print('  saved:', repr(saved[-1]), '| spread still open:', pg.locator('.nsp').count()==1, '| errors', errs)
         b.close()

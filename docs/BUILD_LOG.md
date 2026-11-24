@@ -11,6 +11,20 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 18:15 CST (right-click opens a note's words; no menu)
+
+Jacob, 17:00: right-clicking wasn't working on the page, and a right-click should go straight to
+editing rather than open a menu. On the board and on the spread, a right-click (or Ctrl-click),
+or by touch a hold let go without moving, now opens the note's or category's words to change —
+no menu. A phone that sends its own long-press event (and then cancels the touch, as Android can)
+gets the same. A right-click inside the words being changed keeps the browser's menu, for paste.
+The failure itself was not reproduced in the test browser; the Android long-press case is the
+likeliest cause found. The menu's other choices remain elsewhere: + on a category for a
+subcategory, × to remove, drag to the tray to unfile. `checks/t_boardmenu.py`,
+`checks/t_spreadmenu.py`.
+
+---
+
 # Checkpoint — 2026-11-24, 18:00 CST (the notes' own menu on the spread)
 
 Jacob, 16:51: right-click a note or category to change it, on the page and on the spread. On the

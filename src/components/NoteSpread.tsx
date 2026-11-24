@@ -87,8 +87,6 @@ export function NoteSpread({ notes, spots, onSave, onClose }: {
   // ---- Picking up and putting down ----
   const [held, setHeld] = useState<{ path: Path; id: number; x0: number; y0: number; dx: number; dy: number; box: boolean; over: string | null; moved: boolean } | null>(null)
   const heldRef = useRef(held)
-  /** A note's or category's own menu (Jacob, 11/24): right-click, or by touch hold still and let go. */
-  const [menu, setMenu] = useState<{ path: Path; x: number; y: number } | null>(null)
   const pressedAt = useRef(0)
   const hand = useRef<{ x: number; y: number } | null>(null)
 
@@ -138,11 +136,18 @@ export function NoteSpread({ notes, spots, onSave, onClose }: {
       heldRef.current = null
       hand.current = null
       setHeld(null)
-      if (h && !h.moved && e.pointerType === 'touch' && Date.now() - pressedAt.current >= 450) { setMenu({ path: h.path, x: e.clientX, y: e.clientY }); return }
+      if (h && !h.moved && e.pointerType === 'touch' && Date.now() - pressedAt.current >= 450) { setEditing(key(h.path)); return }
       if (!h || !h.moved) return
       drop(h, e.clientX, e.clientY)
     },
-    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (!heldRef.current?.moved) setMenu({ path, x: e.clientX, y: e.clientY }) },
+    // Right-click, or a phone's long press: the words open to change, no menu (Jacob, 11/24).
+    onContextMenu: (e: React.MouseEvent) => {
+      // In the words being changed, the browser's own menu (paste and so on).
+      if ((e.target as HTMLElement).closest('input')) return
+      e.preventDefault(); e.stopPropagation()
+      if (heldRef.current?.moved) return
+      heldRef.current = null; setHeld(null); setEditing(key(path))
+    },
     onPointerCancel: () => { heldRef.current = null; hand.current = null; setHeld(null) },
   })
 
@@ -219,10 +224,10 @@ export function NoteSpread({ notes, spots, onSave, onClose }: {
   }, [held?.moved]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !editing) { if (menu) setMenu(null); else onClose() } }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !editing) onClose() }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [editing, menu, onClose])
+  }, [editing, onClose])
 
   // ---- Drawing ----
   const lift = (path: Path) => (held?.moved && key(held.path) === key(path)
@@ -339,33 +344,6 @@ export function NoteSpread({ notes, spots, onSave, onClose }: {
           </div>
         </div>
       </div>
-      {menu && (() => {
-        const node = nodeAt(board, menu.path)
-        if (!node) return null
-        const isLoose = menu.path.length === 2 && menu.path[0] === loose
-        const isBox = !isLoose && (node.kids.length > 0 || menu.path.length === 1)
-        const close = () => setMenu(null)
-        return (
-          <div className="nbd-menu-back" onPointerDown={close} onContextMenu={(e) => { e.preventDefault(); close() }}>
-            <div className="padctx nbd-menu" role="menu" onPointerDown={(e) => e.stopPropagation()}
-              style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 200) }}>
-              <span className="nb-tear-say">{node.text.length > 40 ? `${node.text.slice(0, 40)}…` : node.text}</span>
-              <button role="menuitem" onClick={() => { close(); setEditing(key(menu.path)) }}>Edit the words</button>
-              {isBox && <button role="menuitem" onClick={() => {
-                close(); const at = key([...menu.path, node.kids.length]); set(addBox(board, menu.path, 'New category')); setEditing(at)
-              }}>Add a subcategory</button>}
-              {!isBox && !isLoose && <button role="menuitem" onClick={() => {
-                close()
-                const i = looseAt(board)
-                set(i >= 0 ? move(board, menu.path, [i]) : move(addBox(board, [], LOOSE), menu.path, [board.length]))
-              }}>Take it out of the category</button>}
-              <button role="menuitem" className="danger" onClick={() => {
-                close(); if (!node.kids.length || window.confirm(`Remove “${node.text}” and the ${node.kids.length} under it?`)) set(remove(board, menu.path))
-              }}>{isBox ? 'Remove this category' : 'Delete this note'}</button>
-            </div>
-          </div>
-        )
-      })()}
     </div>
   )
 }

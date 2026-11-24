@@ -1,4 +1,4 @@
-"""The notes board's own menu: right-click at a desk; by touch, hold and let go without moving. Holding and moving still drags."""
+"""Right-click at a desk, or by touch hold and let go without moving: the words open to change, no menu. Holding and moving still drags."""
 from common import *
 import json
 V={'id':'cccccccc-cccc-4ccc-8ccc-ccccccccc001','project_id':PROJ,'kind':'visit','visited_on':'2026-11-18','visited_at':'15:00:00','title':'Walk','weather':'x','names':None,
@@ -20,8 +20,7 @@ for name,vp in (('desk',dict(viewport={'width':1440,'height':900})),('phone',PHO
             cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y,'id':1}]}); pg.wait_for_timeout(520)
             cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
         pg.wait_for_timeout(300)
-        print(name,'| menu:', pg.locator('.nbd-menu button').all_inner_texts())
-        pg.locator('.nbd-menu button:has-text("Edit the words")').click(); pg.wait_for_timeout(200)
+        print(name,'| no menu:', pg.locator('.nbd-menu').count()==0, '| editing:', pg.locator('.nbd-edit').count()==1)
         pg.keyboard.type('Anchor bolts plumbed'); pg.keyboard.press('Enter'); pg.wait_for_timeout(900)
         print('  edited, saved:', repr(saved[-1]) if saved else None)
         head=pg.locator('.nbd-box-head:has-text("Envelope")').first; hb=head.bounding_box()
@@ -29,6 +28,7 @@ for name,vp in (('desk',dict(viewport={'width':1440,'height':900})),('phone',PHO
         else:
             cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':hb['x']+40,'y':hb['y']+hb['height']/2,'id':1}]}); pg.wait_for_timeout(520)
             cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-        pg.wait_for_timeout(300); print('  category menu:', pg.locator('.nbd-menu button').all_inner_texts())
-        pg.mouse.click(5,5) if name=='desk' else pg.touchscreen.tap(5,300); pg.wait_for_timeout(200); print('  closes on a touch elsewhere:', pg.locator('.nbd-menu').count()==0, '| errors', errs)
+        pg.wait_for_timeout(300); print('  category opens its name:', pg.locator('.nbd-edit').input_value() if pg.locator('.nbd-edit').count() else None)
+        pg.keyboard.type('Exterior envelope'); pg.keyboard.press('Enter'); pg.wait_for_timeout(900)
+        print('  saved:', repr(saved[-1]), '| errors', errs)
         b.close()
