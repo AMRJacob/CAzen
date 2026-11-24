@@ -11,6 +11,15 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:40 CST (the upload card at the bottom right)
+
+Jacob, 11:32: the minimised upload covers other parts of the screen; the bottom right instead. The
+corner card is now 16 px from the bottom and right edges (inside the safe area). On a phone it runs
+across the bottom above the corner menu mark. `t_upload_bg.py` passes; the card sits at 1424, 884 in
+a 1440 × 900 window.
+
+---
+
 # Checkpoint — 2026-11-24, 11:45 CST (set introduction folded like a manual section; actions in the right-click menu)
 
 Jacob, 11:11: the set introduction as a collapsible group like the manual's sections, its pages

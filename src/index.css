@@ -3769,7 +3769,7 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .change-manual tr.cm-page .thumb-cell { width: 70px; }
 
 /* An upload going on while other work is done: a card in the top-right corner. */
-.upload-chip { position: fixed; top: 14px; right: 16px; z-index: 70; width: 300px; padding: 10px 12px; background: var(--panel, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(43, 45, 44, 0.18); }
+.upload-chip { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); right: calc(16px + env(safe-area-inset-right)); z-index: 70; width: 300px; padding: 10px 12px; background: var(--panel, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(43, 45, 44, 0.18); }
 .upload-chip.done { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #eef4ee; border-color: rgba(95, 122, 97, 0.4); }
 .upload-chip.bad { background: #fbf0ec; border-color: rgba(181, 83, 28, 0.4); }
 .upload-chip-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -3780,7 +3780,7 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 @keyframes upload-busy { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 @media (prefers-reduced-motion: reduce) { .upload-bar.busy span { animation: none; width: 100%; opacity: .4; } }
 .upload-min { position: sticky; float: right; top: 4px; margin-right: 14px; }
-@media (max-width: 620px) { .upload-chip { left: 12px; right: 12px; width: auto; top: calc(10px + env(safe-area-inset-top)); } }
+@media (max-width: 620px) { .upload-chip { left: 12px; right: 12px; width: auto; bottom: calc(var(--corner, 22px) + 72px + env(safe-area-inset-bottom)); } }
 .pv-strip .pv-boxes { display: flex; gap: 12px; align-items: center; padding-bottom: 8px; white-space: nowrap; }
 .change-intro .intro-table { width: 100%; }
 .change-intro .intro-table td { vertical-align: middle; }
