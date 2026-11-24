@@ -11,6 +11,31 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 12:20 CST (Addendum 2: Cash Allowances read; "Set Introduction")
+
+Jacob, with UCA Addendum 2: project manual pages still missed — Cash Allowances did not make it
+in; and an MEP cover sheet in the document — a "Set Introduction" part instead of cover, to hold
+such sheets from any discipline, ours included.
+
+- **Cash Allowances (pp. 6–9 of the PDF) is text in fonts with no character map**: the text
+  layer is there, but 2–7% of its characters are letters, so no footer, header or section number
+  could be read. A page whose text is mostly not letters (`unreadableText` in `pageText.ts`:
+  100+ characters, under 30% letters) is now read from its picture, as a scan is — in the change
+  document upload and in the project manual upload. Drawings are still never OCR'd.
+- **"Set Cover" is now "Set Introduction"** everywhere in the upload (Part dropdown, right-click
+  *Make part of the set introduction*, chosen-pages bar, row results, notes, corner card). It is
+  the same part: the change document's own pages (00 91 xx) and any narrative or cover sheet put
+  there. Nothing stored changed.
+
+Result on his file in the test browser (read in 16 s): pages 1–2 Set Introduction, 3–14
+drawings, 15–16 Set Introduction (the MEP narrative), 17–26 drawings; Addendum / Addendum 2 /
+04/24/2026; manual: 00 01 10 Table of Contents (3–4) and 01 21 00 Cash Allowances (pages 1–4),
+both new sections; Save 22 sheets and 2 manual sections. `t_resort`, `t_changedoc`,
+`t_coversheet`, `t_split`, `t_upload_bg`, `changedoc.test.ts` rerun clean. Not saved to the real
+project from here.
+
+---
+
 # Checkpoint — 2026-11-24, 11:50 CST ("Set Cover")
 
 Jacob, 10:13: call the upload's "Cover" option "Set Cover", so it is not confused with the
@@ -3387,8 +3412,3 @@ pixel ratio; and frame timing under 6× CPU throttling.
 - Change orders: line 2 is the total of the change order lines on that application; approval dates no longer decide anything. The summary's "this month" is the change from the previous application. The dates check is gone.
 - Money moved between lines (migration 0053, applied: `pay_apps.moves`): right-click a scheduled value that changed on this application → "Show the line it moved to…" (or "came from"), then click that line. Both cells carry a note ("→ line 78 $25,000 ✕"), and the application lists its moves above the sheet; ✕ undoes one. The amount is what's left unaccounted on the two lines. An explanation only — no figure is worked out from it — so it works on certified applications too.
 - Change upload, project manual pages: right-click a page → "Split to a new section". One page starts a new section there; several chosen pages become a section of their own. The new section asks for its number; "Join to the one above" puts it back.
-
-## 2026-11-24 — Garbled-font manual pages read; "Set Introduction"
-- Pages whose text layer is mostly non-letters (fonts with no character map, e.g. UCA Addendum 2 Cash Allowances, 2–7% letters) are now read from the picture (OCR), the same way scanned pages are. Applies to change documents and to the initial project manual upload.
-- UCA Addendum 2 now reads: Table of Contents (00 01 10, pp. 3–4) and Cash Allowances (01 21 00, pp. 6–9) as manual sections.
-- The "Set Cover" part is renamed **Set Introduction**. It holds the change document's own pages (00 91 xx) and narratives or cover sheets from any discipline — the MEP narrative in Addendum 2 sorts there.
