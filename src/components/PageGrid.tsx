@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Mark } from './Logo'
 import {
   addBlock, ADDED, BUILT_IN, holds, COLS, defaultLayout, depth, itemsOf, KEPT, LABEL, ROWS, screenNow, settle, textOf,
@@ -202,6 +203,22 @@ export function PageGrid({ blocks, screen, arranging, render, onArrange }: {
   )
 }
 
+// ---------- The corner menus' place ----------
+
+/**
+ * A notebook's corner menu, drawn in the notebook's full-screen frame (`.nb`) rather than inside
+ * the page. The page scrolls and turns with a 3-D animation; a fixed button inside such a box is
+ * where iOS has been known to stop taking touches after the screen changes size (Jacob, 11/24:
+ * unfolding the phone, the circle would not open). Same look, same corner; only where it is
+ * drawn moves. Until the frame is found (the first moment after mounting) it is drawn in place.
+ */
+export function InFrame({ children }: { children: React.ReactNode }) {
+  const here = useRef<HTMLSpanElement | null>(null)
+  const [frame, setFrame] = useState<Element | null>(null)
+  useLayoutEffect(() => { setFrame(here.current?.closest('.nb') ?? null) }, [])
+  return frame ? createPortal(children, frame) : <span ref={here} style={{ display: 'contents' }}>{children}</span>
+}
+
 // ---------- Arranging, from the corner ----------
 
 /**
@@ -234,7 +251,7 @@ export function ArrangeMenu({ kind, screen, layout, onChange, onClose, onDiscard
   )
   const add = (k: BlockKind) => onChange(addBlock(layout, k, cols, ADDED.includes(k) ? LABEL[k] : undefined))
   return (
-    <>
+    <InFrame>
     {/* Above the mark, as the pad's colour and More panels are; outside the bar so the bar cannot clip it. */}
     {showing && hidden.length > 0 && (
       <div className="nb-arr-show" role="menu" aria-label="Show a hidden block">
@@ -254,7 +271,7 @@ export function ArrangeMenu({ kind, screen, layout, onChange, onClose, onDiscard
         {spot('Discard', I(<><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></>), onDiscard)}
       </div>
     </nav>
-    </>
+    </InFrame>
   )
 }
 

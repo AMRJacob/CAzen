@@ -17,6 +17,7 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     node --experimental-strip-types obspages.test.ts   # which field-notes page an observation is on
     node --experimental-strip-types agenda.test.ts     # an agenda: carry-forward and its outline
     python3 t_places.py        # numbers, trades, one observation in several places, the Agenda block and its PDF
+    python3 t_unfold.py        # a folding phone opened mid-use: each corner menu tapped before and after widening
     node --experimental-strip-types layout.test.ts     # the notebook page grid
     python3 t_frames.py 4      # dropped frames while zooming and panning a hatch-heavy sheet
     python3 t_markup.py        # Delete, undo, and the question on leaving markup

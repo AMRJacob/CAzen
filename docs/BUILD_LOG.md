@@ -11,6 +11,30 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:10 CST (notebook corner menus drawn outside the page)
+
+**"When I open my Duo screen in tablet mode, the circle menu won't open when I touch it"** (Jacob,
+10:49). **Not reproduced.** In the test browser, starting at 402 × 874 and widening to 680 × 874,
+820 × 874, 744 × 1133 and 884 × 1100 (also with a menu open through the change), the app's corner
+menu, a notebook's contents menu and a notebook page's menu each opened on a tap before and after.
+Which menu he meant, and the Duo's unfolded size in CSS pixels, are not known.
+
+What was found that differs between the menus: a notebook's corner menu (contents page and page,
+and the Arrange menu) was drawn *inside the page* — a scrolling box that also turns with a 3-D
+animation — while the app's own menu is not inside anything that scrolls. A fixed button inside a
+scrolling box is a place iOS has been known to stop delivering touches after the screen changes
+size; **that is from memory of WebKit behaviour, not looked up, and not seen on the device.** On
+that reading, the notebook menus are now drawn in the notebook's full-screen frame (`InFrame` in
+`PageGrid.tsx`, a portal to `.nb`): same look, same corner, same stacking under the notebook's
+dialogs. Above 899 px wide the app's own corner menu gives way to the sidebar, as before.
+
+Not changed: the pad's menu and the tagging screen's menu are inside their own full-screen layers.
+
+`checks/t_unfold.py` (new): each menu tapped before and after widening, and reports where it is
+drawn. `t_contents.py` and `t_arrange.py` rerun clean.
+
+---
+
 # Checkpoint — 2026-11-24, 11:05 CST (a Set Introduction zone, in order)
 
 Jacob, 10:35: a "Set Introduction" zone at the beginning, like the project manual and the

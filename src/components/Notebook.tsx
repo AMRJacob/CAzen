@@ -5,7 +5,7 @@ import { NotePad, PadStill } from './NotePad'
 import { ObservationForm } from './ObservationForm'
 import { glowOf } from '../lib/tags'
 import { NoteBoard } from './NoteBoard'
-import { ArrangeMenu, CheckBlock, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
+import { ArrangeMenu, CheckBlock, InFrame, PageGrid, shownBlocks, TextBlock, usePageLayout, useScreen } from './PageGrid'
 import { ADDED, LABEL, widgetsForReport, type Block, type Layout, type Widget, type Widgets } from '../lib/pageLayout'
 import { tearOut } from '../lib/tearOut'
 import IssueForm from '../pages/IssueForm'
@@ -359,6 +359,7 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents
     </button>
   )
   return (
+    <InFrame>
     <nav ref={nav} className={`nb-menu${contents ? ' nb-menu-contents' : ''}${open ? ' open' : ''}`} aria-label="The book" onPointerDown={() => { if (open) rest(4200) }}>
       <button className="nb-menu-mark" aria-expanded={open} aria-label={open ? 'Hide the menu' : 'Show the menu'} onClick={() => setOpen(!open)}>
         <Mark size={30} />
@@ -382,6 +383,7 @@ function BookMenu({ onNew, onClose, onDelete, onDuplicate, adds, visit, contents
         {contents && onDelete && spot('Delete a page', I(<><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /><path d="M10 11v6M14 11v6" /></>), onDelete)}
       </div>
     </nav>
+    </InFrame>
   )
 }
 
