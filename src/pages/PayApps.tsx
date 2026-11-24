@@ -1429,6 +1429,25 @@ function ScheduleChanges({ rows, moves, onSave, before, linkState }: {
     if (amount <= 0) return
     onSave([...moves, a.change < 0 ? { from: a.id, to: other, amount } : { from: other, to: a.id, amount }])
   }
+  /**
+   * One line spread over every line that went the other way (a lump like "Balance of Work" broken
+   * out into trades): each takes what is left of its own change, until the amount is used up.
+   */
+  const others = (id: string) => { const a = rows.find((r) => r.id === id)!; return rows.filter((r) => r.id !== id && Math.sign(r.change) === -Math.sign(a.change) && r.left >= 0.005) }
+  const linkAll = () => {
+    if (!linking) return
+    const a = rows.find((r) => r.id === linking.id)!
+    let pot = Math.round((Number(linking.amount) || 0) * 100) / 100
+    const next = [...moves]
+    for (const r of others(a.id)) {
+      if (pot < 0.005) break
+      const amount = Math.round(Math.min(pot, r.left) * 100) / 100
+      next.push(a.change < 0 ? { from: a.id, to: r.id, amount } : { from: r.id, to: a.id, amount })
+      pot = Math.round((pot - amount) * 100) / 100
+    }
+    setLinking(null)
+    onSave(next)
+  }
   return (
     <div className="card pay-changes">
       <h3>Schedule changes <span className="muted small">against {before}</span></h3>
@@ -1454,7 +1473,9 @@ function ScheduleChanges({ rows, moves, onSave, before, linkState }: {
                     <span className="pay-change-move">
                       <MoneyInput className="cell mono right pay-moving-amount" value={linking.amount} autoFocus onFocus={(e) => e.target.select()} aria-label="Amount moved"
                         onChange={(raw) => setLinking((x) => (x ? { ...x, amount: raw } : x))} />
-                      <span className="muted small"> {r.change < 0 ? 'moved to' : 'came from'} — pick the line</span>
+                      <span className="muted small"> {r.change < 0 ? 'moved to' : 'came from'} — pick the line, or</span>
+                      {others(r.id).length > 1 && <button className="primary-lite small" onClick={linkAll}>
+                        {r.change < 0 ? 'every line that went up' : 'every line that went down'} ({others(r.id).length})</button>}
                       <button className="link small" onClick={() => setLinking(null)}>Cancel</button>
                     </span>
                   ) : linking ? (
