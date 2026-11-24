@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
 import { getDocument } from './pdfjs'
-import { readPageText, type PageText } from './pageText'
+import { readPageText, unreadableText, type PageText } from './pageText'
 import type { Reader } from './scheduleText'
 
 export interface SplitSheet {
@@ -33,7 +33,7 @@ export async function splitDrawingSet(
     single.addPage(page)
     const pdfPage = await reader.getPage(i + 1)
     let text = await readPageText(pdfPage)
-    if (scans && !text.words.length && Math.max(text.width, text.height) <= 14.5 * 72) {
+    if (scans && (!text.words.length || unreadableText(text)) && Math.max(text.width, text.height) <= 14.5 * 72) {
       scans.onPage?.(i + 1, total)
       try {
         const { scanReader, scannedPageText } = await import('./scanText')

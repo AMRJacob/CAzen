@@ -124,3 +124,19 @@ function joinWords(words: PageWord[], text: PageText, lineSep = ' '): string {
     .filter(Boolean)
     .join(lineSep)
 }
+
+/**
+ * Text a PDF hands over that is not the words on the page.
+ *
+ * Some PDFs draw their letters with a font that carries no map back to characters (Type 3 fonts
+ * from some print drivers): the page prints perfectly and its text comes out as "/1 /2 □ /3".
+ * UCA Addendum 2's Cash Allowances section was that — 2–7% letters, where every readable page in
+ * the same file was 62–95%. Such a page is read from its picture, as a scan is.
+ */
+export function unreadableText(t: PageText): boolean {
+  const all = t.words.map((w) => w.str).join('')
+  const chars = all.replace(/\s/g, '').length
+  if (chars < 100) return false
+  const letters = (all.match(/[A-Za-z]/g) ?? []).length
+  return letters / chars < 0.3
+}

@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
 import { getDocument } from './pdfjs'
-import { pageBody, readPageText } from './pageText'
+import { pageBody, readPageText, unreadableText } from './pageText'
 import type { ManualPage } from './specRead'
 import type { Reader } from './scheduleText'
 
@@ -24,7 +24,7 @@ export async function readManual(
     for (let i = 0; i < reader.numPages; i++) {
       const page = await reader.getPage(i + 1)
       let text = await readPageText(page)
-      if (scans && !text.words.length && Math.max(text.width, text.height) <= 14.5 * 72) {
+      if (scans && (!text.words.length || unreadableText(text)) && Math.max(text.width, text.height) <= 14.5 * 72) {
         scans.onPage?.(i + 1, reader.numPages)
         try {
           const { scanReader, scannedPageText } = await import('./scanText')
