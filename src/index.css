@@ -3733,3 +3733,7 @@ html.pdf-docked .pay-703-wrap { overflow-x: auto; }
 .change-manual tr.cm-page.picked td { background: var(--moss-soft); }
 .change-manual td.page-pick { cursor: pointer; user-select: none; white-space: nowrap; padding-left: 18px; }
 .cm-fold { text-decoration: none; }
+/* Upload rows are chosen by clicking them (not their boxes); the chosen are highlighted. */
+.upload-panel tr.page-row, .change-manual tr.cm-page { cursor: pointer; }
+.upload-panel tr.page-row td.page-no { user-select: none; }
+.change-manual tr.cm-page .thumb-cell { width: 70px; }

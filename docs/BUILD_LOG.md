@@ -11,6 +11,30 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 10:55 CST (upload: rows chosen by clicking, a fuller right-click menu, previews under manual sections)
+
+Jacob, 09:39.
+
+- **No more tick boxes in the upload.** A row is chosen by clicking it anywhere outside its
+  boxes, menus and buttons (clicking the picture still opens the preview); Shift-click for a run,
+  Ctrl-click to add or drop one. The same in a manual section's page list. The include column and
+  its header box are gone; the preview's *Include* box is a *Remove from the upload / Put back*
+  link.
+- **Right-click** acts on the chosen pages, or on the row under the pointer when none are chosen:
+  *Move to the project manual*, *Move to drawings*, *Make part of the cover* (each only when it
+  would change something), *Remove from the upload*, *Put back in the upload*. The bar that
+  appears when pages are chosen has *Remove from the upload* too. A removed page stays listed,
+  greyed, and can be put back.
+- **Previews under a manual section.** Opening a section's page list shows each page's picture
+  (click it for the full preview) beside its place in the upload and its footer page.
+- **A sheet with no revision date takes the change document's issue date** when saved (new
+  uploads and pages moved into the drawings of a reopened document).
+
+`checks/t_resort.py`, `checks/t_changedoc.py` updated (no tick boxes; choosing by row; menu
+wording; remove and put back; previews; a sheet saved with the issue date). Test browser only.
+
+---
+
 # Checkpoint — 2026-11-24, 10:30 CST (no dragging in the upload; choose pages and move them; titles from known numbers; "Revision date")
 
 Jacob, 09:26–09:27.

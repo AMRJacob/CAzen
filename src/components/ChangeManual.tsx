@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { PageThumb } from './PageThumb'
 import { detectSections, placeOnPage, readManual, sectionInRegion, troubleText, FRONT, type ManualPage } from '../lib/pdf/splitManual'
 import { pageBody, type PageText, type Region } from '../lib/pdf/pageText'
 import { placeText, splicePages, suggestAction, type SpecAction, type Splice } from '../lib/pdf/changeDoc'
@@ -56,13 +57,15 @@ const span = (ats: number[]) => {
   return runs.join(', ')
 }
 
-export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu }: {
+export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, onDrawings, picked, onPick, onMenu, isControl }: {
   /** These pages (by their place in the upload) are drawings, not manual pages. */
   onDrawings?: (ats: number[]) => void
   /** The pages chosen on the upload screen (by their place in the upload), shared with its drawings list. */
   picked?: Set<number>
   /** A page number clicked in a section's page list: choose it (Shift for a run, Ctrl for one more). */
   onPick?: (at: number, e: React.MouseEvent, list: number[]) => void
+  /** Whether a click landed on a control (a button, a box) rather than on the row itself. */
+  isControl?: (e: React.MouseEvent) => boolean
   /** A right-click on one of a section's pages: the screen's Drawings / Cover / Project manual menu. */
   onMenu?: (at: number, e: React.MouseEvent) => void
   project: ProjectStore
@@ -230,13 +233,13 @@ export function ChangeManual({ project, pages, revisionLabel, onPlan, onPeek, on
                 const at = pages[pi].at
                 return (
                   <tr key={`p${at}`} className={`cm-page${picked?.has(at) ? ' picked' : ''}`} data-at={at}
+                    title="Click to choose; Shift-click for a run, Ctrl-click for one more; right-click to move or remove"
+                    onClick={(e) => { if (!isControl?.(e)) onPick?.(at, e, allAts) }}
                     onContextMenu={onMenu ? (e) => { e.preventDefault(); onMenu(at, e) } : undefined}>
-                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => onPick?.(at, e, allAts)}>
-                      page {at + 1}
-                    </td>
-                    <td className="small muted" colSpan={2}>
-                      {onPeek && <button className="link small" onClick={() => onPeek(at)}>view</button>}
-                      {' '}footer page {placeText(r.places[k])}{pages[pi].text.scanned ? ' · read from a scan' : ''}
+                    <td className="thumb-cell"><PageThumb bytes={pages[pi].bytes} label={`Upload page ${at + 1}`} onOpen={() => onPeek?.(at)} /></td>
+                    <td className="small" colSpan={2}>
+                      page {at + 1} of the upload
+                      <div className="muted">footer page {placeText(r.places[k])}{pages[pi].text.scanned ? ' · read from a scan' : ''}</div>
                     </td>
                     <td colSpan={4} className="small">
                       {onDrawings && <button className="link small" onClick={() => onDrawings([at])}>It’s a drawing</button>}

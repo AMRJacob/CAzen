@@ -1040,6 +1040,11 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const pagesFor = (at: number) => (sel.has(at) ? [...sel].sort((a, b) => a - b) : [at])
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
   const moveChosen = (role: PageRole) => { pagesTo([...sel], role); setSel(new Set()) }
+  /** Take pages out of the upload, or put them back (by their place in the upload). */
+  const includePages = (ats: number[], include: boolean) =>
+    setDrafts((ds) => ds.map((d) => (ats.includes(d.pageIndex) ? { ...d, include } : d)))
+  /** A click on one of a row's own controls is not a click to choose the row. */
+  const onControl = (e: React.MouseEvent) => !!(e.target as HTMLElement).closest('input, select, textarea, button, a, label, .thumb-cell')
 
   // The cover read again whenever which pages make it up changes; fields typed by hand stay.
   const coverKey = drafts.filter((d) => d.include && d.role === 'cover').map((d) => d.pageIndex).join(',')
@@ -1156,23 +1161,6 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const restore = (i: number) => setDrafts((ds) => ds.map((x, j) => (j === i && x.full
     ? { ...x, page: { ...x.page, bytes: x.full.bytes }, full: undefined } : x)))
 
-  /**
-   * Ticking with shift held carries the change across everything between this row and the last one
-   * touched — the difference between unticking fourteen spec pages and unticking them one by one.
-   */
-  const lastTicked = useRef<number | null>(null)
-  function tick(i: number, include: boolean, shift: boolean) {
-    // Read the anchor before moving it: the updater below runs later, by which time
-    // lastTicked would already be this row and the range would be a single row.
-    const anchor = lastTicked.current
-    lastTicked.current = i
-    setDrafts((ds) => {
-      if (!shift || anchor === null) return ds.map((d, j) => (j === i ? { ...d, include } : d))
-      const from = Math.min(anchor, i)
-      const to = Math.max(anchor, i)
-      return ds.map((d, j) => (j >= from && j <= to ? { ...d, include } : d))
-    })
-  }
 
   /**
    * An addendum usually carries project manual pages behind its drawings, and they arrive here
@@ -1277,7 +1265,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
       }
       if (newSheets.length) {
         const out: SheetToSave[] = sortSheets(newSheets, (d) => d.number, order).map((d) => ({
-          number: d.number, title: d.title, revisionLabel: d.revision || setRev || number, sheetDate: d.date || null,
+          number: d.number, title: d.title, revisionLabel: d.revision || setRev || number, sheetDate: d.date || issuedOn,
           bytes: d.page.bytes, body: pageBody(d.page.text),
         }))
         await saveIssuance(project, head, out, (done, total) => setProgress(`drawings ${done} of ${total}`), id)
@@ -1310,7 +1298,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         // a mark typed for the whole set, and failing both the set's own name — which is what an
         // architect would write there anyway ("Addendum 2"), and beats a row number nobody chose.
         number: d.number, title: d.title, revisionLabel: d.revision || setRev || number,
-        sheetDate: d.date || null,
+        sheetDate: d.date || issuedOn,
         bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
       const saved = await saveIssuance(project, { kind, number, issuedOn, title: subject }, out, (done, total) => setProgress(`${done} of ${total}`))
@@ -1459,15 +1447,22 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           {rowMenu && (
             <div className="pick-menu-shade" onClick={() => setRowMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowMenu(null) }}>
               <div className="pick-menu" role="menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 220), top: Math.min(rowMenu.y, window.innerHeight - 170) }} onClick={(e) => e.stopPropagation()}>
-                <div className="muted small pick-menu-title">{rowMenu.ats.length === 1 ? `Page ${rowMenu.ats[0] + 1}` : `${rowMenu.ats.length} pages`} — file as</div>
-                {(['sheet', 'cover', 'spec'] as PageRole[]).map((r) => {
-                  const all = rowMenu.ats.every((a) => drafts.find((d) => d.pageIndex === a)?.role === r)
+                {(() => {
+                  const ds = rowMenu.ats.map((a) => drafts.find((d) => d.pageIndex === a)).filter((d): d is Draft => !!d)
+                  const done = () => { setRowMenu(null); setSel(new Set()) }
+                  const some = (r: PageRole) => ds.some((d) => d.role !== r || !d.include)
+                  const out = ds.some((d) => !d.include), inn = ds.some((d) => d.include)
                   return (
-                    <button key={r} role="menuitem" disabled={all} onClick={() => { pagesTo(rowMenu.ats, r); setRowMenu(null); setSel(new Set()) }}>
-                      {r === 'sheet' ? 'Drawings' : r === 'cover' ? 'Cover' : 'Project manual'}{all ? ' (already)' : ''}
-                    </button>
+                    <>
+                      <div className="muted small pick-menu-title">{ds.length === 1 ? `Page ${ds[0].pageIndex + 1}` : `${ds.length} pages`}</div>
+                      {some('spec') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'spec'); done() }}>Move to the project manual</button>}
+                      {some('sheet') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'sheet'); done() }}>Move to drawings</button>}
+                      {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the cover</button>}
+                      {inn && <button role="menuitem" onClick={() => { includePages(rowMenu.ats, false); done() }}>Remove from the upload</button>}
+                      {out && <button role="menuitem" onClick={() => { includePages(rowMenu.ats, true); done() }}>Put back in the upload</button>}
+                    </>
                   )
-                })}
+                })()}
               </div>
             </div>
           )}
@@ -1493,6 +1488,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               <button onClick={() => moveChosen('sheet')}>Drawings</button>
               <button onClick={() => moveChosen('spec')}>Project manual</button>
               <button onClick={() => moveChosen('cover')}>Cover</button>
+              <button onClick={() => { includePages([...sel], false); setSel(new Set()) }}>Remove from the upload</button>
               <button className="link" onClick={() => setSel(new Set())}>Clear</button>
             </div>
           )}
@@ -1501,7 +1497,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
                 onDrawings={(ats) => pagesTo(ats, 'sheet')}
-                picked={sel} onPick={pickPage} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })} />
+                picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })} />
             ) : (
               <div className="drop-empty muted small">Project manual pages go here. Choose pages in the drawings below (click their page numbers) and make them Project manual.</div>
             )}
@@ -1571,15 +1567,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           </div>
 
           <div>
-          <p className="muted small drop-hint">Drawings and cover pages. Click page numbers to choose them — Shift-click for a run — then move them with the bar above, or right-click.</p>
+          <p className="muted small drop-hint">Drawings and cover pages. Click a row to choose it — Shift-click for a run, Ctrl-click for one more — then right-click, or use the bar above, to move or remove them.</p>
           <table>
             <thead><tr>
-              <th>
-                <input type="checkbox" aria-label="Include every page"
-                  checked={drafts.length > 0 && drafts.every((d) => d.include)}
-                  ref={(el) => { if (el) el.indeterminate = drafts.some((d) => d.include) && !drafts.every((d) => d.include) }}
-                  onChange={(e) => setDrafts((ds) => ds.map((d) => ({ ...d, include: e.target.checked })))} />
-              </th>
               <th>Page</th><th>View</th><th title="A drawing; the cover or narrative of the change document, filed as the document; or a page of the project manual, filed into its section">Part</th><th>Sheet no.</th><th>Title</th><th>Rev. mark</th>{datesRead && <th>Revision date</th>}<th>Size</th><th>Read by</th><th>Result</th></tr></thead>
             <tbody>
               {drafts.map((d, i) => {
@@ -1590,19 +1580,15 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                 // each can be moved on its own.)
                 if (d.role === 'spec' && d.include && d.origin?.t !== 'spec') return null
                 return (
-                  <tr key={d.pageIndex} className={`${d.include ? '' : 'skipped'}${sel.has(d.pageIndex) ? ' picked' : ''}`}
+                  <tr key={d.pageIndex} className={`page-row${d.include ? '' : ' skipped'}${sel.has(d.pageIndex) ? ' picked' : ''}`}
+                    // A click on the row, outside its boxes and buttons, chooses it: Shift for a run,
+                    // Ctrl for one more. A right-click acts on the chosen pages, or on this one.
+                    onClick={(e) => { if (!onControl(e)) pickPage(d.pageIndex, e, listed) }}
                     onContextMenu={(e) => {
                       if ((e.target as HTMLElement).closest('input, select, textarea')) return
                       e.preventDefault(); setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(d.pageIndex) })
                     }}>
-                    <td>
-                      {/* onClick rather than onChange: it carries the shift key, and by the time it
-                          runs the box already holds its new value. */}
-                      <input type="checkbox" checked={d.include} readOnly
-                        onClick={(e) => tick(i, (e.target as HTMLInputElement).checked, e.shiftKey)}
-                        aria-label={`Include page ${d.pageIndex + 1}`} />
-                    </td>
-                    <td className="page-pick" title="Click to choose; Shift-click for a run, Ctrl-click for one more" onClick={(e) => pickPage(d.pageIndex, e, listed)}>{d.pageIndex + 1}</td>
+                    <td className="page-no">{d.pageIndex + 1}</td>
                     <td className="thumb-cell">
                       <PageThumb bytes={d.page.bytes} label={pageLabel(d)} onOpen={() => setPeek(i)} />
                     </td>
@@ -1706,11 +1692,9 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
             const i = peek
             return (
               <>
-                <label className="pv-check">
-                  <input type="checkbox" checked={d.include}
-                    onChange={(e) => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} />
-                  Include
-                </label>
+                <button className="link small pv-include" onClick={() => setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}>
+                  {d.include ? 'Remove from the upload' : 'Put back in the upload'}
+                </button>
                 <label className="pv-field pv-role">Part
                   <RolePick value={d.role} onChange={(r) => setRole(i, r)} label="What this page is" />
                 </label>

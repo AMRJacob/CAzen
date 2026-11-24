@@ -61,7 +61,7 @@ with sync_playwright() as p:
     dr=lambda: pg.locator('.upload-panel table:not(.change-manual-table) > tbody > tr')
     secs=lambda: pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').count()
     s0, d0 = secs(), dr().count()
-    dr().last.locator('td.page-pick').click(); pg.click('.pick-bar button:has-text("Project manual")'); pg.wait_for_timeout(2500)
+    dr().last.locator('td.page-no').click(); pg.click('.pick-bar button:has-text("Project manual")'); pg.wait_for_timeout(2500)
     print('drawing made a manual page: manual sections', s0, '→', secs(), '| drawing rows', d0, '→', dr().count())
     pg.locator('.change-manual-table > tbody > tr:not(.cm-page)').last.locator('button:has-text("They’re drawings")').click(); pg.wait_for_timeout(1500)
     print('section made drawings: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
@@ -73,6 +73,7 @@ with sync_playwright() as p:
     pg.click(btn); pg.wait_for_selector('.upload-panel',state='detached',timeout=30000)
     print('posted:',[n for n,_ in posts])
     iss=[b for n,b in posts if n=='issuances'][0]; print('issuance:',{k:iss.get(k) for k in ('kind','number','title','issued_on')})
+    print('sheet revision date:',[b.get('sheet_date') for n,b in posts if n=='sheet_revisions'])
     print('spec revisions:',[(b.get('section_id'),b.get('issuance_id'),b.get('pages'),b.get('revision_label')) for n,b in posts if n=='spec_revisions'])
     form=[b for n,b in posts if n=='issued_forms'][0]; print('register:',{k:form.get(k) for k in ('kind','number','title','values','file_path')})
     for k,v in puts.items():
