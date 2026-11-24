@@ -3538,6 +3538,10 @@ input.nb-arr-name { border: none; background: none; font: inherit; font-weight: 
 .pay-change-move { display: inline-flex; align-items: center; gap: .3rem; margin-right: .8rem; color: #1d4690; font-size: .85rem; }
 .pay-change-move button { color: #888; }
 .pay-703 td.pay-sv-blank input::placeholder { color: #bbb; }
+.pay-sv-change { font-size: .7rem; line-height: 1.2; color: #555; display: flex; gap: .35rem; justify-content: flex-end; flex-wrap: wrap; }
+.pay-sv-link { color: #1d4690; }
+.pay-703 td.pay-sv-changed { background: #eef3fb; box-shadow: inset 0 -2px 0 #6f8fc4; }
+.pay-sv-summary { margin: .2rem 0 .5rem; }
 .pay-sv-move-total { color: #666; font-size: .68rem; }
 .pay-moving-amount { width: 9rem; display: inline-block; }
 .pay-sv-move { font-size: .72rem; color: #1d4690; line-height: 1.2; white-space: nowrap; }
