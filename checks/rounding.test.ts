@@ -48,3 +48,16 @@ console.log(bad ? `rounding: ${bad} of ${n} failed` : `rounding: ${n} checks pas
     ['line', 'E', 20000, 20010], ['line', 'G', 20000, 20010], ['line', 'I', 1001, 1000.5]], 'every figure that differs, and only those')
   console.log(bad ? `rounding+compare: ${bad} of ${n} failed` : `rounding+compare: ${n} checks pass`)
 }
+{ // Retainage rounded application by application (Kinco): UCA CW Loop line 2 through application 3 holds $4,102, not $4,101.
+  const l2 = [{ id: 'g', contract_id: 'c', sort: 1, item_no: '2', description: 'General Conditions', scheduled_value: 198475, retainage_rate: null, change_order_id: null, is_heading: false } as any,
+    { id: 'e', contract_id: 'c', sort: 2, item_no: '3', description: 'Equipment & Hoisting', scheduled_value: 32471, retainage_rate: null, change_order_id: null, is_heading: false } as any,
+    { id: 'z', contract_id: 'c', sort: 3, item_no: '13', description: 'Balance of Work', scheduled_value: 7769054, retainage_rate: null, change_order_id: null, is_heading: false } as any]
+  const m = (g: number, e: number) => new Map([['g', { this_period: g, stored: 0 }], ['e', { this_period: e, stored: 0 }]])
+  const a3 = { ...app, id: 'a3', number: 3 }
+  const near = figure({ ...base, rounding: { I: 'nearest' } }, l2, a3, m(42334, 8187), [{ billed: m(29771, 0) }, { billed: m(9924, 7144) }])
+  const per = figure({ ...base, rounding: { I: 'period' } }, l2, a3, m(42334, 8187), [{ billed: m(29771, 0) }, { billed: m(9924, 7144) }])
+  eq([near.lines[0].retainage, near.lines[1].retainage], [4101, 767], 'nearest rounds the line total: $4,101 and $767')
+  eq([per.lines[0].retainage, per.lines[1].retainage], [4102, 766], 'per application, as Kinco prints: $4,102 and $766')
+  eq(per.g702.previousCertificates, (29771 - 1489) + (9924 - 496) + (7144 - 357), 'line 7 from the earlier applications, each rounded when billed')
+  console.log(bad ? `rounding+period: ${bad} of ${n} failed` : `rounding+period: ${n} checks pass`)
+}

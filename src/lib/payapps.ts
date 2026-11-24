@@ -54,7 +54,12 @@ export interface Contract {
  * Rounding a column here makes CAzen's figures come out as theirs do — totals and the G702
  * included — while the exact figure stays on hand for anyone who asks.
  */
-export type RoundWay = 'nearest' | 'up' | 'down'
+/**
+ * 'period' is for retainage only: each application's retainage on what it billed is rounded to the
+ * dollar when it is billed, and column I is those rounded amounts added up — so it is not the
+ * rounded total, and can be a dollar or two from it. Kinco's sheets are kept this way.
+ */
+export type RoundWay = 'nearest' | 'up' | 'down' | 'period'
 export type RoundColumn = 'G' | 'pct' | 'H' | 'I'
 export type Rounding = Partial<Record<RoundColumn, RoundWay>>
 /** One cell set apart from its column: rounded another way, or left exact (migration 0050). */
@@ -64,6 +69,7 @@ export type CellRounding = Record<string, Partial<Record<RoundColumn, CellWay>>>
 /** A figure rounded to a whole unit the way the column says: nearest takes under .5 down and .5 or more up. */
 export function roundAs(n: number, way: RoundWay | 'exact' | undefined): number {
   if (!way || way === 'exact') return n
+  if (way === 'period') way = 'nearest'
   // Only floating-point dust is cleared first (1.4999999999 is 1.5); a real 0.4995 stays under a half.
   const t = Math.round(n * 1e6) / 1e6
   const w = way === 'up' ? Math.ceil(t) : way === 'down' ? Math.floor(t) : Math.round(t)
@@ -239,6 +245,22 @@ export function figure(
   const { rate: workRate, stepped } = rateAt(percentComplete, baseWork, steps)
   const storedRate = application.retainage_stored ?? contract.retainage_stored
 
+  // Each earlier application's rate on work, judged on the job as it stood then, for retainage
+  // rounded application by application.
+  const ratesBefore = earlier.map((_, k) => {
+    const upTo = earlier.slice(0, k + 1)
+    const earned = sum(real.map((l) => sum(upTo.map((x) => x.billed.get(l.id)?.this_period ?? 0)) + (earlier[k].billed.get(l.id)?.stored ?? 0)))
+    return rateAt(scheduled > 0 ? (earned / scheduled) * 100 : 0, baseWork, steps).rate
+  })
+  /** Column I kept application by application: each one's retainage on its billing rounded, then added up. */
+  const heldByPeriod = (id: string, ownRate: number | null, storedNow: number) => {
+    let held = 0
+    for (let k = 0; k < earlier.length; k++) held += roundAs(((earlier[k].billed.get(id)?.this_period ?? 0) * (ownRate ?? ratesBefore[k])) / 100, 'nearest')
+    return held
+      + roundAs(((billed.get(id)?.this_period ?? 0) * (ownRate ?? workRate)) / 100, 'nearest')
+      + roundAs((storedNow * storedRate) / 100, 'nearest')
+  }
+
   // What the line looked like a month ago, so the sheet can say whether stored material is
   // still in storage or has gone into the work.
   const last = earlier[earlier.length - 1]
@@ -262,7 +284,7 @@ export function figure(
     const exactRetainage = round(((previous + thisPeriod) * rate) / 100 + (stored * storedRate) / 100)
     const pct = roundAs(l.scheduled_value > 0 ? (toDate / l.scheduled_value) * 100 : 0, wP)
     const balance = roundAs(round(l.scheduled_value - toDate), wH)
-    const retainage = roundAs(exactRetainage, wI)
+    const retainage = wI === 'period' ? heldByPeriod(l.id, l.retainage_rate, stored) : roundAs(exactRetainage, wI)
     const exact: NonNullable<LineFigures['exact']> = {}
     if (toDate !== exactToDate) exact.toDate = exactToDate
     if (Math.abs(pct - exactPercent) > 1e-9) exact.percent = exactPercent
@@ -326,6 +348,11 @@ export function figure(
       const prior = sum(before.map((x) => x.billed.get(l.id)?.this_period ?? 0))
       const r = l.retainage_rate ?? rate
       const wI = wayAt(a.rounding, l.id, 'I')
+      if (wI === 'period') {
+        let h = 0
+        for (let k = 0; k <= upTo; k++) h += roundAs(((earlier[k].billed.get(l.id)?.this_period ?? 0) * (l.retainage_rate ?? ratesBefore[k])) / 100, 'nearest')
+        return h + roundAs(((b?.stored ?? 0) * storedRate) / 100, 'nearest')
+      }
       if (wI) return roundAs(round((prior + (b?.this_period ?? 0)) * r / 100 + (b?.stored ?? 0) * storedRate / 100), wI)
       return round((prior + (b?.this_period ?? 0)) * r / 100) + round((b?.stored ?? 0) * storedRate / 100)
     }))

@@ -1139,9 +1139,10 @@ function AgainstPdf({ pdf, diffs, onForget, beside, opening, onBeside, onAttach,
 
 const ROUND_SAYS: Record<RoundWay | 'exact', string> = {
   exact: 'Exact, to the cent', nearest: 'Rounded to the nearest whole dollar', up: 'Rounded up to a whole dollar', down: 'Rounded down to a whole dollar',
+  period: 'Each application’s retainage rounded to the dollar when billed, then added up',
 }
-const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: '↓' }
-const CELL_SAYS: Record<CellWay, string> = { exact: 'Left exact', nearest: 'Rounded to the nearest whole', up: 'Rounded up', down: 'Rounded down' }
+const ROUND_MARK: Record<RoundWay, string> = { nearest: '≈', up: '↑', down: '↓', period: 'Σ' }
+const CELL_SAYS: Record<CellWay, string> = { exact: 'Left exact', nearest: 'Rounded to the nearest whole', up: 'Rounded up', down: 'Rounded down', period: 'Each application’s retainage rounded, then added up' }
 
 /** Right-click on a line of the schedule of values. */
 function LineMenu({ at, title, items, onPick, onClose }: {
@@ -1197,6 +1198,7 @@ function RoundMenu({ at, way, onPick, onClose }: {
     ['nearest', `Round to the nearest whole ${unit}`],
     ['up', `Round up`],
     ['down', `Round down`],
+    ...(at.col === 'I' ? [['period', 'Round each application’s retainage, then add them up'] as [RoundWay, string]] : []),
   ]
   return (
     <div className="pay-round-menu" role="menu" style={{ left: Math.min(at.x, window.innerWidth - 240), top: at.y + 4 }}>
