@@ -84,7 +84,7 @@ with sync_playwright() as p:
     rows.nth(6).locator('td:nth-child(4) input').fill('A-203'); rows.nth(6).locator('td:nth-child(5) input').fill('DETAIL')
     rows.nth(8).locator('td.page-no').click(button='right'); pg.click('.pick-menu button:has-text("Make part of the cover")')
     print('moved          ',roles(pg),'|',pg.inner_text('.kept-spec').replace('\n',' '),'|',pg.inner_text('.upload-panel .actions button.primary'))
-    pg.click('.upload-panel .actions button.primary'); pg.wait_for_selector('.upload-panel',state='detached',timeout=60000)
+    pg.click('.upload-panel .actions button.primary'); pg.wait_for_selector('.upload-chip.done',timeout=60000)
     print('calls:',[(n,(b or {}).get('pages') if isinstance(b,dict) else '', q) for n,b,q in calls if n not in('sheet_text','spec_text')])
     for k,v in puts.items(): print('file',k.split('/',1)[1][:40],len(pypdf.PdfReader(io.BytesIO(v)).pages),'pages')
     print('errors:',errs); b.close()

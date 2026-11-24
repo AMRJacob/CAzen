@@ -70,7 +70,7 @@ with sync_playwright() as p:
     print('manual pages back by their Part: manual sections →', secs(), '| drawing rows →', dr().count(), '| save:', pg.inner_text(btn))
     print('wide pop-up:',pg.evaluate("(()=>{const e=document.querySelector('.upload-panel.wide');const r=e.getBoundingClientRect();return [Math.round(r.width),getComputedStyle(e).position]})()"))
     pg.screenshot(path='upload_wide.png')
-    pg.click(btn); pg.wait_for_selector('.upload-panel',state='detached',timeout=30000)
+    pg.click(btn); pg.wait_for_selector('.upload-chip.done',timeout=60000)
     print('posted:',[n for n,_ in posts])
     iss=[b for n,b in posts if n=='issuances'][0]; print('issuance:',{k:iss.get(k) for k in ('kind','number','title','issued_on')})
     print('sheet revision date:',[b.get('sheet_date') for n,b in posts if n=='sheet_revisions'])

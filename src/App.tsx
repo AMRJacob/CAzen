@@ -11,6 +11,7 @@ import { Shelf } from './components/Shelf'
 import { FeedbackButton } from './components/Feedback'
 import Home from './pages/Home'
 import { useFullscreen } from './lib/fullscreen'
+import { UploadHost } from './lib/uploadHost'
 
 /**
  * Each page is fetched when it is first opened, so the phone reads only the page in front of it
@@ -91,7 +92,9 @@ function Gate() {
   return (
     <FirmProvider>
       <ProjectProvider>
-        <Shell />
+        <UploadHost>
+          <Shell />
+        </UploadHost>
       </ProjectProvider>
     </FirmProvider>
   )

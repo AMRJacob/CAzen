@@ -11,6 +11,36 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 11:20 CST (an upload carries on in the corner while other work is done)
+
+Jacob, 09:56: while sheets upload, collapse the upload screen to the top-right corner with a
+progress bar and allow multitasking.
+
+- **Uploads live in the app's frame now** (`src/lib/uploadHost.tsx`, `UploadHost` around the
+  shell in `App.tsx`), not on the Drawings page. The Drawings page asks for one
+  (`useUploads().open`, with the project, its sheets and discipline order) — from the Upload
+  button, a file dropped on the page, `?upload`, or *Pages* on Sets and revisions — and reloads
+  when one is saved (the `cazen:uploaded` event). Leaving the Drawings page no longer stops an
+  upload. The upload screen's code is still fetched only when one opens.
+- **Pressing Save shrinks it to a card in the top-right corner**: *Saving Addendum 1*, a progress
+  bar (sheets, then manual sections, then the cover, counted together), what it is doing now, and
+  *Show* to open it again. Re-sorting a saved set shows a moving bar (its steps are not counted).
+  While a long PDF is being read (OCR) there is *Work on something else* to send that to the
+  corner too; when the pages are read the card says *ready to review*.
+- **When it is done** the card says what was saved — "ASI 4 saved — 1 sheet, 2 manual sections" —
+  for eight seconds, on whatever page is open. If a save stops on an error the card turns red
+  with the reason, and *Show* opens the upload at the review with the error.
+- **Closing or reloading the tab** while an upload is reading or saving makes the browser ask
+  first — that is the one thing that still stops it.
+- The upload screen is now always the wide pop-up over the page (the file-choosing step too),
+  since it is no longer part of the Drawings page.
+
+`checks/t_upload_bg.py`: save, the corner card at work, Pay applications opened while it saves,
+the card still there, then "saved". `t_changedoc.py`, `t_resort.py` now wait for the saved card.
+Test browser only; not tried on the phone or with a real 80-sheet set.
+
+---
+
 # Checkpoint — 2026-11-24, 10:55 CST (upload: rows chosen by clicking, a fuller right-click menu, previews under manual sections)
 
 Jacob, 09:39.

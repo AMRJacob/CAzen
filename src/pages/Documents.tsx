@@ -34,6 +34,7 @@ import { documentForIssuance, DOCUMENT_FOR } from '../lib/issued'
 import { classifyPages, countOf, readCover, type CoverReading, type PageRole } from '../lib/pdf/changeDoc'
 import { ChangeManual, type ManualPlan, type SpecPageIn } from '../components/ChangeManual'
 import { saveManual } from '../lib/manual'
+import { UPLOADED, useUploads } from '../lib/uploadHost'
 import { reopenIssuance, takeAwayMoved, type Origin, type Reopened } from '../lib/resort'
 import { setFolderName, setSheetDate, sheetDates } from '../lib/sheets'
 import { useColumnWidths } from '../components/ResizableColumns'
@@ -68,19 +69,19 @@ export default function Documents() {
   const [sheets, setSheets] = useState<CurrentSheet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  // A saved set or change document opened again to sort its pages (from Sets and revisions).
-  const [resorting, setResorting] = useState<string | null>(null)
+  // Uploads run in the app's frame (src/lib/uploadHost.tsx), so they carry on when this page is left.
+  const uploads = useUploads()
+  const uploading = uploads.busy
   const [params, setParams] = useSearchParams()
+  const [wantUpload, setWantUpload] = useState<{ files?: File[]; reopen?: string } | null>(null)
   useEffect(() => {
     if (params.get('upload') === null) return
-    setUploading(true)
+    setWantUpload({})
     // Taken out of the address once it's done its job, so a refresh doesn't reopen it.
     const next = new URLSearchParams(params)
     next.delete('upload')
     setParams(next, { replace: true })
   }, [params, setParams])
-  const [dropped, setDropped] = useState<File[] | undefined>(undefined)
   const [pageDrag, setPageDrag] = useState(false)
   const [view, setView] = useState<'sheets' | 'sets'>('sheets')
   const [asOf, setAsOf] = useState('')
@@ -155,6 +156,24 @@ export default function Documents() {
 
   useEffect(() => { load() }, [load])
 
+  // An upload asked for here is handed to the app's frame with what it needs from this page.
+  useEffect(() => {
+    if (!wantUpload || !current || !firm) return
+    uploads.open({
+      project: current, firmId: firm.id, order,
+      existingNumbers: new Set(sheets.map((s) => s.number)),
+      existingTitles: new Map(sheets.filter((s) => s.title).map((s) => [s.number.toUpperCase(), s.title!])),
+      initialFiles: wantUpload.files, reopen: wantUpload.reopen,
+    })
+    setWantUpload(null)
+  }, [wantUpload, current, firm, order, sheets, uploads])
+  // An upload finished (here or after leaving and coming back): the list is read again.
+  useEffect(() => {
+    const again = (e: Event) => { if ((e as CustomEvent).detail === current?.id) load() }
+    window.addEventListener(UPLOADED, again)
+    return () => window.removeEventListener(UPLOADED, again)
+  }, [load, current?.id])
+
   useEffect(() => {
     if (!current || !asOf) { setAsOfRows(null); return }
     listSheetsAsOf(current.id, asOf).then(setAsOfRows).catch((e) => setError(message(e)))
@@ -203,7 +222,7 @@ export default function Documents() {
   const pageDropProps = uploading ? {} : {
     onDragOver: (e: React.DragEvent) => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); setPageDrag(true) } },
     onDragLeave: (e: React.DragEvent) => { if (e.currentTarget === e.target) setPageDrag(false) },
-    onDrop: (e: React.DragEvent) => { e.preventDefault(); setPageDrag(false); const f = [...e.dataTransfer.files]; if (f.length) { setDropped(f); setUploading(true) } },
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setPageDrag(false); const f = [...e.dataTransfer.files]; if (f.length) setWantUpload({ files: f }) },
   }
 
   return (
@@ -215,37 +234,11 @@ export default function Documents() {
         </div>
         {/* Uploading a set from a phone is a rare thing done at a desk, so it isn't given the
             loudest control on a phone screen; it lives under More in the corner menu instead. */}
-        {!uploading && <button className="primary desk-only" onClick={() => setUploading(true)}>Upload a set or revised sheets</button>}
+        {!uploading && <button className="primary desk-only" onClick={() => setWantUpload({})}>Upload a set or revised sheets</button>}
       </div>
 
       {/* Whether the copy on this device is still the job. Silent unless it isn't. */}
       <FieldSync project={current} onSynced={load} />
-
-      {resorting && firm && !uploading && (
-        <UploadIssuance
-          key={resorting}
-          reopen={resorting}
-          project={current}
-          firmId={firm.id}
-          order={order}
-          existingNumbers={new Set(sheets.map((s) => s.number))}
-          existingTitles={new Map(sheets.filter((s) => s.title).map((s) => [s.number.toUpperCase(), s.title!]))}
-          onDone={() => { setResorting(null); load() }}
-          onCancel={() => setResorting(null)}
-        />
-      )}
-      {uploading && firm && (
-        <UploadIssuance
-          project={current}
-          firmId={firm.id}
-          order={order}
-          existingNumbers={new Set(sheets.map((s) => s.number))}
-          existingTitles={new Map(sheets.filter((s) => s.title).map((s) => [s.number.toUpperCase(), s.title!]))}
-          initialFiles={dropped}
-          onDone={() => { setUploading(false); setDropped(undefined); load() }}
-          onCancel={() => { setUploading(false); setDropped(undefined) }}
-        />
-      )}
 
       {error && <div className="notice error">{error}</div>}
 
@@ -280,7 +273,7 @@ export default function Documents() {
 
       {view === 'sets' ? (
         <SetsList project={current} order={order} isAdmin={isAdmin} onChanged={load}
-          onResort={(id) => setResorting(id)} reloadKey={resorting} />
+          onResort={(id) => setWantUpload({ reopen: id })} reloadKey={uploading} />
       ) : (
         <>
           <div className="toolbar">
@@ -920,7 +913,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   firmId: string
   order: Discipline[]
   existingNumbers: Set<string>
-  onDone: () => void
+  /** Saved; what was saved, in a few words, for the corner. */
+  onDone: (what?: string) => void
   onCancel: () => void
 }) {
   const [kind, setKind] = useState<IssuanceKind>(existingNumbers.size ? 'addendum' : 'bid_set')
@@ -948,6 +942,18 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   const [editing, setEditing] = useState<{ template?: TitleblockTemplate; page: number } | null>(null)
   const [step, setStep] = useState<'pick' | 'splitting' | 'review' | 'saving'>('pick')
   const [progress, setProgress] = useState('')
+  // In the corner while it saves (or reads a long file), so other work can go on; how far it has got.
+  const [collapsed, setCollapsed] = useState(false)
+  const [units, setUnits] = useState<{ done: number; total: number } | null>(null)
+  // Reading the file failed while in the corner: open again, to say so.
+  useEffect(() => { if (collapsed && step === 'pick') setCollapsed(false) }, [collapsed, step])
+  // Closing or reloading the tab would stop it: the browser asks first.
+  useEffect(() => {
+    if (step !== 'saving' && step !== 'splitting') return
+    const ask = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [step])
   const [error, setError] = useState<string | null>(null)
   const [sizeWarning, setSizeWarning] = useState<string | null>(null)
   const [reducing, setReducing] = useState<Set<number>>(new Set())
@@ -1071,7 +1077,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
       let bytesTotal = 0
       for (const [i, file] of files.entries()) {
         const label = files.length > 1 ? `${file.name} (${i + 1} of ${files.length}): ` : ''
-        const split = await splitDrawingSet(await file.arrayBuffer(), (done, total) => setProgress(`${label}${done} of ${total}`),
+        const split = await splitDrawingSet(await file.arrayBuffer(), (done, total) => { setProgress(`${label}${done} of ${total}`); setUnits({ done, total }) },
           { onPage: (page, total) => setProgress(`${label}page ${page} of ${total} is a scan — reading it`) })
         for (const p of split) pages.push({ ...p, pageIndex: pages.length })
         bytesTotal += file.size
@@ -1257,7 +1263,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
     const coverChanged = coverNow.length !== coverWas.length || coverNow.some((d, k) => d !== coverWas[k])
     const left = keptSheets.length + newSheets.length + sections.length + keptSpecs.reduce((n, k) => n + (k.keep ? 1 : 0), 0)
     if (!left) { setError('That would leave this document with no drawings and no manual pages, and CAzen removes a set with nothing in it. Keep at least one page as a drawing or a manual page.'); return }
-    setStep('saving'); setError(null)
+    setStep('saving'); setCollapsed(true); setError(null); setUnits(null); setProgress('starting')
     try {
       const head = { kind, number, issuedOn, title: subject }
       if (kind !== r.issuance.kind || number !== (r.issuance.number ?? '') || issuedOn !== r.issuance.issued_on.slice(0, 10) || subject !== (r.issuance.title ?? '')) {
@@ -1281,7 +1287,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         cover: coverChanged ? coverNow.map((d) => d.page) : undefined,
         onProgress: (what) => setProgress(`tidying ${what}`),
       })
-      onDone()
+      onDone(`${number || ISSUANCE_LABELS[kind]}: pages re-sorted`)
     } catch (e) {
       setError(`Part of the re-sort may have gone in before this stopped: ${message(e)}`)
       setStep('review')
@@ -1291,7 +1297,11 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   async function save() {
     if (reopened) return saveResort(reopened)
     setStep('saving')
+    setCollapsed(true)
+    setProgress('starting')
     setError(null)
+    const total = chosen.length + sections.length + (covers.length ? 1 : 0)
+    setUnits({ done: 0, total })
     try {
       const out: SheetToSave[] = sortSheets(chosen, (d) => d.number, order).map((d) => ({
         // What the Rev. column says for this sheet: whatever the title block itself carried, then
@@ -1301,7 +1311,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         sheetDate: d.date || issuedOn,
         bytes: d.page.bytes, body: pageBody(d.page.text),
       }))
-      const saved = await saveIssuance(project, { kind, number, issuedOn, title: subject }, out, (done, total) => setProgress(`${done} of ${total}`))
+      const saved = await saveIssuance(project, { kind, number, issuedOn, title: subject }, out, (done, all) => { setProgress(`${done} of ${all}`); setUnits({ done, total }) })
 
       // The manual pages go in under the same issuance, so the change document carries its
       // sections as well as its sheets.
@@ -1312,7 +1322,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
           built.push(await sec.build())
         }
         await saveManual(project, { kind, number, issuedOn }, built,
-          (done, total, sec) => setProgress(`manual ${done} of ${total}${sec ? ` · ${sec}` : ''}`), saved.id)
+          (done, all, sec) => { setProgress(`manual ${done} of ${all}${sec ? ` · ${sec}` : ''}`); setUnits({ done: out.length + done, total }) }, saved.id)
       }
 
       // Uploading sheets as an ASI or a PR is issuing that ASI or PR, so the entry in the change
@@ -1352,7 +1362,7 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
         const d = chosen.find((x) => x.templateId === t.id && x.pinned === t.id) ?? chosen.find((x) => x.templateId === t.id && !x.unsure)
         if (d) await saveTemplate({ ...t, page_size: { w: Math.round(d.page.text.width), h: Math.round(d.page.text.height) } }).catch(() => {})
       }
-      onDone()
+      onDone(`${number || ISSUANCE_LABELS[kind]} saved — ${[chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'sheet' : 'sheets'}` : '', sections.length ? `${sections.length} manual ${sections.length === 1 ? 'section' : 'sections'}` : ''].filter(Boolean).join(', ') || 'the cover'}`)
     } catch (err) {
       setError(message(err))
       setStep('review')
@@ -1378,12 +1388,34 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
     )
   }
 
+  // In the corner: what it is doing, how far it has got, and the way back to it.
+  if (collapsed) {
+    const name = number || ISSUANCE_LABELS[kind]
+    const pct = units && units.total ? Math.round((units.done / units.total) * 100) : null
+    const stopped = step === 'review' && !!error
+    return (
+      <div className={`upload-chip${stopped ? ' bad' : ''}`} role="status" aria-live="polite">
+        <div className="upload-chip-head">
+          <strong>{step === 'saving' ? `Saving ${name}` : step === 'splitting' ? 'Reading the PDF' : stopped ? `${name} stopped` : `${name} ready to review`}</strong>
+          <button className="link small" onClick={() => setCollapsed(false)}>Show</button>
+        </div>
+        {(step === 'saving' || step === 'splitting') && (
+          <div className={`upload-bar${pct == null ? ' busy' : ''}`}><span style={pct == null ? undefined : { width: `${pct}%` }} /></div>
+        )}
+        <div className="muted small upload-chip-say">{stopped ? error : step === 'review' ? 'The pages are read.' : progress || '…'}</div>
+      </div>
+    )
+  }
+
   return (
     <>
-    {/* Once the pages are read, the upload opens wide over the page: there is a lot to see at once. */}
-    {(step === 'review' || step === 'saving') && <div className="upload-backdrop" aria-hidden="true" />}
-    <div className={`card upload-panel${step === 'review' || step === 'saving' ? ' wide' : ''}`} role={step === 'review' || step === 'saving' ? 'dialog' : undefined} aria-label="Upload">
-      {(step === 'review' || step === 'saving') && <button className="link upload-close" onClick={onCancel} disabled={step === 'saving'} aria-label="Cancel the upload">×</button>}
+    {/* The upload opens wide over whatever page is showing: there is a lot to see at once. */}
+    <div className="upload-backdrop" aria-hidden="true" />
+    <div className="card upload-panel wide" role="dialog" aria-label="Upload">
+      {step !== 'saving' && <button className="link upload-close" onClick={onCancel} aria-label="Cancel the upload">×</button>}
+      {(step === 'splitting' || step === 'saving') && (
+        <button className="link small upload-min" onClick={() => setCollapsed(true)} title="Keep it going in the corner and work on something else">Work on something else</button>
+      )}
       <h2>{reopen ? `Pages of ${reopened ? issuanceText(reopened.issuance.kind, reopened.issuance.number) : 'this set'}` : 'Upload a set, revised sheets or a change document'}</h2>
       {reopen && <p className="muted small">Each page is shown where it is filed now. Move one by its Part, by right-clicking it, or by dragging it between the project manual and the drawings; Shift- or Ctrl-click page numbers to move several. Saving files what moved and leaves the rest as it is.</p>}
       {!reopen && <p className="muted small">Each upload is one set or revision round. Its sheets replace the current ones with the same number, and the earlier versions stay in each sheet’s history.
