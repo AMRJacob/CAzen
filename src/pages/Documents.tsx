@@ -1045,6 +1045,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
   /** The pages (by their place in the upload) a right-click on a page acts on: the chosen ones, if it is one of them. */
   const pagesFor = (at: number) => (sel.has(at) ? [...sel].sort((a, b) => a - b) : [at])
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; ats: number[] } | null>(null)
+  // Project manual pages split off by hand to start a section of their own (by their place in the upload).
+  const [specSplits, setSpecSplits] = useState<Set<number>>(new Set())
   const moveChosen = (role: PageRole) => { pagesTo([...sel], role); setSel(new Set()) }
   /** Take pages out of the upload, or put them back (by their place in the upload). */
   const includePages = (ats: number[], include: boolean) =>
@@ -1490,6 +1492,17 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
                       {some('spec') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'spec'); done() }}>Move to the project manual</button>}
                       {some('sheet') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'sheet'); done() }}>Move to drawings</button>}
                       {some('cover') && <button role="menuitem" onClick={() => { pagesTo(rowMenu.ats, 'cover'); done() }}>Make part of the cover</button>}
+                      {ds.length > 0 && ds.every((d) => d.role === 'spec' && d.include) && (
+                        <button role="menuitem" onClick={() => {
+                          // One page: a new section starts there. Several: they become a section of their own.
+                          const order = specPages.map((p) => p.at)
+                          const ats = [...rowMenu.ats].sort((a, b) => order.indexOf(a) - order.indexOf(b))
+                          const next = new Set(specSplits)
+                          next.add(ats[0])
+                          if (ats.length > 1) { const after = order[order.indexOf(ats[ats.length - 1]) + 1]; if (after != null) next.add(after) }
+                          setSpecSplits(next); done()
+                        }}>Split to a new section</button>
+                      )}
                       {inn && <button role="menuitem" onClick={() => { includePages(rowMenu.ats, false); done() }}>Remove from the upload</button>}
                       {out && <button role="menuitem" onClick={() => { includePages(rowMenu.ats, true); done() }}>Put back in the upload</button>}
                     </>
@@ -1529,7 +1542,8 @@ export function UploadIssuance({ project, firmId, order, existingNumbers, existi
               <ChangeManual project={project} pages={specPages} revisionLabel={setRev || number} onPlan={setManualPlan}
                 onPeek={(at) => setPeek(drafts.findIndex((d) => d.pageIndex === at))}
                 onDrawings={(ats) => pagesTo(ats, 'sheet')}
-                picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })} />
+                picked={sel} onPick={pickPage} isControl={onControl} onMenu={(at, e) => setRowMenu({ x: e.clientX, y: e.clientY, ats: pagesFor(at) })}
+                splits={specSplits} onJoin={(at) => setSpecSplits((s) => { const n = new Set(s); n.delete(at); return n })} />
             ) : (
               <div className="drop-empty muted small">Project manual pages go here. Choose pages in the drawings below (click their page numbers) and make them Project manual.</div>
             )}
