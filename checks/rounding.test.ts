@@ -30,7 +30,9 @@ eq([p.lines[4].percent, Math.round(p.lines[4].exact!.percent! * 100) / 100], [35
   const later = figure({ ...base, rounding: { I: 'nearest' } }, lines, { ...app, id: 'b', number: 2 }, new Map(), [{ billed, rounding: { l1: { I: 'down' }, l4: { I: 'exact' } } }])
   eq(later.g702.previousCertificates, 224149 - 11207.7, 'a later application reads the earlier one with its own cells')
 }
-eq([roundAs(2.5, 'nearest'), roundAs(2.0000001, 'up'), roundAs(-1.5, 'down')], [3, 2, -2], 'roundAs edges')
+eq([roundAs(2.5, 'nearest'), roundAs(2.0000001, 'up'), roundAs(-1.5, 'down')], [3, 2, -1], 'roundAs edges')
+eq([1488.01, 1488.5, 1488.99, 0.99, -1.25, -1.99].map((n) => roundAs(n, 'down')), [1488, 1488, 1488, 0, -1, -1], 'down drops the cents, whatever they are')
+eq([1488.01, 1488.5, -1.25].map((n) => roundAs(n, 'up')), [1489, 1489, -2], 'up takes the next dollar for any cents')
 eq([roundAs(1488.49, 'nearest'), roundAs(1488.4995, 'nearest'), roundAs(1488.5, 'nearest'), roundAs(0.4995, 'nearest'), roundAs(0.1 + 0.2 + 1.2, 'nearest')], [1488, 1488, 1489, 0, 2], 'nearest: under .5 down, .5 and over up')
 console.log(bad ? `rounding: ${bad} of ${n} failed` : `rounding: ${n} checks pass`)
 { // The contractor's figures set against CAzen's, and the G702 page read by its labels (made-up lines).

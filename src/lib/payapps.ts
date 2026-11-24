@@ -72,7 +72,9 @@ export function roundAs(n: number, way: RoundWay | 'exact' | undefined): number 
   if (way === 'period') way = 'nearest'
   // Only floating-point dust is cleared first (1.4999999999 is 1.5); a real 0.4995 stays under a half.
   const t = Math.round(n * 1e6) / 1e6
-  const w = way === 'up' ? Math.ceil(t) : way === 'down' ? Math.floor(t) : Math.round(t)
+  // Down drops the cents whatever they are ($1,488.99 is $1,488), and on a deduction too: -$1.25
+  // is -$1, not -$2. Up is the other way: any cents at all make the next dollar.
+  const w = way === 'up' ? Math.sign(t) * Math.ceil(Math.abs(t)) : way === 'down' ? Math.trunc(t) : Math.round(t)
   return w === 0 ? 0 : w
 }
 

@@ -3201,3 +3201,6 @@ pixel ratio; and frame timing under 6× CPU throttling.
   defects.
 - The 18ms ink prediction is the one thing in the pad best judged on the device; it is a single
   constant in `src/lib/nib.ts`.
+
+## 2026-11-24 — Round down ignores the cents
+- A "round down" override now drops the cents whatever they are ($1,488.99 → $1,488), including on deductions (−$1.25 → −$1); "round up" mirrors it.
