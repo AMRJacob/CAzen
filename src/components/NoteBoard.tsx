@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { addBox, addLoose, LOOSE, looseAt, move, nodeAt, placeBeside, readBoard, remove, rename, writeBoard, type Note, type Path } from '../lib/noteBoard'
+import { addBox, addLoose, LOOSE, looseAt, move, placeBeside, readBoard, remove, rename, writeBoard, type Note, type Path } from '../lib/noteBoard'
 
 /**
  * A page's notes, as things to be picked up and put somewhere.
