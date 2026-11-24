@@ -11,6 +11,16 @@ from it.
 
 ---
 
+# Checkpoint — 2026-11-24, 18:00 CST (the notes' own menu on the spread)
+
+Jacob, 16:51: right-click a note or category to change it, on the page and on the spread. On the
+page the menu was already there (`checks/t_boardmenu.py` still passes, desk and phone). The spread
+now has the same: right-click, or by touch hold still and let go — *Edit the words*, *Add a
+subcategory* (categories), *Take it out of the category* (filed notes), *Delete* / *Remove*.
+`checks/t_spreadmenu.py` (desk and phone).
+
+---
+
 # Checkpoint — 2026-11-24, 17:50 CST (Spread out and Check with AI moved to the Notes heading's menu)
 
 Jacob, 16:46. A click on open space in the notes block no longer opens the spread, and the two

@@ -23,6 +23,7 @@ from fixtures in `common.py`, so nothing here reads or writes the production dat
     python3 t_aicheck.py
     python3 t_aicheck_phone.py # the AI review on a phone: in the notebook frame, accept / reject / apply
     python3 t_blankpage.py     # a page starts with what was chosen; hide from a heading; Add from the corner ("phone" too)
+    python3 t_spreadmenu.py    # on the spread: right-click or hold a note or category, Edit the words
     python3 t_spread.py        # the notes spread: open, move anywhere, combine two loose notes, file, take out ("phone" too)
     node --experimental-strip-types fill.test.ts       # blocks widen and lengthen into room left by hidden ones
     node --experimental-strip-types spread.test.ts     # the notes spread: names for places, two loose notes combined
